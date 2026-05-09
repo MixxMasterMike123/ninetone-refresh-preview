@@ -84,3 +84,33 @@ export function renderBio(text: string | undefined | null): string {
   processed = cleanLinksInMarkdown(processed);
   return marked.parse(processed, { async: false }) as string;
 }
+
+/**
+ * Detect bios that read like they were written by a chatbot summarizing a press
+ * release, not a person describing themselves. Real bios use first or third
+ * person without hedging. AI summaries say "would be focused on", "according to
+ * Ninetone", "based on publicly available information", etc.
+ *
+ * Returns true when the bio should be suppressed in favor of the role title.
+ */
+export function isAiSpeculative(text: string | undefined | null): boolean {
+  if (!text) return false;
+  const t = String(text).toLowerCase();
+  const tells = [
+    "would be focused",
+    "would be involved",
+    "would likely",
+    "would therefore",
+    "would entail",
+    "according to ninetone",
+    "according to the company",
+    "based on publicly available",
+    "while specific details",
+    "while the specific",
+    "publicly available information",
+    "in their capacity as",
+    "in her capacity as",
+    "in his capacity as",
+  ];
+  return tells.some((tell) => t.includes(tell));
+}

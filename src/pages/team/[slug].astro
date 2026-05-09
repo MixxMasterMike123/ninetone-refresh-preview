@@ -1,7 +1,7 @@
 ---
 import Base from "../../layouts/Base.astro";
 import { getTeam } from "../../lib/ninetone";
-import { renderBio } from "../../lib/markdown";
+import { renderBio, isAiSpeculative } from "../../lib/markdown";
 
 export async function getStaticPaths() {
   const team = await getTeam();
@@ -18,7 +18,9 @@ const { member } = Astro.props as { member: Record<string, unknown> };
 const name = String(member.userNameCalc ?? "");
 const title = String(member.title ?? "");
 const titleDescription = String(member.titleDescription ?? "");
-const descriptionHtml = renderBio(String(member.DescriptionString ?? member.Description ?? ""));
+const rawDescription = String(member.DescriptionString ?? member.Description ?? "");
+const aiBio = isAiSpeculative(rawDescription);
+const descriptionHtml = aiBio ? "" : renderBio(rawDescription);
 const photo = member.userPhoto ? String(member.userPhoto) : member.userPhotoSmall ? String(member.userPhotoSmall) : undefined;
 const email = String(member.userEmail ?? "");
 const phone = String(member.Phone ?? "");
@@ -47,6 +49,16 @@ const phone = String(member.Phone ?? "");
       </div>
     </div>
 
-    <div class="prose mt-12 max-w-2xl text-neutral-800" set:html={descriptionHtml}></div>
+    {descriptionHtml ? (
+      <div class="prose mt-12 max-w-2xl text-neutral-800" set:html={descriptionHtml}></div>
+    ) : (
+      <p class="mt-12 max-w-2xl text-sm text-neutral-500">
+        {email ? (
+          <>For more about {name}, get in touch at <a href={`mailto:${email}`} class="text-ninetone-red hover:underline">{email}</a>.</>
+        ) : (
+          <>More about {name} coming soon.</>
+        )}
+      </p>
+    )}
   </article>
 </Base>
