@@ -71,7 +71,7 @@ try { latestNews = await getNewsForArtist(name, 3); } catch {}
         twitter={String(artist.url_twitter ?? "")}
       />
 
-      <div class="prose prose-invert mt-12 max-w-none text-white/90" set:html={bioHtml}></div>
+      <div class="prose prose-invert mt-12 max-w-2xl mx-auto text-white/90" set:html={bioHtml}></div>
     </div>
   </section>
 
