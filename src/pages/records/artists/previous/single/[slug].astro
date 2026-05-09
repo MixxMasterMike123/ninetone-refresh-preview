@@ -1,0 +1,88 @@
+---
+import Base from "../../../../../layouts/Base.astro";
+import SocialRow from "../../../../../components/SocialRow.astro";
+import MerchCard from "../../../../../components/MerchCard.astro";
+import { getPreviousArtists, getNewsForArtist } from "../../../../../lib/ninetone";
+import { getProducts } from "../../../../../lib/shopify";
+import { renderBio } from "../../../../../lib/markdown";
+
+export async function getStaticPaths() {
+  const artists = await getPreviousArtists();
+  return artists
+    .filter((a) => a.SLUG)
+    .map((a) => ({
+      params: { slug: String(a.SLUG) },
+      props: { artist: a },
+    }));
+}
+
+const { artist } = Astro.props as { artist: Record<string, unknown> };
+
+const name = String(artist["Head Artist"] ?? "");
+// Previous artists are Records artists, so use `artistPresentation*` fields
+const tagline = String(artist["Artist Presentation Title"] ?? "");
+const bioHtml = renderBio(String(artist.artistPresentationString ?? ""));
+const image = artist.artistPicture_small ? String(artist.artistPicture_small) : undefined;
+const tags = artist.genre ? String(artist.genre).split(/\r|\n/).filter(Boolean) : [];
+const collectionId = String(artist.collectionId ?? "").trim();
+
+let merch: Awaited<ReturnType<typeof getProducts>> = [];
+if (collectionId) {
+  try { merch = await getProducts({ collectionId, limit: 8 }); } catch {}
+}
+
+let latestNews: Awaited<ReturnType<typeof getNewsForArtist>> = [];
+try { latestNews = await getNewsForArtist(name, 3); } catch {}
+---
+
+<Base title={name} description={tagline || `${name} | Previous Artists | Ninetone`}>
+  <section class="bg-ninetone-ink py-16 text-white">
+    <div class="mx-auto max-w-7xl px-6">
+      <p class="mb-2 text-xs uppercase tracking-wider opacity-70">
+        <a href="/records/artists/previous" class="hover:underline">← Previous Artists</a>
+      </p>
+      <h1 class="font-display text-5xl text-ninetone-green">{name}</h1>
+      {tagline && <p class="mt-2 max-w-3xl text-white/80 uppercase tracking-wider text-sm">{tagline}</p>}
+    </div>
+  </section>
+
+  <section class="bg-[#1a1410] py-16 text-white" style="background-image: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.85)), url(/images/recordsBanner.png); background-size: cover;">
+    <div class="mx-auto max-w-4xl px-6">
+      {image && (
+        <img src={image} alt={name} class="mb-8 w-full max-w-md rounded-sm object-cover mx-auto" />
+      )}
+
+      {tags.length > 0 && (
+        <div class="mb-6 flex flex-wrap justify-center gap-2">
+          {tags.map((g) => (
+            <span class="rounded bg-white/10 px-3 py-1 text-xs uppercase tracking-wider">{g}</span>
+          ))}
+        </div>
+      )}
+
+      <SocialRow
+        spotify={String(artist.url_spotify ?? "")}
+        applemusic={String(artist.url_applemusic ?? "")}
+        amazon={String(artist.url_amazon ?? "")}
+        youtube={String(artist.url_youtube_music ?? "")}
+        instagram={String(artist.url_instagram ?? "")}
+        tiktok={String(artist.url_tiktok_artist ?? "")}
+        facebook={String(artist.url_facebook ?? "")}
+        twitter={String(artist.url_twitter ?? "")}
+      />
+
+      <div class="prose prose-invert mt-12 max-w-none text-white/90" set:html={bioHtml}></div>
+    </div>
+  </section>
+
+  {merch.length > 0 && (
+    <section class="bg-ninetone-ink py-16">
+      <div class="mx-auto max-w-7xl px-6">
+        <h2 class="font-display text-2xl uppercase tracking-wider text-white">Merch</h2>
+        <div class="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+          {merch.map((p) => <MerchCard product={p} />)}
+        </div>
+      </div>
+    </section>
+  )}
+</Base>

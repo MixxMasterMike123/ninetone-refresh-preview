@@ -1,0 +1,46 @@
+---
+import type { SectionTheme } from "../lib/sections";
+
+interface Side {
+  href: string;
+  label: string;
+  bgImage?: string;
+  arrowDirection: "left" | "right";
+}
+
+interface Props {
+  left: Side;
+  right: Side;
+  theme?: SectionTheme;
+}
+
+const { left, right, theme = "records" } = Astro.props;
+
+const tints: Record<SectionTheme, string> = {
+  group: "bg-ninetone-red/70",
+  records: "bg-ninetone-red/70",
+  management: "bg-ninetone-navy/70",
+  nation: "bg-ninetone-green/70",
+};
+const tint = tints[theme];
+---
+
+<section class="grid grid-cols-1 md:grid-cols-2">
+  {[left, right].map((side) => (
+    <a
+      href={side.href}
+      class="group relative flex h-[60vh] items-center justify-center overflow-hidden text-white"
+      style={side.bgImage ? `background-image: url(${side.bgImage}); background-size: cover; background-position: center;` : undefined}
+    >
+      <div class={`absolute inset-0 ${tint} transition-opacity group-hover:opacity-90`}></div>
+      <div class="relative flex flex-col items-center gap-6">
+        <span class={`text-6xl ${side.arrowDirection === "left" ? "order-2" : "order-1"}`} aria-hidden>
+          {side.arrowDirection === "left" ? "←" : "→"}
+        </span>
+        <span class={`font-display text-2xl tracking-[0.3em] ${side.arrowDirection === "left" ? "order-1" : "order-2"}`}>
+          {side.label}
+        </span>
+      </div>
+    </a>
+  ))}
+</section>

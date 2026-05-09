@@ -1,0 +1,40 @@
+---
+import Base from "../../layouts/Base.astro";
+import WebPostsSection from "../../components/WebPostsSection.astro";
+import { getTeam, getWebPostSection } from "../../lib/ninetone";
+
+let team: Awaited<ReturnType<typeof getTeam>> = [];
+let fetchError: string | null = null;
+try {
+  team = await getTeam();
+} catch (e) {
+  fetchError = (e as Error).message;
+}
+let webPosts = await getWebPostSection("Ninetone Group Team").catch(() => null);
+---
+
+<Base title="Team">
+  <WebPostsSection data={webPosts} />
+  <section class="mx-auto max-w-7xl px-6 py-12">
+    <h1 class="text-center font-display text-5xl">Meet Our Team</h1>
+    {fetchError && (
+      <p class="mx-auto mt-6 max-w-xl rounded bg-yellow-100 p-4 text-sm text-yellow-800">
+        Couldn't load team yet — set FM_USER / FM_PASS in .env to enable.
+      </p>
+    )}
+    <div class="mt-12 grid gap-6 sm:grid-cols-2 md:grid-cols-3">
+      {team.map((m) => (
+        <div class="flex items-center gap-4 border border-neutral-200 p-4">
+          <div class="aspect-square w-24 shrink-0 overflow-hidden bg-neutral-300">
+            {m.userPhotoSmall && <img src={String(m.userPhotoSmall)} alt={String(m.userNameCalc ?? "")} class="h-full w-full object-cover grayscale" loading="lazy" />}
+          </div>
+          <div>
+            <h3 class="font-semibold">{String(m.userNameCalc ?? "")}</h3>
+            <p class="text-sm text-neutral-600">{String(m.title ?? "")}</p>
+            <a href={`/team/${String(m.SLUG ?? "")}`} class="text-sm text-ninetone-red hover:underline">View profile →</a>
+          </div>
+        </div>
+      ))}
+    </div>
+  </section>
+</Base>

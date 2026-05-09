@@ -1,0 +1,4 @@
+# Previous Artists moved under Records as a tab
+/previous-artists/single/:slug  /records/artists/previous/single/:slug  301
+/previous-artists/*             /records/artists/previous/:splat        301
+/previous-artists               /records/artists/previous               301

@@ -1,0 +1,50 @@
+---
+interface Props {
+  spotify?: string;
+  applemusic?: string;
+  amazon?: string;
+  youtube?: string;
+  instagram?: string;
+  tiktok?: string;
+  facebook?: string;
+  twitter?: string;
+  linkedin?: string;
+  wikipedia?: string;
+  size?: "sm" | "md";
+}
+
+const p = Astro.props as Props;
+const size = p.size ?? "md";
+
+const links: { url?: string; label: string; icon: string }[] = [
+  { url: p.instagram, label: "Instagram", icon: "IG" },
+  { url: p.tiktok, label: "TikTok", icon: "TT" },
+  { url: p.facebook, label: "Facebook", icon: "FB" },
+  { url: p.twitter, label: "X / Twitter", icon: "X" },
+  { url: p.youtube, label: "YouTube", icon: "YT" },
+  { url: p.spotify, label: "Spotify", icon: "SP" },
+  { url: p.applemusic, label: "Apple Music", icon: "AM" },
+  { url: p.amazon, label: "Amazon Music", icon: "AZ" },
+  { url: p.linkedin, label: "LinkedIn", icon: "IN" },
+  { url: p.wikipedia, label: "Wikipedia", icon: "W" },
+];
+
+const visible = links.filter((l) => l.url && l.url.trim() !== "");
+const dim = size === "sm" ? "h-6 w-6 text-[9px]" : "h-8 w-8 text-xs";
+---
+
+<ul class="flex flex-wrap gap-1.5">
+  {visible.map((l) => (
+    <li>
+      <a
+        href={l.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={l.label}
+        class={`flex ${dim} items-center justify-center rounded-full bg-white/10 font-bold hover:bg-white/20`}
+      >
+        {l.icon}
+      </a>
+    </li>
+  ))}
+</ul>

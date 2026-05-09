@@ -1,0 +1,35 @@
+# Cloudflare Pages cache headers.
+#
+# Strategy:
+#   - HTML pages: short browser cache + long edge cache via stale-while-revalidate.
+#     Visitors served from CDN instantly; edge re-fetches in the background after
+#     the TTL so post-deploy updates roll out within ~10 min.
+#   - Hashed assets (Astro emits content-hashed filenames under /_astro/):
+#     immutable + 1 year. Filename changes when content changes.
+#   - Public images & static files: 1 day in browser, longer at edge.
+#   - Search index JSON: same as HTML.
+#
+# Order matters — first matching rule wins per header name.
+
+# Astro content-hashed bundles — safe to cache forever.
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Public images — change infrequently, rename to bust.
+/images/*
+  Cache-Control: public, max-age=86400, s-maxage=604800
+
+# Favicon & root assets.
+/favicon.ico
+  Cache-Control: public, max-age=86400
+/favicon.svg
+  Cache-Control: public, max-age=86400
+
+# Search index — refresh roughly with HTML pages.
+/search-index.json
+  Cache-Control: public, max-age=600, s-maxage=600, stale-while-revalidate=86400
+
+# Default for everything else (including HTML pages).
+# 10 min browser cache, edge serves stale up to 1 day while revalidating.
+/*
+  Cache-Control: public, max-age=600, s-maxage=600, stale-while-revalidate=86400

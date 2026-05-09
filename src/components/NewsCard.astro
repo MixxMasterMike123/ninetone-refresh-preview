@@ -1,0 +1,36 @@
+---
+interface Props {
+  title: string;
+  slug: string;
+  image?: string;
+  excerpt?: string;
+  date?: string;
+  author?: string;
+  lang?: "en" | "sv";
+}
+
+const { title, slug, image, excerpt, date, author, lang = "en" } = Astro.props;
+const readMore = lang === "sv" ? "Läs mer" : "Read more";
+---
+
+<article class="flex flex-col overflow-hidden rounded-sm bg-white shadow-sm transition hover:shadow-md">
+  <a href={`/news/${slug}`} class="relative block aspect-[16/10] overflow-hidden bg-neutral-200">
+    {image && <img src={image} alt={title} class="h-full w-full object-cover" loading="lazy" />}
+    <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+    <h3 class="absolute bottom-3 left-3 right-3 font-display text-lg font-semibold leading-tight text-white">
+      {title}
+    </h3>
+  </a>
+  <div class="flex flex-1 flex-col gap-3 p-4">
+    {(author || date) && (
+      <div class="text-xs text-neutral-500">
+        {author && <>By <span class="underline">{author}</span></>}
+        {date && <span class="ml-2">{date}</span>}
+      </div>
+    )}
+    {excerpt && <p class="text-sm text-neutral-700 line-clamp-3">{excerpt}</p>}
+    <a href={`/news/${slug}`} class="mt-auto inline-flex items-center gap-2 self-start text-sm font-semibold text-ninetone-red hover:underline">
+      {readMore} <span aria-hidden>→</span>
+    </a>
+  </div>
+</article>

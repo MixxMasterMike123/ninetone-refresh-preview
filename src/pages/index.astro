@@ -1,0 +1,72 @@
+---
+import Base from "../layouts/Base.astro";
+import MerchCard from "../components/MerchCard.astro";
+import WebPostsSection from "../components/WebPostsSection.astro";
+import { getProducts } from "../lib/shopify";
+import { getWebPostSection } from "../lib/ninetone";
+
+const collectionId = import.meta.env.SHOPIFY_HOMEPAGE_COLLECTION_ID;
+let products: Awaited<ReturnType<typeof getProducts>> = [];
+let merchError: string | null = null;
+try {
+  products = await getProducts({ collectionId, limit: 12 });
+} catch (e) {
+  merchError = (e as Error).message;
+}
+let webPosts = await getWebPostSection("Ninetone Group").catch(() => null);
+---
+
+<Base title="Ninetone Group" theme="group">
+  <section class="grid grid-cols-1 md:grid-cols-3">
+    <a
+      href="/records"
+      class="group relative flex h-[60vh] items-center justify-center overflow-hidden bg-ninetone-red text-white"
+      style="background-image: url(/images/recordsBanner.png); background-size: cover; background-position: center;"
+    >
+      <div class="absolute inset-0 bg-ninetone-red/60 transition-opacity group-hover:opacity-50"></div>
+      <div class="relative flex flex-col items-center gap-4">
+        <img src="/images/recordsLogo.png" alt="Ninetone Records" class="h-32 w-auto" />
+        <span class="mt-4 text-4xl" aria-hidden>→</span>
+      </div>
+    </a>
+    <a
+      href="/management"
+      class="group relative flex h-[60vh] items-center justify-center overflow-hidden bg-ninetone-navy text-white"
+      style="background-image: url(/images/managementBanner.png); background-size: cover; background-position: center;"
+    >
+      <div class="absolute inset-0 bg-ninetone-navy/60 transition-opacity group-hover:opacity-50"></div>
+      <div class="relative flex flex-col items-center gap-4">
+        <img src="/images/managementLogo.png" alt="Ninetone Management" class="h-32 w-auto" />
+        <span class="mt-4 text-4xl" aria-hidden>→</span>
+      </div>
+    </a>
+    <a
+      href="/ninetone-nation"
+      class="group relative flex h-[60vh] items-center justify-center overflow-hidden bg-ninetone-green text-white"
+      style="background-image: url(/images/nationBanner.png); background-size: cover; background-position: center;"
+    >
+      <div class="absolute inset-0 bg-ninetone-green/60 transition-opacity group-hover:opacity-50"></div>
+      <div class="relative flex flex-col items-center gap-4">
+        <img src="/images/nationLogo.png" alt="Ninetone Nation" class="h-32 w-auto" />
+        <span class="mt-4 text-4xl" aria-hidden>→</span>
+      </div>
+    </a>
+  </section>
+
+  <WebPostsSection data={webPosts} />
+
+  <section class="mx-auto max-w-7xl px-6 py-16">
+    <h2 class="font-display text-2xl uppercase tracking-wider">Shop Ninetone Merchandise</h2>
+    {merchError && (
+      <p class="mt-4 rounded bg-yellow-100 p-4 text-sm text-yellow-800">
+        Couldn't load Shopify products — set SHOPIFY_ADMIN_TOKEN in .env.
+      </p>
+    )}
+    {!merchError && products.length === 0 && (
+      <p class="mt-4 text-sm text-neutral-500">No products found in collection.</p>
+    )}
+    <div class="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+      {products.map((p) => <MerchCard product={p} />)}
+    </div>
+  </section>
+</Base>

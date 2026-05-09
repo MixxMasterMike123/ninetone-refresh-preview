@@ -1,0 +1,68 @@
+---
+interface Props {
+  currentPage: number;
+  lastPage: number;
+  baseUrl: string;
+}
+
+const { currentPage, lastPage, baseUrl } = Astro.props as Props;
+
+if (lastPage <= 1) return Astro.redirect("");
+
+// Page 1 is the bare baseUrl; subsequent pages are /baseUrl/2, /baseUrl/3, etc.
+function urlFor(p: number): string {
+  return p === 1 ? baseUrl : `${baseUrl}/${p}`;
+}
+
+// Build a compact page list: 1 ... (current-1) current (current+1) ... last
+function buildPageList(current: number, last: number): (number | "…")[] {
+  const out: (number | "…")[] = [];
+  const window = 1; // pages on each side of current
+  for (let i = 1; i <= last; i++) {
+    if (i === 1 || i === last || (i >= current - window && i <= current + window)) {
+      out.push(i);
+    } else if (out[out.length - 1] !== "…") {
+      out.push("…");
+    }
+  }
+  return out;
+}
+
+const pages = buildPageList(currentPage, lastPage);
+const prevUrl = currentPage > 1 ? urlFor(currentPage - 1) : null;
+const nextUrl = currentPage < lastPage ? urlFor(currentPage + 1) : null;
+---
+
+<nav class="mt-12 flex items-center justify-center gap-2 text-sm" aria-label="Pagination">
+  {prevUrl ? (
+    <a href={prevUrl} class="rounded-sm border border-white/20 px-3 py-1.5 text-white hover:bg-white/10" rel="prev">
+      ← Prev
+    </a>
+  ) : (
+    <span class="rounded-sm border border-white/10 px-3 py-1.5 text-white/30">← Prev</span>
+  )}
+
+  <ul class="flex items-center gap-1">
+    {pages.map((p) =>
+      p === "…" ? (
+        <li class="px-2 text-white/50">…</li>
+      ) : p === currentPage ? (
+        <li class="rounded-sm bg-white px-3 py-1.5 font-semibold text-ninetone-ink">{p}</li>
+      ) : (
+        <li>
+          <a href={urlFor(p)} class="block rounded-sm border border-white/20 px-3 py-1.5 text-white hover:bg-white/10">
+            {p}
+          </a>
+        </li>
+      ),
+    )}
+  </ul>
+
+  {nextUrl ? (
+    <a href={nextUrl} class="rounded-sm border border-white/20 px-3 py-1.5 text-white hover:bg-white/10" rel="next">
+      Next →
+    </a>
+  ) : (
+    <span class="rounded-sm border border-white/10 px-3 py-1.5 text-white/30">Next →</span>
+  )}
+</nav>

@@ -1,0 +1,52 @@
+---
+import Base from "../../layouts/Base.astro";
+import { getTeam } from "../../lib/ninetone";
+import { renderBio } from "../../lib/markdown";
+
+export async function getStaticPaths() {
+  const team = await getTeam();
+  return team
+    .filter((m) => m.SLUG)
+    .map((m) => ({
+      params: { slug: String(m.SLUG) },
+      props: { member: m },
+    }));
+}
+
+const { member } = Astro.props as { member: Record<string, unknown> };
+
+const name = String(member.userNameCalc ?? "");
+const title = String(member.title ?? "");
+const titleDescription = String(member.titleDescription ?? "");
+const descriptionHtml = renderBio(String(member.DescriptionString ?? member.Description ?? ""));
+const photo = member.userPhoto ? String(member.userPhoto) : member.userPhotoSmall ? String(member.userPhotoSmall) : undefined;
+const email = String(member.userEmail ?? "");
+const phone = String(member.Phone ?? "");
+---
+
+<Base title={name}>
+  <article class="mx-auto max-w-4xl px-6 py-12">
+    <p class="mb-6 text-xs uppercase tracking-wider text-neutral-500">
+      <a href="/team" class="hover:underline">← Team</a>
+    </p>
+
+    <div class="flex flex-col gap-8 sm:flex-row sm:items-start">
+      <div class="aspect-square w-48 shrink-0 overflow-hidden bg-neutral-200">
+        {photo && <img src={photo} alt={name} class="h-full w-full object-cover grayscale" />}
+      </div>
+      <div>
+        <h1 class="font-display text-4xl">{name}</h1>
+        {title && <p class="mt-2 text-lg text-neutral-600">{title}</p>}
+        {titleDescription && titleDescription !== title && (
+          <p class="mt-1 text-sm text-neutral-500">{titleDescription}</p>
+        )}
+        <div class="mt-6 flex flex-wrap gap-4 text-sm">
+          {email && <a href={`mailto:${email}`} class="text-ninetone-red hover:underline">{email}</a>}
+          {phone && <a href={`tel:${phone.replace(/\s/g, "")}`} class="text-neutral-700">{phone}</a>}
+        </div>
+      </div>
+    </div>
+
+    <div class="prose mt-12 max-w-none text-neutral-800" set:html={descriptionHtml}></div>
+  </article>
+</Base>

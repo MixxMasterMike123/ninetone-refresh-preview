@@ -1,0 +1,46 @@
+---
+import Base from "../../layouts/Base.astro";
+import ArtistCard from "../../components/ArtistCard.astro";
+import { getBookingRoster } from "../../lib/ninetone";
+
+let roster: Awaited<ReturnType<typeof getBookingRoster>> = [];
+let fetchError: string | null = null;
+try {
+  roster = await getBookingRoster();
+} catch (e) {
+  fetchError = (e as Error).message;
+}
+---
+
+<Base title="Booking" theme="nation">
+  <section class="bg-ninetone-green py-16 text-white">
+    <div class="mx-auto max-w-7xl px-6 text-center">
+      <h1 class="font-display text-5xl">Boka Din Underhållning</h1>
+      <p class="mt-4 text-white/90">Boka din favoritartist eller föreläsare till ditt evenemang</p>
+    </div>
+  </section>
+
+  <section class="bg-white py-16">
+    <div class="mx-auto max-w-7xl px-6">
+      <h2 class="text-center font-display text-3xl">Artist</h2>
+      {fetchError && (
+        <p class="mx-auto mt-4 max-w-xl rounded bg-yellow-100 p-4 text-sm text-yellow-800">
+          Couldn't load roster yet — set FM_USER / FM_PASS in .env to enable.
+        </p>
+      )}
+      <div class="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-3">
+        {roster.map((a) => (
+          <ArtistCard
+            theme="nation"
+            name={String(a["Head Artist"] ?? "")}
+            slug={String(a.SLUG ?? "")}
+            blurb={String(a.artistPresentationShort ?? "")}
+            image={a.artistPicture_small ? String(a.artistPicture_small) : undefined}
+            tags={a.genre ? String(a.genre).split(/\r|\n/).filter(Boolean) : []}
+            ctaLabel={`Boka ${String(a["Head Artist"] ?? "")}`}
+          />
+        ))}
+      </div>
+    </div>
+  </section>
+</Base>

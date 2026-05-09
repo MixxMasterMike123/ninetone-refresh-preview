@@ -1,0 +1,41 @@
+---
+import { renderBio } from "../lib/markdown";
+import type { WebPostCategory } from "../lib/ninetone";
+
+interface Props {
+  data: WebPostCategory | null;
+  /** Optional: override the page heading. Default uses data.title. */
+  heading?: string;
+}
+
+const { data, heading } = Astro.props as Props;
+
+if (!data || data.blocks.length === 0) return Astro.redirect("");
+
+// Subjects sometimes arrive HTML-wrapped (e.g. "<h2>Foo</h2>"); strip any
+// outer tag so we can render them as a consistent <h2> ourselves.
+function stripOuterTag(s: string): string {
+  return s.replace(/^\s*<([a-z0-9]+)[^>]*>([\s\S]*?)<\/\1>\s*$/i, "$2").trim();
+}
+
+const blocks = data.blocks.map((b) => ({
+  subject: stripOuterTag(b.subject),
+  messageHtml: renderBio(b.message),
+}));
+
+const pageTitle = heading ?? data.title;
+---
+
+<section class="bg-white py-16">
+  <div class="mx-auto max-w-4xl px-6">
+    {pageTitle && <h1 class="font-display text-4xl">{pageTitle}</h1>}
+    <div class="mt-8 space-y-10">
+      {blocks.map((b) => (
+        <div>
+          {b.subject && <h2 class="font-display text-2xl">{b.subject}</h2>}
+          <div class="prose prose-neutral mt-4 max-w-none text-neutral-700" set:html={b.messageHtml}></div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

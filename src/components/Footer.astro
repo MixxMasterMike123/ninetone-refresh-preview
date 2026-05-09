@@ -1,0 +1,94 @@
+---
+import type { SectionTheme } from "../lib/sections";
+import { sectionColors } from "../lib/sections";
+
+interface Props {
+  theme?: SectionTheme;
+  lang?: "en" | "sv";
+}
+
+const { theme = "group", lang = "en" } = Astro.props;
+const colors = sectionColors[theme];
+
+const ctaCopy: Record<SectionTheme, { en: { title: string; body: string; cta: string; href: string }; sv: { title: string; body: string; cta: string; href: string } }> = {
+  group: {
+    en: { title: "We want your demos!", body: "Complete our contact form and include links to your music. We're eager to discover the next rising star!", cta: "WE WANT YOUR DEMOS", href: "/records/contact-records" },
+    sv: { title: "Vi vill ha dina demos!", body: "Fyll i vårt kontaktformulär och inkludera länkar till din musik. Vi söker efter nästa stjärna!", cta: "VI VILL HA DINA DEMOS", href: "/records/contact-records" },
+  },
+  records: {
+    en: { title: "We want your demos!", body: "Complete our contact form and include links to your music. We're eager to discover the next rising star!", cta: "WE WANT YOUR DEMOS", href: "/records/contact-records" },
+    sv: { title: "Vi vill ha dina demos!", body: "Fyll i vårt kontaktformulär och inkludera länkar till din musik. Vi söker efter nästa stjärna!", cta: "VI VILL HA DINA DEMOS", href: "/records/contact-records" },
+  },
+  management: {
+    en: { title: "We succeed together!", body: "Are you the next big thing in social media? Connect with us! Fill out our Management contact form and include links to your social platforms. We're on the lookout for extraordinary talent like yours.", cta: "WE WANT YOUR TALENT!", href: "/management/contact-management" },
+    sv: { title: "Vi lyckas tillsammans!", body: "Är du nästa stora namn inom sociala medier? Hör av dig! Fyll i kontaktformuläret och inkludera länkar till dina kanaler.", cta: "VI VILL HA DIN TALANG!", href: "/management/contact-management" },
+  },
+  nation: {
+    en: { title: "Book your entertainment from Ninetone Nation", body: "Top artists, speakers, and entertainers for your event.", cta: "BOOKING REQUEST", href: "/ninetone-nation/contact-ninetone-nation" },
+    sv: { title: "Boka din underhållning från Ninetone Nation", body: "Här hittar du några av Sveriges största artister.", cta: "BOKNINGSFÖRFRÅGAN", href: "/ninetone-nation/contact-ninetone-nation" },
+  },
+};
+
+const copy = ctaCopy[theme][lang];
+
+const navItems = [
+  { href: "/", labelEn: "HOME", labelSv: "HEM" },
+  { href: "/records", labelEn: "NINETONE RECORDS", labelSv: "NINETONE RECORDS" },
+  { href: "/management", labelEn: "NINETONE MANAGEMENT", labelSv: "NINETONE MANAGEMENT" },
+  { href: "/ninetone-nation", labelEn: "NINETONE NATION", labelSv: "NINETONE NATION" },
+  { href: "/news", labelEn: "NEWS", labelSv: "NYHETER" },
+  { href: "/previous-artists", labelEn: "PREVIOUS ARTISTS", labelSv: "TIDIGARE ARTISTER" },
+];
+
+const socials = [
+  { name: "Facebook", href: "#" },
+  { name: "Instagram", href: "#" },
+  { name: "Threads", href: "#" },
+  { name: "TikTok", href: "#" },
+  { name: "X", href: "#" },
+  { name: "LinkedIn", href: "#" },
+  { name: "Wikipedia", href: "#" },
+  { name: "Spotify", href: "#" },
+  { name: "Apple Music", href: "#" },
+  { name: "Deezer", href: "#" },
+  { name: "YouTube", href: "#" },
+  { name: "Vimeo", href: "#" },
+];
+---
+
+<footer class={`${colors.bg} ${colors.text}`}>
+  <div class="mx-auto grid max-w-7xl gap-8 px-6 py-12 md:grid-cols-3">
+    <div class="flex flex-col items-start gap-4">
+      <img src="/images/ninetoneSQlogo.png" alt="Ninetone Group" class="h-24 w-auto" />
+    </div>
+
+    <div class="text-center">
+      <ul class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs font-semibold tracking-wider md:grid-cols-3">
+        {navItems.map((item) => (
+          <li>
+            <a href={item.href} class="hover:underline">
+              {lang === "sv" ? item.labelSv : item.labelEn}
+            </a>
+          </li>
+        ))}
+      </ul>
+      <ul class="mt-6 flex flex-wrap justify-center gap-3 text-xs">
+        {socials.map((s) => (
+          <li><a href={s.href} class="hover:underline" aria-label={s.name}>{s.name}</a></li>
+        ))}
+      </ul>
+    </div>
+
+    <div class="flex flex-col items-start gap-3 md:items-end md:text-right">
+      <h3 class="font-display text-xl font-semibold">{copy.title}</h3>
+      <p class="max-w-xs text-sm opacity-90">{copy.body}</p>
+      <a href={copy.href} class={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold ${colors.cta}`}>
+        {copy.cta} <span aria-hidden>→</span>
+      </a>
+    </div>
+  </div>
+
+  <div class="border-t border-white/20 py-4 text-center text-xs opacity-80">
+    © Ninetone Group {new Date().getFullYear()} — All Rights Reserved
+  </div>
+</footer>

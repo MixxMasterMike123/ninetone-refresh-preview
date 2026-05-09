@@ -1,0 +1,105 @@
+---
+import type { SectionTheme } from "../lib/sections";
+import { sectionColors, sectionCta } from "../lib/sections";
+
+interface Props {
+  theme?: SectionTheme;
+  lang?: "en" | "sv";
+}
+
+const { theme = "group", lang = "en" } = Astro.props;
+const colors = sectionColors[theme];
+const cta = sectionCta[theme];
+const ctaLabel = lang === "sv" ? cta.sv : cta.en;
+
+const navItems = [
+  { href: "/", labelEn: "HOME", labelSv: "HEM" },
+  { href: "/records", labelEn: "NINETONE RECORDS", labelSv: "NINETONE RECORDS" },
+  { href: "/management", labelEn: "NINETONE MANAGEMENT", labelSv: "NINETONE MANAGEMENT" },
+  { href: "/ninetone-nation", labelEn: "NINETONE NATION", labelSv: "NINETONE NATION" },
+  { href: "/news", labelEn: "NEWS", labelSv: "NYHETER" },
+];
+---
+
+<header class={`${colors.bg} ${colors.text}`}>
+  <div class="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-4">
+    <a href="/" class="flex shrink-0 items-center" aria-label="Ninetone Group">
+      <img src="/images/ninetoneSQlogo.png" alt="Ninetone Group" class="h-12 w-auto" />
+    </a>
+
+    <nav class="hidden flex-1 lg:block">
+      <ul class="flex items-center justify-center gap-6 text-xs font-semibold tracking-wider">
+        {navItems.map((item) => (
+          <li>
+            <a href={item.href} class="hover:underline">
+              {lang === "sv" ? item.labelSv : item.labelEn}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+
+    <div class="flex items-center gap-3">
+      <button
+        type="button"
+        id="search-toggle"
+        class="inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-white/10"
+        aria-label={lang === "sv" ? "Sök" : "Search"}
+        aria-expanded="false"
+        aria-controls="search-panel"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+          <circle cx="11" cy="11" r="7"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+      </button>
+      <a
+        href={cta.href}
+        class={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold ${colors.cta}`}
+      >
+        {ctaLabel}
+        <span aria-hidden>→</span>
+      </a>
+      <div class="text-xs">
+        <a href={lang === "en" ? Astro.url.pathname.replace(/^\/en/, "/sv") : Astro.url.pathname.replace(/^\/sv/, "/en")} class="hover:underline">
+          {lang === "en" ? "SV" : "EN"}
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div id="search-panel" class="hidden border-t border-white/10">
+    <form method="get" action="/search-result" class="mx-auto flex max-w-7xl items-center gap-2 px-6 py-3">
+      <input
+        type="search"
+        name="q"
+        id="search-panel-input"
+        placeholder={lang === "sv" ? "Sök artister, nyheter, team…" : "Search artists, news, team…"}
+        class="w-full rounded-sm border border-white/30 bg-white/10 px-3 py-2 text-sm text-white placeholder-white/60 focus:border-white focus:outline-none"
+        autocomplete="off"
+      />
+      <button type="submit" class={`rounded-md px-4 py-2 text-sm font-semibold ${colors.cta}`}>
+        {lang === "sv" ? "Sök" : "Go"}
+      </button>
+    </form>
+  </div>
+</header>
+
+<script>
+  const toggle = document.getElementById("search-toggle");
+  const panel = document.getElementById("search-panel");
+  const input = document.getElementById("search-panel-input") as HTMLInputElement | null;
+  if (toggle && panel) {
+    toggle.addEventListener("click", () => {
+      const open = !panel.classList.contains("hidden");
+      if (open) {
+        panel.classList.add("hidden");
+        toggle.setAttribute("aria-expanded", "false");
+      } else {
+        panel.classList.remove("hidden");
+        toggle.setAttribute("aria-expanded", "true");
+        input?.focus();
+      }
+    });
+  }
+</script>

@@ -1,0 +1,36 @@
+---
+import Base from "../../layouts/Base.astro";
+import NewsCard from "../../components/NewsCard.astro";
+import { getNews } from "../../lib/ninetone";
+
+let posts: Awaited<ReturnType<typeof getNews>> = [];
+let fetchError: string | null = null;
+try {
+  posts = await getNews();
+} catch (e) {
+  fetchError = (e as Error).message;
+}
+---
+
+<Base title="News">
+  <section class="mx-auto max-w-7xl px-6 py-12">
+    <h1 class="font-display text-5xl">Ninetone news</h1>
+    {fetchError && (
+      <p class="mt-6 rounded bg-yellow-100 p-4 text-sm text-yellow-800">
+        Couldn't load news yet — set FM_USER / FM_PASS in .env to enable.
+      </p>
+    )}
+    <div class="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      {posts.map((p) => (
+        <NewsCard
+          title={String(p.Title ?? "")}
+          slug={String(p.slug ?? "")}
+          image={p.image_webp ? String(p.image_webp) : undefined}
+          excerpt={String(p.shortMessage ?? p.Message ?? "")}
+          date={String(p.Date ?? "")}
+          author={String(p["Created By"] ?? "")}
+        />
+      ))}
+    </div>
+  </section>
+</Base>

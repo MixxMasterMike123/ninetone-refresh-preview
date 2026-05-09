@@ -1,0 +1,17 @@
+---
+import Base from "../../layouts/Base.astro";
+import SplitPortalHero from "../../components/SplitPortalHero.astro";
+import WebPostsSection from "../../components/WebPostsSection.astro";
+import { getWebPostSection } from "../../lib/ninetone";
+
+let webPosts = await getWebPostSection("Ninetone Records").catch(() => null);
+---
+
+<Base title="Ninetone Records" theme="records">
+  <SplitPortalHero
+    theme="records"
+    left={{ href: "/records/artists", label: "MEET THE ARTISTS", arrowDirection: "left", bgImage: "/images/artistSectionBanner.png" }}
+    right={{ href: "/team", label: "MEET THE TEAM", arrowDirection: "right", bgImage: "/images/meetTheTeamBanner.png" }}
+  />
+  <WebPostsSection data={webPosts} />
+</Base>

@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand colors (official) */
+  --color-ninetone-red: #91000c;
+  --color-ninetone-red-dark: #6b0009;
+  --color-ninetone-navy: #13486f;
+  --color-ninetone-navy-dark: #0d3450;
+  --color-ninetone-green: #1a936f;
+  --color-ninetone-green-dark: #126b51;
+  --color-ninetone-card: #1a2b3f;
+  --color-ninetone-card-sage: #b8c9b3;
+  --color-ninetone-ink: #0a1420;
+  --color-ninetone-paper: #f5f3ee;
+
+  /* Typography */
+  --font-display: "Ubuntu", system-ui, sans-serif;
+  --font-sans: "Rubik", system-ui, sans-serif;
+  --font-menu: "Ubuntu", system-ui, sans-serif;
+}
+
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background: white;
+  color: #111;
+  font-weight: 400;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Menu items: Ubuntu Light (300) */
+nav, header nav a, footer nav a {
+  font-family: var(--font-menu);
+  font-weight: 300;
+}
+
+/* Bio rendering — matches DivHunt's "markdown" function output */
+.prose h1, .prose h2, .prose h3, .prose h4 {
+  font-family: var(--font-display);
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  line-height: 1.2;
+}
+.prose h2 { font-size: 1.875rem; font-weight: 700; }
+.prose h3 { font-size: 1.5rem; font-weight: 700; }
+.prose h4 { font-size: 1.25rem; font-weight: 600; }
+.prose p {
+  margin-top: 0;
+  margin-bottom: 1.25em;
+  line-height: 1.7;
+}
+.prose a {
+  color: var(--color-ninetone-red);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose a:hover { opacity: 0.8; }
+.prose ul, .prose ol {
+  margin: 1em 0;
+  padding-left: 1.5rem;
+}
+.prose ul { list-style: disc; }
+.prose ol { list-style: decimal; }
+.prose li { margin: 0.4em 0; }
+.prose strong { font-weight: 700; }
+.prose em { font-style: italic; }
+.prose blockquote {
+  border-left: 3px solid var(--color-ninetone-red);
+  padding-left: 1rem;
+  font-style: italic;
+  margin: 1.25em 0;
+}
+.prose hr {
+  border-top: 1px solid #e5e5e5;
+  margin: 2em 0;
+}
+.prose-invert a { color: white; }
+.prose-invert blockquote { border-color: white; }

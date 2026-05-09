@@ -1,0 +1,31 @@
+---
+interface Props {
+  active: "current" | "previous";
+}
+
+const { active } = Astro.props as Props;
+
+const tabs: { key: "current" | "previous"; label: string; href: string }[] = [
+  { key: "current", label: "Artists", href: "/records/artists" },
+  { key: "previous", label: "Previous Artists", href: "/records/artists/previous" },
+];
+---
+
+<div class="mb-10 flex items-center justify-center gap-3">
+  {tabs.map((t) => {
+    const isActive = t.key === active;
+    return (
+      <a
+        href={t.href}
+        class={
+          isActive
+            ? "rounded-full bg-white px-6 py-2 text-sm font-semibold text-ninetone-ink"
+            : "rounded-full px-6 py-2 text-sm font-semibold text-white/80 hover:text-white"
+        }
+        aria-current={isActive ? "page" : undefined}
+      >
+        {t.label}
+      </a>
+    );
+  })}
+</div>

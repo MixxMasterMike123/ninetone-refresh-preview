@@ -1,0 +1,44 @@
+---
+import Base from "../../layouts/Base.astro";
+import ArtistCard from "../../components/ArtistCard.astro";
+import { getClients } from "../../lib/ninetone";
+
+let clients: Awaited<ReturnType<typeof getClients>> = [];
+let fetchError: string | null = null;
+try {
+  clients = await getClients();
+} catch (e) {
+  fetchError = (e as Error).message;
+}
+---
+
+<Base title="Clients" theme="management">
+  <section class="bg-ninetone-ink py-12 text-white">
+    <div class="mx-auto max-w-7xl px-6">
+      <h1 class="font-display text-5xl">Clients</h1>
+      <p class="mt-4 text-neutral-300">Meet Ninetone's Clients. Pioneering the creative digital age</p>
+    </div>
+  </section>
+
+  <section class="bg-ninetone-ink pb-20">
+    <div class="mx-auto max-w-7xl px-6">
+      {fetchError && (
+        <p class="rounded bg-yellow-200/10 p-4 text-sm text-yellow-200">
+          Couldn't load clients yet — set FM_USER / FM_PASS in .env to enable.
+        </p>
+      )}
+      <div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+        {clients.map((c) => (
+          <ArtistCard
+            theme="management"
+            name={String(c["Head Artist"] ?? "")}
+            slug={String(c.SLUG ?? "")}
+            blurb={String(c.artistPresentationShort ?? "")}
+            image={c.artistPicture_small ? String(c.artistPicture_small) : undefined}
+            tags={c.genre ? String(c.genre).split(/\r|\n/).filter(Boolean) : []}
+          />
+        ))}
+      </div>
+    </div>
+  </section>
+</Base>

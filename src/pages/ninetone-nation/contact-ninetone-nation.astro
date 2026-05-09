@@ -1,0 +1,25 @@
+---
+import Base from "../../layouts/Base.astro";
+---
+
+<Base title="Booking Request" theme="nation">
+  <section class="bg-ninetone-green py-20 text-white">
+    <div class="mx-auto grid max-w-6xl gap-12 px-6 md:grid-cols-2">
+      <div>
+        <p class="text-sm uppercase tracking-wider opacity-80">Ninetone Nation</p>
+        <h1 class="mt-2 font-display text-4xl">Bokningsförfrågan</h1>
+      </div>
+      <div class="rounded bg-ninetone-green-dark p-6">
+        <h2 class="font-display text-2xl">Boka din favoritartist</h2>
+        <form class="mt-6 grid gap-3" method="post">
+          <div class="grid gap-3 sm:grid-cols-2">
+            <input class="rounded bg-white/10 px-3 py-2 text-sm placeholder:text-white/60" placeholder="Namn *" required />
+            <input class="rounded bg-white/10 px-3 py-2 text-sm placeholder:text-white/60" placeholder="E-post *" type="email" required />
+          </div>
+          <textarea class="rounded bg-white/10 px-3 py-2 text-sm placeholder:text-white/60" rows="4" placeholder="Vilken artist är du intresserad av? Datum, plats, etc." required></textarea>
+          <button type="submit" class="rounded bg-white px-4 py-2 text-sm font-semibold uppercase tracking-wider text-ninetone-green hover:bg-neutral-100">Skicka</button>
+        </form>
+      </div>
+    </div>
+  </section>
+</Base>

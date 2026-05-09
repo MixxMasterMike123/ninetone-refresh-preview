@@ -1,0 +1,70 @@
+---
+import Base from "../../layouts/Base.astro";
+import { getNews } from "../../lib/ninetone";
+import { renderBio } from "../../lib/markdown";
+
+export async function getStaticPaths() {
+  const posts = await getNews();
+  return posts
+    .filter((p) => p.slug)
+    .map((p) => ({
+      params: { slug: String(p.slug) },
+      props: { post: p },
+    }));
+}
+
+const { post } = Astro.props as { post: Record<string, unknown> };
+
+const title = String(post.Title ?? "");
+const author = String(post["Created By"] ?? "");
+const date = String(post.Date ?? "");
+const image = post.image_webp ? String(post.image_webp) : undefined;
+const messageHtml = renderBio(String(post.MessageString ?? post.Message ?? ""));
+
+const ytLinks = [post.ytLinkA, post.ytLinkB, post.ytLinkC, post.ytLinkD]
+  .map((u) => String(u ?? "").trim())
+  .filter(Boolean);
+---
+
+<Base title={title} description={String(post.shortMessage ?? "")}>
+  <article class="mx-auto max-w-3xl px-6 py-12">
+    <p class="mb-2 text-xs uppercase tracking-wider text-neutral-500">
+      <a href="/news" class="hover:underline">← News</a>
+    </p>
+
+    {image && <img src={image} alt={title} class="mb-8 aspect-video w-full rounded-sm object-cover" />}
+
+    <h1 class="font-display text-4xl">{title}</h1>
+
+    {(author || date) && (
+      <div class="mt-4 flex items-center gap-4 text-sm text-neutral-600">
+        {author && <span>By <span class="underline">{author}</span></span>}
+        {date && <span>{date}</span>}
+      </div>
+    )}
+
+    <div class="prose mt-8 max-w-none text-neutral-800" set:html={messageHtml}></div>
+
+    {ytLinks.length > 0 && (
+      <div class="mt-12 grid gap-4 sm:grid-cols-2">
+        {ytLinks.map((url) => {
+          const idMatch = url.match(/(?:v=|youtu\.be\/|embed\/)([\w-]{11})/);
+          const id = idMatch ? idMatch[1] : null;
+          return id ? (
+            <iframe
+              src={`https://www.youtube.com/embed/${id}`}
+              class="aspect-video w-full rounded"
+              title={title}
+              loading="lazy"
+              allowfullscreen
+            ></iframe>
+          ) : null;
+        })}
+      </div>
+    )}
+
+    <div class="mt-12 border-t border-neutral-200 pt-8">
+      <a href="/news" class="text-sm text-ninetone-red hover:underline">← Back to News</a>
+    </div>
+  </article>
+</Base>

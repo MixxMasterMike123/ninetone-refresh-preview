@@ -1,0 +1,46 @@
+---
+import Base from "../../layouts/Base.astro";
+import ArtistCard from "../../components/ArtistCard.astro";
+import ArtistsTabs from "../../components/ArtistsTabs.astro";
+import { getArtists } from "../../lib/ninetone";
+
+let artists: Awaited<ReturnType<typeof getArtists>> = [];
+let fetchError: string | null = null;
+try {
+  artists = await getArtists();
+} catch (e) {
+  fetchError = (e as Error).message;
+}
+---
+
+<Base title="Artists" theme="records">
+  <section class="bg-ninetone-ink py-12 text-white">
+    <div class="mx-auto max-w-7xl px-6">
+      <h1 class="font-display text-5xl">Artists</h1>
+      <p class="mt-4 text-neutral-300">Top Music Production &amp; Artist Branding | Ninetone Records</p>
+    </div>
+  </section>
+
+  <section class="bg-ninetone-ink pb-20">
+    <div class="mx-auto max-w-7xl px-6">
+      <ArtistsTabs active="current" />
+      {fetchError && (
+        <p class="rounded bg-yellow-200/10 p-4 text-sm text-yellow-200">
+          Couldn't load artists yet — set FM_USER / FM_PASS in .env to enable. ({fetchError})
+        </p>
+      )}
+      <div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+        {artists.map((a) => (
+          <ArtistCard
+            theme="records"
+            name={String(a["Head Artist"] ?? "")}
+            slug={String(a.SLUG ?? "")}
+            blurb={String(a.artistPresentationShort ?? "")}
+            image={a.artistPicture_small ? String(a.artistPicture_small) : undefined}
+            tags={a.genre ? String(a.genre).split(/\r|\n/).filter(Boolean) : []}
+          />
+        ))}
+      </div>
+    </div>
+  </section>
+</Base>

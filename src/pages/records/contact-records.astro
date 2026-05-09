@@ -1,0 +1,45 @@
+---
+import Base from "../../layouts/Base.astro";
+---
+
+<Base title="Contact Ninetone Records" theme="records">
+  <section class="bg-ninetone-red py-20 text-white">
+    <div class="mx-auto grid max-w-6xl gap-12 px-6 md:grid-cols-2">
+      <div>
+        <p class="text-sm uppercase tracking-wider opacity-80">Ninetone Group</p>
+        <h1 class="mt-2 font-display text-4xl">The #1 Networking, Music Production And Talent Developer In Sweden</h1>
+        <div class="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div class="rounded bg-white/10 p-4 text-center">
+            <div class="font-display text-3xl">31</div>
+            <div class="text-xs uppercase tracking-wider">Successful Artists</div>
+          </div>
+          <div class="rounded bg-white/10 p-4 text-center">
+            <div class="font-display text-3xl">38</div>
+            <div class="text-xs uppercase tracking-wider">Influential Clients</div>
+          </div>
+          <div class="rounded bg-white/10 p-4 text-center">
+            <div class="font-display text-3xl">17</div>
+            <div class="text-xs uppercase tracking-wider">Dedicated Employees</div>
+          </div>
+          <div class="rounded bg-white/10 p-4 text-center">
+            <div class="font-display text-3xl">5</div>
+            <div class="text-xs uppercase tracking-wider">Recording Studios</div>
+          </div>
+        </div>
+      </div>
+      <div class="rounded bg-ninetone-red-dark p-6">
+        <h2 class="font-display text-2xl">We Want Your Music</h2>
+        <p class="mt-2 text-sm opacity-90">Fill out this form and paste links to your music. We always look out for the next rising star.</p>
+        <form class="mt-6 grid gap-3" method="post">
+          <div class="grid gap-3 sm:grid-cols-2">
+            <input class="rounded bg-white/10 px-3 py-2 text-sm placeholder:text-white/60" placeholder="Name *" required />
+            <input class="rounded bg-white/10 px-3 py-2 text-sm placeholder:text-white/60" placeholder="E-Mail *" type="email" required />
+          </div>
+          <textarea class="rounded bg-white/10 px-3 py-2 text-sm placeholder:text-white/60" rows="3" placeholder="Paste links to your music: SoundCloud, direct links, etc. NO FILE UPLOAD *" required></textarea>
+          <textarea class="rounded bg-white/10 px-3 py-2 text-sm placeholder:text-white/60" rows="3" placeholder="Write something about yourself"></textarea>
+          <button type="submit" class="rounded bg-ninetone-navy px-4 py-2 text-sm font-semibold uppercase tracking-wider text-white hover:bg-ninetone-navy-dark">Submit</button>
+        </form>
+      </div>
+    </div>
+  </section>
+</Base>

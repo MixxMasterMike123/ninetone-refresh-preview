@@ -1,0 +1,47 @@
+---
+import "../styles/global.css";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import type { SectionTheme } from "../lib/sections";
+
+interface Props {
+  title: string;
+  description?: string;
+  theme?: SectionTheme;
+  lang?: "en" | "sv";
+}
+
+const {
+  title,
+  description = "Ninetone Group — Music Production, Talent Management & Booking",
+  theme = "group",
+  lang = "en",
+} = Astro.props;
+
+const fullTitle = title === "Ninetone Group" ? title : `${title} | Ninetone Group`;
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;500;700&family=Rubik:wght@300;400;500;600;700&display=swap"
+    />
+    <meta name="generator" content={Astro.generator} />
+    <title>{fullTitle}</title>
+  </head>
+  <body class="min-h-screen bg-white text-neutral-900 antialiased">
+    <Header theme={theme} lang={lang} />
+    <main>
+      <slot />
+    </main>
+    <Footer theme={theme} lang={lang} />
+  </body>
+</html>

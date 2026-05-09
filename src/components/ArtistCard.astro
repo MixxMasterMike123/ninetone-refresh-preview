@@ -1,0 +1,53 @@
+---
+import type { SectionTheme } from "../lib/sections";
+
+interface Props {
+  name: string;
+  slug: string;
+  image?: string;
+  blurb?: string;
+  tags?: string[];
+  theme?: SectionTheme;
+  ctaLabel?: string;
+  href?: string;
+}
+
+const {
+  name,
+  slug,
+  image,
+  blurb,
+  tags = [],
+  theme = "records",
+  ctaLabel = "Read more",
+  href: hrefOverride,
+} = Astro.props;
+
+// Card backgrounds match section: navy on records/management, sage on nation
+const cardBg = theme === "nation" ? "bg-ninetone-card-sage text-ninetone-ink" : "bg-ninetone-card text-white";
+const ctaBg = theme === "nation" ? "bg-white text-ninetone-ink" : "bg-white/10 text-white hover:bg-white/20";
+
+const href = hrefOverride ?? (
+  theme === "management" ? `/management/clients/${slug}` :
+  theme === "nation" ? `/ninetone-nation/${slug}` :
+  `/records/artists/${slug}`
+);
+---
+
+<article class={`flex flex-col overflow-hidden rounded-sm ${cardBg}`}>
+  <div class="aspect-[3/4] w-full overflow-hidden bg-neutral-800">
+    {image && <img src={image} alt={name} class="h-full w-full object-cover" loading="lazy" />}
+  </div>
+  <div class="flex flex-1 flex-col gap-3 p-4">
+    <h3 class="font-sans text-sm font-bold uppercase tracking-wider">{name}</h3>
+    {tags.length > 0 && (
+      <div class="flex flex-wrap gap-1 text-[10px] opacity-70">
+        {tags.map((t) => <span class="rounded bg-white/10 px-2 py-0.5">{t}</span>)}
+      </div>
+    )}
+    {blurb && <p class="text-xs leading-relaxed opacity-80 line-clamp-4">{blurb}</p>}
+    <a href={href} class={`mt-auto inline-flex items-center gap-2 self-start rounded-sm px-3 py-1.5 text-xs font-semibold ${ctaBg}`}>
+      {ctaLabel} <span aria-hidden>→</span>
+    </a>
+  </div>
+</article>
