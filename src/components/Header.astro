@@ -28,10 +28,10 @@ const navItems = [
     </a>
 
     <nav class="hidden flex-1 lg:block">
-      <ul class="flex items-center justify-center gap-6 text-xs font-semibold tracking-wider">
+      <ul class="flex items-center justify-center gap-2 text-xs font-semibold tracking-wider">
         {navItems.map((item) => (
           <li>
-            <a href={item.href} class="hover:underline">
+            <a href={item.href} class="inline-flex min-h-11 items-center px-3 hover:underline">
               {lang === "sv" ? item.labelSv : item.labelEn}
             </a>
           </li>
@@ -43,7 +43,7 @@ const navItems = [
       <button
         type="button"
         id="search-toggle"
-        class="inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-white/10"
+        class="inline-flex h-11 w-11 items-center justify-center rounded-md hover:bg-white/10"
         aria-label={lang === "sv" ? "Sök" : "Search"}
         aria-expanded="false"
         aria-controls="search-panel"
@@ -55,16 +55,18 @@ const navItems = [
       </button>
       <a
         href={cta.href}
-        class={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold ${colors.cta}`}
+        class={`inline-flex min-h-11 items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold ${colors.cta}`}
       >
         {ctaLabel}
         <span aria-hidden>→</span>
       </a>
-      <div class="text-xs">
-        <a href={lang === "en" ? Astro.url.pathname.replace(/^\/en/, "/sv") : Astro.url.pathname.replace(/^\/sv/, "/en")} class="hover:underline">
-          {lang === "en" ? "SV" : "EN"}
-        </a>
-      </div>
+      <a
+        href={lang === "en" ? Astro.url.pathname.replace(/^\/en/, "/sv") : Astro.url.pathname.replace(/^\/sv/, "/en")}
+        class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md px-2 text-xs font-semibold hover:bg-white/10"
+        aria-label={lang === "en" ? "Switch to Swedish" : "Switch to English"}
+      >
+        {lang === "en" ? "SV" : "EN"}
+      </a>
     </div>
   </div>
 
