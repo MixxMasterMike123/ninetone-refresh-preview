@@ -30,10 +30,24 @@ body {
   font-weight: 400;
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: -0.01em;
+@layer base {
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+    text-wrap: balance;
+  }
+
+  /* Default type scale (Major Third, 1.25×) — Tailwind text-* utilities override.
+     Card titles and other small-context headings should set their own size class
+     but never below 1rem. */
+  h1 { font-size: 3rem; }     /* 48px */
+  h2 { font-size: 2rem; }     /* 32px */
+  h3 { font-size: 1.5rem; }   /* 24px */
+  h4 { font-size: 1.25rem; }  /* 20px */
+  h5 { font-size: 1rem; }     /* 16px */
+  h6 { font-size: 0.875rem; letter-spacing: 0.05em; text-transform: uppercase; }
 }
 
 /* Menu items: Ubuntu Light (300) */

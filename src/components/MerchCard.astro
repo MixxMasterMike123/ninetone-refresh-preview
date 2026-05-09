@@ -17,7 +17,7 @@ const img = product.image ?? product.images[0] ?? null;
     {img && <img src={img.src} alt={img.alt ?? product.title} class="h-full w-full object-cover" loading="lazy" />}
   </a>
   <div class="flex flex-1 flex-col gap-2 p-4">
-    <h3 class="text-sm font-semibold">{product.title}</h3>
+    <h3 class="text-base font-semibold leading-tight">{product.title}</h3>
     <p class="text-sm opacity-80">{productPrice(product)}</p>
     <a href={productUrl(product)} target="_blank" rel="noopener" class="mt-auto inline-flex items-center gap-2 self-start rounded-sm bg-ninetone-green px-3 py-1.5 text-xs font-semibold hover:bg-ninetone-green-dark">
       {cta} <span aria-hidden>→</span>
