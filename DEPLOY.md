@@ -34,10 +34,10 @@ This doc covers the **preview** deployment only. When the site is ready to repla
    | `FM_DB` | `Ninetone Group AB` |
    | `FM_USER` | *(from .env)* |
    | `FM_PASS` | *(from .env)* — mark as Secret |
-   | `SHOPIFY_STORE` | `shop.ninetone.com` |
-   | `SHOPIFY_STOREFRONT_TOKEN` | *(from .env)* — mark as Secret |
-   | `SHOPIFY_HOMEPAGE_COLLECTION_ID` | *(from .env)* |
-   | `API_BOOKING_TAG` | *(from .env)* |
+   | `SHOPIFY_SHOP_DOMAIN` | `fc6d3a-d9.myshopify.com` |
+   | `SHOPIFY_PUBLIC_STORE_URL` | `https://shop.ninetone.com` |
+   | `SHOPIFY_ADMIN_TOKEN` | *(from .env)* — mark as Secret |
+   | `SHOPIFY_HOMEPAGE_COLLECTION_ID` | `514085060873` |
    | `PUBLIC_NOINDEX` | `true` |
 
    Anything starting with `PUBLIC_` is exposed to the client — that is intentional for the noindex flag (it gates a `<meta>` tag at render time).
