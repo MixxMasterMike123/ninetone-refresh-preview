@@ -80,8 +80,15 @@ const ytLinks = [ytOne, ytTwo].filter(Boolean);
       <div class="grid gap-10 md:grid-cols-12 md:gap-16">
         <aside class="md:col-span-5 lg:col-span-5">
           <div class="md:sticky md:top-24">
-            <div class="relative aspect-[4/5] w-full overflow-hidden bg-ninetone-paper-warm">
-              {heroImage && <img src={heroImage} alt={name} class="h-full w-full object-cover" />}
+            <div class="fm-img-frame relative aspect-[4/5] w-full overflow-hidden bg-ninetone-paper-warm">
+              {heroImage && (
+                <img
+                  src={heroImage}
+                  alt={name}
+                  class="fm-img h-full w-full object-cover"
+                  onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"
+                />
+              )}
               <span class="absolute left-0 top-0 h-1 w-16 bg-ninetone-green" aria-hidden></span>
             </div>
             <div class="mt-6 hidden md:block">

@@ -43,14 +43,15 @@ const phone = String(member.Phone ?? "");
           <div class="md:sticky md:top-24">
             {/* FM team photos are 200×200 — cap container so we never upscale.
                 Width 240px ≈ 1.2× source, beyond which pixelation becomes visible. */}
-            <div class="relative aspect-square w-60 max-w-full overflow-hidden bg-ninetone-paper-warm">
+            <div class="fm-img-frame relative aspect-square w-60 max-w-full overflow-hidden bg-ninetone-paper-warm">
               {photo && (
                 <img
                   src={photo}
                   alt={name}
                   width="240"
                   height="240"
-                  class="h-full w-full object-cover grayscale transition-all duration-700 ease-out hover:grayscale-0"
+                  class="fm-img h-full w-full object-cover grayscale transition-all duration-700 ease-out hover:grayscale-0"
+                  onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"
                 />
               )}
               <span class="absolute left-0 top-0 h-1 w-12 bg-ninetone-ink" aria-hidden></span>

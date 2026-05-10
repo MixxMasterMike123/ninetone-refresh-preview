@@ -71,13 +71,14 @@ team = [...team].sort((a, b) => {
           const title = String(m.title ?? "");
           return (
             <a href={url(`/team/${slug}`)} class="group flex flex-col">
-              <div class="relative aspect-[3/4] w-full overflow-hidden bg-ninetone-paper-warm">
+              <div class="fm-img-frame relative aspect-[3/4] w-full overflow-hidden bg-ninetone-paper-warm">
                 {photo && (
                   <img
                     src={photo}
                     alt={name}
-                    class="h-full w-full object-cover grayscale transition-all duration-700 ease-out group-hover:scale-[1.04] group-hover:grayscale-0"
+                    class="fm-img h-full w-full object-cover grayscale transition-all duration-700 ease-out group-hover:scale-[1.04] group-hover:grayscale-0"
                     loading="lazy"
+                    onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"
                   />
                 )}
                 <span class="absolute left-0 top-0 h-1 w-12 bg-ninetone-ink transition-[width] duration-300 ease-out group-hover:w-full" aria-hidden></span>

@@ -28,13 +28,14 @@ const aspectClass = size === "lg" ? "aspect-[16/9]" : "aspect-[16/10]";
 ---
 
 <article class="group flex flex-col">
-  <a href={href} class={`relative block ${aspectClass} overflow-hidden bg-ninetone-ink/5`}>
+  <a href={href} class={`fm-img-frame relative block ${aspectClass} overflow-hidden bg-ninetone-ink/5`}>
     {image && (
       <img
         src={image}
         alt={title}
-        class="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
+        class="fm-img h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
         loading="lazy"
+        onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"
       />
     )}
     <span class="absolute left-0 top-0 h-1 w-12 bg-ninetone-red transition-[width] duration-300 ease-out group-hover:w-full" aria-hidden></span>

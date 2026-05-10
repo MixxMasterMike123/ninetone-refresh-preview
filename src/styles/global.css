@@ -180,3 +180,49 @@ nav, header nav a, footer nav a {
   margin: 0.05em 0.08em 0 -0.04em;
   font-variation-settings: "opsz" 144;
 }
+
+/* Image loading: shimmer skeleton + fade-in once loaded.
+   Apply to <img> elements that fetch through the FM image proxy (where the
+   first request can take ~600-1000ms cold). The parent of the img should be
+   relative+overflow-hidden and use bg-ninetone-paper-warm so the shimmer has
+   a base color. The img itself starts opacity-0 and is faded in via onload. */
+.fm-img {
+  opacity: 0;
+  transition: opacity 400ms ease-out;
+}
+.fm-img.is-loaded {
+  opacity: 1;
+}
+.fm-img-frame {
+  position: relative;
+  isolation: isolate;
+  background-color: var(--color-ninetone-paper-warm);
+}
+.fm-img-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    var(--color-ninetone-paper-warm) 30%,
+    color-mix(in srgb, var(--color-ninetone-paper-warm) 70%, var(--color-ninetone-paper) 30%) 50%,
+    var(--color-ninetone-paper-warm) 70%
+  );
+  background-size: 200% 100%;
+  animation: fm-shimmer 1.4s ease-in-out infinite;
+  z-index: 0;
+  pointer-events: none;
+}
+.fm-img-frame.is-ready::before {
+  animation: none;
+  opacity: 0;
+  transition: opacity 300ms ease-out;
+}
+@keyframes fm-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fm-img-frame::before { animation: none; }
+  .fm-img { transition: none; }
+}

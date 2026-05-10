@@ -80,8 +80,9 @@ const linkProps = href
     <img
       src={image}
       alt=""
-      class="absolute inset-0 -z-10 h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
+      class="fm-img absolute inset-0 -z-10 h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
       loading="lazy"
+      onload="this.classList.add('is-loaded')"
     />
   )}
   {/* Always overlay images with a dark gradient so text in the corner stays
