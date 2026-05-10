@@ -1,10 +1,12 @@
 # Ninetone Refresh
 
-Astro + Tailwind v4 + Cloudflare Pages site for Ninetone Group. Content is FileMaker-driven.
+Astro + Tailwind v4 site for Ninetone Group, built statically and deployed to GitHub Pages. FileMaker-driven content. Cloudflare Worker handles image bytes (the runtime layer GH Pages lacks).
 
 ## Stack
 
-- **Framework:** Astro 6 with `@astrojs/cloudflare` adapter
+- **Framework:** Astro 6, `output: "static"` (no adapter — we tried `@astrojs/cloudflare`, dropped it)
+- **Hosting:** GitHub Pages via GitHub Actions ([.github/workflows/deploy.yml](.github/workflows/deploy.yml))
+- **Image proxy:** Cloudflare Worker at [worker-fm-proxy/](worker-fm-proxy/) — see [DEPLOY.md](DEPLOY.md) for *why* this exists; it's load-bearing
 - **Styling:** Tailwind v4 (Vite plugin) + `@tailwindcss/typography`
 - **Search:** `fuse.js` client-side
 - **Markdown:** `marked`
@@ -29,6 +31,19 @@ npm run preview  # serve built output
 - `src/styles/` — Tailwind entrypoints + design tokens
 - `public/` — static assets
 - `_old/` — legacy DivHunt SPA artifacts (ignored — do not edit)
+- `worker-fm-proxy/` — Cloudflare Worker that serves FM images. Has its own `node_modules`. Deploy with `cd worker-fm-proxy && npx wrangler deploy`.
+
+## FM data + image proxy invariants
+
+- **Build-time data**: every FM read goes through [src/lib/filemaker.ts](src/lib/filemaker.ts), which caches the bearer token (12 min TTL, FM expires at 15) and per-call responses. Don't bypass.
+- **Image URLs rotate AND expire.** FileMaker `Streaming_SSL/RCFileProcessor` URLs are session-bound — they 401 within ~15 min of being generated. A static site that embeds them is broken by tomorrow morning.
+- **Every FM image URL gets rewritten** to a Worker proxy URL during the build by [src/lib/fm-image-mirror.ts](src/lib/fm-image-mirror.ts). The Worker holds a live session token and resolves fresh streaming URLs per request.
+- **To add a new image-bearing layout**: add it to `LAYOUT_CONFIG` in [src/lib/fm-image-mirror.ts](src/lib/fm-image-mirror.ts) AND add a matching route in [worker-fm-proxy/src/index.ts](worker-fm-proxy/src/index.ts), then redeploy both.
+- **Image components use `.fm-img-frame` + `.fm-img`** for the shimmer skeleton + fade-in pattern. Defined in [src/styles/global.css](src/styles/global.css). Wire `onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"` on the `<img>`.
+
+## Path-aware URLs
+
+The site is served from a sub-path (`/ninetone-refresh-preview/`) on GH Pages. **Every internal link / image src / fetch URL must go through `url()` from [src/lib/url.ts](src/lib/url.ts)**, OR be rendered by a component that already wraps it (BentoTile, etc.). Plain `href="/foo"` 404s. When going public on the production domain, drop `base` from `astro.config.mjs` and the helper becomes a no-op.
 
 ## Design system
 

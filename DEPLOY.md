@@ -4,6 +4,7 @@
 
 Stack:
 - **Build + host:** GitHub Actions builds; GitHub Pages serves the static `dist/`
+- **Image proxy:** Cloudflare Worker (`worker-fm-proxy/`) holds a live FM session token and serves images on every request — the runtime layer the static site lacks. See "FM image proxy Worker" below.
 - **Auth (planned):** Cloudflare Access in front of GH Pages, via DNS proxying
 - **Auto-rebuild on FM content change:** FileMaker → GitHub `repository_dispatch` webhook → Actions rebuilds → Pages republishes
 
@@ -61,6 +62,68 @@ Required:
 | `SHOPIFY_HOMEPAGE_COLLECTION_ID` | `514085060873` |
 
 `PUBLIC_NOINDEX=true` is hardcoded in the workflow until launch — flip it there, not in secrets.
+
+---
+
+## FM image proxy Worker
+
+**Why it exists.** FileMaker `Streaming_SSL/RCFileProcessor` URLs (artist photos, news covers, team headshots) **rotate on every API call AND expire when the session token does (~15 min).** Embedding them in static HTML means images break within minutes of deploy. Confirmed empirically: a URL captured at build T=0 returns 401 within hours, while DivHunt's production site shows the same image because their server re-fetches a fresh URL on every request.
+
+GitHub Pages can't refresh tokens at request time. A tiny Cloudflare Worker can — it holds a live FM session token in isolate memory, refreshes when stale, resolves a fresh streaming URL per request, and streams the bytes through. **The Worker IS the runtime layer.** Static HTML embeds proxy URLs like `https://ninetone-fm-image-proxy.../artist/<slug>/big`; nothing FM-specific ever appears in the deployed HTML.
+
+Lives in [`worker-fm-proxy/`](worker-fm-proxy/). Code reference: [`worker-fm-proxy/src/index.ts`](worker-fm-proxy/src/index.ts). Deploy instructions: [`worker-fm-proxy/README.md`](worker-fm-proxy/README.md).
+
+### Routes
+
+| Route | Source layout | Field |
+|---|---|---|
+| `/healthz` | — | sanity check (auths to FM, returns `{ok: true}`) |
+| `/artist/:slug/big` | `API_ARTIST_DETAIL` | `artistPicture_big` |
+| `/artist/:slug/small` | `API_ARTIST_DETAIL` | `artistPicture_small` |
+| `/client/:slug/big` | `API_Management` | `artistPicture_big` |
+| `/client/:slug/small` | `API_Management` | `artistPicture_small` |
+| `/booking/:slug/big` | `API_Booking` | `artistPicture_big` |
+| `/booking/:slug/small` | `API_Booking` | `artistPicture_small` |
+| `/news/:slug/cover` | `API_NEWS` | `image_webp` |
+| `/team/:slug/big` | `API_USERS` | `userPhoto` |
+| `/team/:slug/small` | `API_USERS` | `userPhotoSmall` |
+
+To add a new image-bearing layout, edit the `ROUTES` table in [`worker-fm-proxy/src/index.ts`](worker-fm-proxy/src/index.ts) AND the `LAYOUT_CONFIG` + `FIELD_TO_VARIANT` maps in [`src/lib/fm-image-mirror.ts`](src/lib/fm-image-mirror.ts), then redeploy both: `cd worker-fm-proxy && npx wrangler deploy` and push the site repo.
+
+### Token + caching behavior
+
+- Worker holds the FM session token in module-scope (per-isolate). Refreshes at 12 min (FM expires at 15, leaves 3-min buffer).
+- One auth call per ~12 min per warm isolate. Roughly 5 auth calls per hour per region under continuous traffic, regardless of image volume.
+- Image bytes are CDN-cached at the Cloudflare edge for 1 week (`s-maxage=604800`); browser caches for 1 day. After the first hit per region, subsequent requests are ~30ms.
+- 401-on-find triggers a one-time token refresh + retry (handles the rare clock-drift case where our 12-min cache outlives FM's 15-min server-side expiry).
+
+### Worker secrets
+
+Set via `wrangler secret put`:
+
+```bash
+cd worker-fm-proxy
+npx wrangler secret put FM_USER
+npx wrangler secret put FM_PASS
+```
+
+Non-secret config (`FM_HOST`, `FM_DB`) is in `worker-fm-proxy/wrangler.toml` under `[vars]`. Cloudflare account that owns the Worker is whichever account ran `wrangler login`.
+
+### Updating the Worker
+
+```bash
+cd worker-fm-proxy
+nvm use 22
+npx wrangler deploy
+```
+
+Adds new routes, fixes bugs, etc. Live within ~30s. The site repo doesn't need a redeploy unless the proxy URL or path scheme changes.
+
+### Static-side rewriting
+
+[`src/lib/fm-image-mirror.ts`](src/lib/fm-image-mirror.ts) walks every record returned by `fmFind` / `fmFindWithPortals`, finds fields with `https://files.ninetone.com/Streaming_SSL/...` URLs, and rewrites them to proxy URLs based on the layout name + record slug. So consumers (templates, search index) never see raw FM URLs — they're already swapped at build time. This is invoked transparently inside `src/lib/filemaker.ts`.
+
+If you ever need to opt a layout *out* of proxying (rare), remove it from `LAYOUT_CONFIG` and the original FM URL passes through. Useful only for admin-internal layouts whose image fields don't surface publicly.
 
 ---
 
