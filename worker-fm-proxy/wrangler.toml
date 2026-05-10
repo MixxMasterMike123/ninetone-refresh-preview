@@ -1,0 +1,10 @@
+name = "ninetone-fm-image-proxy"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+# Set via: wrangler secret put FM_USER / FM_PASS
+# Plain vars below are non-secret config.
+
+[vars]
+FM_HOST = "files.ninetone.com"
+FM_DB = "Ninetone Group AB"

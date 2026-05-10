@@ -33,6 +33,6 @@ pnpm-debug.log*
 Screenshots/
 _old/
 
-# FM image mirror — populated at build time from FileMaker streaming URLs.
-# Never commit; bytes are non-trivial and re-downloaded on every CI build.
-public/images/fm/
+# Worker secrets / state (never commit)
+worker-fm-proxy/.wrangler/
+worker-fm-proxy/node_modules/

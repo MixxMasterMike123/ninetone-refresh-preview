@@ -124,10 +124,10 @@ async function fmFindUncached<T = Record<string, unknown>>(
   const json = await fmRequest<T>(layout, body);
   if (!json) return [];
   const rows = json.response.data.map((r) => r.fieldData);
-  // FM Streaming URLs rotate per-call and expire with the session token, so
-  // we must mirror to local paths immediately while the URL is still fresh.
-  // No-op when bytes can't be downloaded — page still renders, image just 401s.
-  await mirrorRecordImages(rows);
+  // FM streaming URLs expire with the session token; rewrite them to point at
+  // the FM image proxy Worker, which holds a live token and resolves a fresh
+  // URL on each request. See src/lib/fm-image-mirror.ts.
+  await mirrorRecordImages(rows, { layout });
   return rows;
 }
 
@@ -138,6 +138,6 @@ async function fmFindUncachedWithPortals<T = Record<string, unknown>>(
   const json = await fmRequest<T>(layout, body);
   if (!json) return [];
   const rows = json.response.data.map((r) => ({ fieldData: r.fieldData, portalData: r.portalData }));
-  await mirrorRecordImages(rows);
+  await mirrorRecordImages(rows, { layout });
   return rows;
 }
