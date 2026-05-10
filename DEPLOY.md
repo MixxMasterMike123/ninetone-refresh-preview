@@ -193,13 +193,83 @@ curl -s "$URL/robots.txt"
 
 ## Going public (later)
 
-When ready to flip the site live on its real domain:
+Two questions to answer when you're ready:
 
-1. **`astro.config.mjs`:** drop the `base: "/ninetone-refresh-preview"` line; set `site: "https://www.ninetone.com"`.
+1. **What domain?** — if `www.ninetone.com` (most likely), the DivHunt site has to come down or be rerouted first.
+2. **What host?** — stay on GitHub Pages, or move to Cloudflare Pages / Workers Static Assets for better infra.
+
+### Common cutover steps (regardless of host)
+
+Same checklist for any production host:
+
+1. **`astro.config.mjs`:** drop `base: "/ninetone-refresh-preview"`; set `site: "https://www.ninetone.com"`.
 2. **Workflow:** flip `PUBLIC_NOINDEX: 'false'` in `.github/workflows/deploy.yml`.
 3. **`public/robots.txt`:** delete (or replace with a real one referencing the real sitemap).
-4. **`public/_headers`:** delete the `X-Robots-Tag` block.
-5. **Cloudflare Access:** delete the Application in Zero Trust.
-6. **DNS:** repoint `www.ninetone.com` from DivHunt to the new host (GH Pages or wherever production lives).
+4. **`public/_headers`:** delete the `X-Robots-Tag` block (or keep on a host that honors `_headers` — see below).
+5. **Cloudflare Access:** delete the Application in Zero Trust (no more login wall).
+6. **Repo visibility:** can flip private if you upgrade to GH Pro; required public if you stay on GH Pages free.
+7. **DNS:** repoint `www.ninetone.com` from DivHunt to the new host (instructions below per option).
+8. **Worker stays as-is** — the FM image proxy is host-independent; same URL keeps working.
 
-If the production host won't be GitHub Pages: the workflow steps stay almost identical, just swap the `actions/deploy-pages` step for whatever the new host's deploy action is (`netlify`, `vercel`, `wrangler`, etc.).
+### Option 1: Stay on GitHub Pages with a custom domain
+
+GH Pages supports custom domains for free. The flow:
+
+1. In the repo: **Settings → Pages → Custom domain** → enter `www.ninetone.com` → Save. Check "Enforce HTTPS" once DNS is verified (a few minutes after step 2).
+2. At your DNS provider (currently wherever `ninetone.com` lives — Cloudflare, GoDaddy, etc.), set a **CNAME** record:
+   ```
+   www → mixxmastermike123.github.io
+   ```
+   For the apex (`ninetone.com` without the `www`), use **A records** pointing to GitHub's IPs (185.199.108.153, 185.199.109.153, 185.199.110.153, 185.199.111.153) — GitHub publishes these.
+3. Wait for DNS propagation (~minutes). GH Pages auto-provisions a Let's Encrypt cert.
+
+**What you keep / lose vs alternatives:**
+- ✅ Free (public repo) or $4/mo (private via Pro)
+- ✅ Same workflow, same build, same Worker — zero changes beyond the cutover steps above
+- ✅ HTTPS with auto-renewing cert
+- ❌ `public/_headers` and `public/_redirects` still ignored (cache headers, custom redirects don't work natively)
+- ❌ No native auth layer (OK because we removed Access at launch anyway)
+- ❌ No per-PR preview deployments (you'd need a separate workflow + branch deploys)
+- ❌ Slower edge: Fastly's POPs cover Sweden well but Cloudflare is generally faster globally
+
+### Option 2: Switch to Cloudflare Pages (recommended for production)
+
+We avoided CF Pages during the preview phase because their build runners get blocked by FileMaker — `500 + FM 802` on every build. **The fix is to keep building on GitHub Actions and use Cloudflare Pages "Direct Upload" mode**, which skips CF's build environment entirely. The Worker proxy is unaffected — it stays where it is.
+
+Migration shape (~30 min):
+
+1. **Create a Pages project** in Direct Upload mode (Cloudflare → Workers & Pages → Create → Pages → Upload assets).
+2. **Update `.github/workflows/deploy.yml`** — replace the GH Pages deploy steps with:
+   ```yaml
+   - name: Deploy to Cloudflare Pages
+     uses: cloudflare/wrangler-action@v3
+     with:
+       apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+       accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+       command: pages deploy dist --project-name=ninetone
+   ```
+3. **Add the two CF secrets** to the GH repo (`CLOUDFLARE_API_TOKEN` with Pages:Edit, `CLOUDFLARE_ACCOUNT_ID`).
+4. **Custom domain** in Pages settings → add `www.ninetone.com`. CF auto-creates the CNAME if `ninetone.com` is on Cloudflare DNS.
+
+**What you gain:**
+- ✅ `public/_headers` works natively — cache control, X-Robots-Tag, security headers
+- ✅ `public/_redirects` works (currently dead)
+- ✅ Cloudflare's edge (better than Fastly globally)
+- ✅ Per-PR preview deployments out of the box
+- ✅ One-click rollback to a previous deploy
+- ✅ Cloudflare Access available if you want to gate staging branches
+- ✅ Faster cache invalidation after deploy
+- ❌ Slightly more dashboard surface to manage
+- ❌ Adds a CF API token to GH secrets
+
+### Option 3: Switch to Cloudflare Workers Static Assets
+
+Same idea as Option 2 but using Workers instead of Pages. Functionally similar for a static-only site. Workers Static Assets is Cloudflare's newer pattern — they may eventually consolidate Pages into it. For now, Pages is the more mature path with better dashboard UX. Pick this only if you want to add SSR/edge logic later in the same Worker.
+
+### Recommendation
+
+**For preview (now):** stay on GH Pages. Works, free, simple.
+
+**For production:** **Option 2 (CF Pages with Direct Upload)**. The `_headers` support alone is worth it (cache control + security headers), and Cloudflare Access remains available if you ever need to gate a staging branch again. Migration is ~30 min and reversible.
+
+The Worker we built for FM images keeps working unchanged across all three options — host-independent.
