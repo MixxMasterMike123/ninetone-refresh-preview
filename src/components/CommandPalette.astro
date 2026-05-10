@@ -97,13 +97,14 @@ const { lang = "en" } = Astro.props as Props;
         .then((data: SearchEntry[]) => {
           fuse = new Fuse(data, {
             keys: [
-              { name: "name", weight: 0.6 },
-              { name: "blurb", weight: 0.25 },
-              { name: "tags", weight: 0.15 },
+              { name: "name", weight: 0.85 },
+              { name: "tags", weight: 0.1 },
+              { name: "blurb", weight: 0.05 },
             ],
-            threshold: 0.35,
+            threshold: 0.3,
             ignoreLocation: true,
             minMatchCharLength: 2,
+            includeScore: true,
           });
           return data;
         });
@@ -204,7 +205,24 @@ const { lang = "en" } = Astro.props as Props;
     }
     await ensureIndex();
     if (!fuse) return;
-    currentResults = fuse.search(q, { limit: 25 }).map((r) => r.item);
+
+    // Strong name-match priority: any result whose name exactly equals or
+    // prefix-matches the query goes to the top (in name-asc order), ahead of
+    // Fuse's own ranking. Solves the case where a fuzzy bio hit on artist X
+    // outranks a literal name match on artist Y.
+    const qLower = q.toLowerCase();
+    const ranked = fuse.search(q, { limit: 50 });
+    const exact: SearchEntry[] = [];
+    const prefix: SearchEntry[] = [];
+    const rest: SearchEntry[] = [];
+    for (const r of ranked) {
+      const name = r.item.name.toLowerCase();
+      if (name === qLower) exact.push(r.item);
+      else if (name.startsWith(qLower)) prefix.push(r.item);
+      else rest.push(r.item);
+    }
+    const sortByName = (a: SearchEntry, b: SearchEntry) => a.name.localeCompare(b.name);
+    currentResults = [...exact.sort(sortByName), ...prefix.sort(sortByName), ...rest].slice(0, 25);
     activeIndex = 0;
     render();
   }
