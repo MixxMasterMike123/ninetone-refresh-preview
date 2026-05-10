@@ -1,0 +1,70 @@
+name: Build and deploy to GitHub Pages
+
+# Triggers:
+#   - push to main: rebuild on every code change
+#   - repository_dispatch with event_type=fm-content-changed:
+#       FileMaker admin POSTs here when content changes (see DEPLOY.md §4).
+#   - workflow_dispatch: manual rebuild button in the Actions tab.
+on:
+  push:
+    branches: [main]
+  repository_dispatch:
+    types: [fm-content-changed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deploy at a time. New runs cancel queued runs but never abort an
+# in-flight deployment (would leave Pages in a half-published state).
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        env:
+          FM_HOST: ${{ secrets.FM_HOST }}
+          FM_DB: ${{ secrets.FM_DB }}
+          FM_USER: ${{ secrets.FM_USER }}
+          FM_PASS: ${{ secrets.FM_PASS }}
+          SHOPIFY_SHOP_DOMAIN: ${{ secrets.SHOPIFY_SHOP_DOMAIN }}
+          SHOPIFY_PUBLIC_STORE_URL: ${{ secrets.SHOPIFY_PUBLIC_STORE_URL }}
+          SHOPIFY_ADMIN_TOKEN: ${{ secrets.SHOPIFY_ADMIN_TOKEN }}
+          SHOPIFY_HOMEPAGE_COLLECTION_ID: ${{ secrets.SHOPIFY_HOMEPAGE_COLLECTION_ID }}
+          PUBLIC_NOINDEX: 'true'
+        run: npm run build
+
+      - name: Add .nojekyll
+        # GitHub Pages would otherwise strip files starting with _ (like _astro/).
+        # Astro relies on _astro/ for hashed bundles. .nojekyll disables Jekyll
+        # processing entirely.
+        run: touch dist/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
