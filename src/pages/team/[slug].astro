@@ -50,9 +50,9 @@ const phone = String(member.Phone ?? "");
     </div>
 
     {descriptionHtml ? (
-      <div class="prose mt-12 max-w-2xl text-neutral-800" set:html={descriptionHtml}></div>
+      <div class="prose mt-12 max-w-none text-neutral-800" set:html={descriptionHtml}></div>
     ) : (
-      <p class="mt-12 max-w-2xl text-sm text-neutral-500">
+      <p class="mt-12 text-sm text-neutral-500">
         {email ? (
           <>For more about {name}, get in touch at <a href={`mailto:${email}`} class="text-ninetone-red hover:underline">{email}</a>.</>
         ) : (
