@@ -60,8 +60,11 @@ Required:
 | `SHOPIFY_PUBLIC_STORE_URL` | `https://shop.ninetone.com` |
 | `SHOPIFY_ADMIN_TOKEN` | from `.env` |
 | `SHOPIFY_HOMEPAGE_COLLECTION_ID` | `514085060873` |
+| `YOUTUBE_API_KEY` | optional — Google Cloud Console → YouTube Data API v3 |
 
 `PUBLIC_NOINDEX=true` is hardcoded in the workflow until launch — flip it there, not in secrets.
+
+`YOUTUBE_API_KEY` powers the per-Management-client YouTube section (latest 5 + top-viewed 5). Free tier (10k quota/day) is plenty: ~5,400 quota units per build for 54 active clients with channels. Without the key, the section degrades gracefully to RSS-only (Latest tab visible, Most viewed tab hidden). Restrict the key to "YouTube Data API v3" + HTTP referrer `*.github.io` is unnecessary since it's used server-side at build time only — leave referrer restrictions OFF, or it'll 403 in CI.
 
 ---
 

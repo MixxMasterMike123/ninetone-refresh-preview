@@ -86,6 +86,7 @@ One-line summary: editorial-magazine confidence with restraint — paper canvas 
 - All FileMaker fetches go through [`src/lib/filemaker.ts`](src/lib/filemaker.ts) which caches the session token + per-call response.
 - All images that come from FM go through [`src/lib/fm-image-mirror.ts`](src/lib/fm-image-mirror.ts) which rewrites URLs to the proxy. New layouts/fields need to be added here AND in the Worker's route table.
 - Cards have a shimmer-skeleton + fade-in pattern (`.fm-img-frame` + `.fm-img` in `global.css`). Apply to anything that loads through the FM proxy.
+- Per-Management-client YouTube feeds (latest 5 + top-viewed 5) are pre-fetched at build time via [`src/lib/youtube.ts`](src/lib/youtube.ts) using YouTube RSS (free) + Data API (free tier). Set `YOUTUBE_API_KEY` to enable the "Most viewed" tab; without it, the section falls back to latest-only. Records artists and Nation booking pages are out of scope.
 
 ## Repo notes
 

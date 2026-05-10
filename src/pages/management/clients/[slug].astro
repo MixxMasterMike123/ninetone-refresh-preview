@@ -4,7 +4,9 @@ import StreamingRow from "../../../components/StreamingRow.astro";
 import MerchCard from "../../../components/MerchCard.astro";
 import NewsCard from "../../../components/NewsCard.astro";
 import RosterStrip from "../../../components/RosterStrip.astro";
+import YouTubeFeed from "../../../components/YouTubeFeed.astro";
 import { getClients, getNewsForArtist, pickRelatedArtists } from "../../../lib/ninetone";
+import { resolveChannelId, getYouTubeFeed } from "../../../lib/youtube";
 import { getProducts } from "../../../lib/shopify";
 import { renderBio } from "../../../lib/markdown";
 import { url } from "../../../lib/url";
@@ -70,6 +72,16 @@ function clientTagsOf(c: Record<string, unknown>): string[] {
 const related = pickRelatedArtists(client, allClients, clientTagsOf, 12);
 
 const ytLinks = [ytOne, ytTwo].filter(Boolean);
+
+// YouTube feed: latest 5 + top 5 most-viewed for clients with a usable
+// channel URL. Errors out silently — section just doesn't render if the
+// channel can't be resolved or the fetch fails.
+const ytChannelUrl = String(client.url_youtube_link ?? "");
+let ytFeed: Awaited<ReturnType<typeof getYouTubeFeed>> | null = null;
+try {
+  const channelId = await resolveChannelId(ytChannelUrl);
+  if (channelId) ytFeed = await getYouTubeFeed(channelId);
+} catch {}
 ---
 
 <Base title={name} theme="management" description={tagline || `${name} | Ninetone Management`}>
@@ -183,6 +195,8 @@ const ytLinks = [ytOne, ytTwo].filter(Boolean);
       </div>
     </div>
   </section>
+
+  <YouTubeFeed feed={ytFeed} clientName={name} theme="management" />
 
   {merch.length > 0 && (
     <section class="bg-ninetone-paper-warm py-20">

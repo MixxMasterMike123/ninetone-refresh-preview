@@ -46,6 +46,7 @@ jobs:
           SHOPIFY_PUBLIC_STORE_URL: ${{ secrets.SHOPIFY_PUBLIC_STORE_URL }}
           SHOPIFY_ADMIN_TOKEN: ${{ secrets.SHOPIFY_ADMIN_TOKEN }}
           SHOPIFY_HOMEPAGE_COLLECTION_ID: ${{ secrets.SHOPIFY_HOMEPAGE_COLLECTION_ID }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           PUBLIC_NOINDEX: 'true'
         run: npm run build
 
