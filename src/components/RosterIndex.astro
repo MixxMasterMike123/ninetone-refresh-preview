@@ -1,5 +1,6 @@
 ---
 import type { Artist } from "../lib/ninetone";
+import { url } from "../lib/url";
 
 interface Props {
   artists: Artist[];
@@ -37,7 +38,7 @@ const sortedLetters = Array.from(byLetter.keys()).sort();
           return (
             <li class="group">
               <a
-                href={`${hrefBase}/${slug}`}
+                href={url(`${hrefBase}/${slug}`)}
                 class="grid grid-cols-[1fr_auto] items-center gap-6 py-4 transition-colors hover:bg-ninetone-paper-warm md:grid-cols-[1fr_2fr_auto] md:gap-8 md:py-5"
               >
                 <span class="font-display text-xl font-medium leading-tight tracking-tight md:text-2xl">{name}</span>

@@ -1,6 +1,7 @@
 ---
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent } from "../lib/sections";
+import { url } from "../lib/url";
 
 interface Props {
   theme?: SectionTheme;
@@ -74,7 +75,7 @@ const socials = [
         </h2>
         <p class="mt-5 max-w-xl text-base text-ninetone-paper/75 md:text-lg">{copy.body}</p>
         <a
-          href={copy.href}
+          href={url(copy.href)}
           class={`mt-8 inline-flex items-center gap-3 px-5 py-3 text-sm font-semibold ${accent.cta}`}
         >
           {copy.cta} <span aria-hidden>→</span>
@@ -89,7 +90,7 @@ const socials = [
         </h3>
         <form
           method="post"
-          action="/api/subscribe"
+          action={url("/api/subscribe")}
           class="mt-6 flex flex-col gap-2 sm:flex-row sm:items-stretch"
           data-newsletter
         >
@@ -120,8 +121,8 @@ const socials = [
   <section class="border-b border-white/10">
     <div class="mx-auto grid max-w-7xl gap-10 px-6 py-12 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
       <div class="flex flex-col gap-4">
-        <a href="/" class="inline-flex items-center gap-3" aria-label="Ninetone Group">
-          <img src="/images/ninetoneSQlogo.png" alt="" class="h-12 w-auto" />
+        <a href={url("/")} class="inline-flex items-center gap-3" aria-label="Ninetone Group">
+          <img src={url("/images/ninetoneSQlogo.png")} alt="" class="h-12 w-auto" />
           <span class="font-display text-xl font-medium tracking-tight">Ninetone</span>
         </a>
         <p class="max-w-xs text-sm text-ninetone-paper/60">
@@ -136,7 +137,7 @@ const socials = [
         <ul class="mt-4 space-y-2.5 text-sm">
           {exploreLinks.map((item) => (
             <li>
-              <a href={item.href} class="text-ninetone-paper/85 transition-colors hover:text-ninetone-paper">
+              <a href={url(item.href)} class="text-ninetone-paper/85 transition-colors hover:text-ninetone-paper">
                 {lang === "sv" ? item.labelSv : item.labelEn}
               </a>
             </li>
@@ -149,7 +150,7 @@ const socials = [
         <ul class="mt-4 space-y-2.5 text-sm">
           {studioLinks.map((item) => (
             <li>
-              <a href={item.href} class="text-ninetone-paper/85 transition-colors hover:text-ninetone-paper">
+              <a href={url(item.href)} class="text-ninetone-paper/85 transition-colors hover:text-ninetone-paper">
                 {lang === "sv" ? item.labelSv : item.labelEn}
               </a>
             </li>
@@ -198,7 +199,8 @@ const socials = [
       button.textContent = "Subscribing…";
       button.disabled = true;
       try {
-        const res = await fetch("/api/subscribe", {
+        const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+        const res = await fetch(`${base}/api/subscribe`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email }),

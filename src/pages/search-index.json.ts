@@ -7,6 +7,7 @@ import {
   getTeam,
   getNews,
 } from "../lib/ninetone";
+import { url } from "../lib/url";
 
 export type SearchSection =
   | "records"
@@ -50,7 +51,7 @@ export const GET: APIRoute = async () => {
       name: String(a["Head Artist"] ?? ""),
       blurb: String(a.artistPresentationShort ?? ""),
       tags: splitTags(a.genre),
-      href: `/records/artists/${slug}`,
+      href: url(`/records/artists/${slug}`),
       image: a.artistPicture_small ? String(a.artistPicture_small) : undefined,
     });
   }
@@ -63,7 +64,7 @@ export const GET: APIRoute = async () => {
       name: String(a["Head Artist"] ?? ""),
       blurb: String(a.artistPresentationShort ?? ""),
       tags: splitTags(a.genre),
-      href: `/records/artists/previous/single/${slug}`,
+      href: url(`/records/artists/previous/single/${slug}`),
       image: a.artistPicture_small ? String(a.artistPicture_small) : undefined,
     });
   }
@@ -76,7 +77,7 @@ export const GET: APIRoute = async () => {
       name: String(c["Head Artist"] ?? ""),
       blurb: String(c.clientPresentationTitle ?? c.clientPresentationShort ?? ""),
       tags: splitTags(c.tags ?? c.genre),
-      href: `/management/clients/${slug}`,
+      href: url(`/management/clients/${slug}`),
       image: c.artistPicture_small ? String(c.artistPicture_small) : undefined,
     });
   }
@@ -89,7 +90,7 @@ export const GET: APIRoute = async () => {
       name: String(e["Head Artist"] ?? ""),
       blurb: String(e.bookingPresentationTitle ?? e.bookingPresentationShort ?? ""),
       tags: splitTags(e.tags ?? e.genre),
-      href: `/ninetone-nation/${slug}`,
+      href: url(`/ninetone-nation/${slug}`),
       image: e.artistPicture_small ? String(e.artistPicture_small) : undefined,
     });
   }
@@ -102,7 +103,7 @@ export const GET: APIRoute = async () => {
       name: String(m.userNameCalc ?? ""),
       blurb: String(m.title ?? ""),
       tags: [],
-      href: `/team/${slug}`,
+      href: url(`/team/${slug}`),
       image: m.userPhotoSmall ? String(m.userPhotoSmall) : m.userPhoto ? String(m.userPhoto) : undefined,
     });
   }
@@ -115,7 +116,7 @@ export const GET: APIRoute = async () => {
       name: String(p.Title ?? ""),
       blurb: String(p.shortMessage ?? ""),
       tags: [],
-      href: `/news/${slug}`,
+      href: url(`/news/${slug}`),
       image: p.image_webp ? String(p.image_webp) : undefined,
     });
   }

@@ -7,6 +7,7 @@ import RosterStrip from "../../../components/RosterStrip.astro";
 import { getArtists, getNewsForArtist, pickRelatedArtists } from "../../../lib/ninetone";
 import { getProducts } from "../../../lib/shopify";
 import { renderBio } from "../../../lib/markdown";
+import { url } from "../../../lib/url";
 
 export async function getStaticPaths() {
   const artists = await getArtists();
@@ -76,7 +77,7 @@ const ytLinks = [ytOne, ytTwo].filter(Boolean);
   <section class="bg-ninetone-paper">
     <div class="mx-auto max-w-7xl px-6 pb-12 pt-12 md:pt-16">
       <p class="mb-8">
-        <a href="/records/artists" class="kicker text-ninetone-ink/55 hover:text-ninetone-ink">← Records · Artists</a>
+        <a href={url("/records/artists")} class="kicker text-ninetone-ink/55 hover:text-ninetone-ink">← Records · Artists</a>
       </p>
 
       <div class="grid gap-10 md:grid-cols-12 md:gap-16">
@@ -176,7 +177,7 @@ const ytLinks = [ytOne, ytTwo].filter(Boolean);
                   )}
                 </div>
                 <a
-                  href="/records/contact-records"
+                  href={url("/records/contact-records")}
                   class="inline-flex items-center gap-2 self-start bg-ninetone-red px-4 py-3 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-red-dark"
                 >
                   Get in touch <span aria-hidden>→</span>

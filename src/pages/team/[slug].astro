@@ -2,6 +2,7 @@
 import Base from "../../layouts/Base.astro";
 import { getTeam } from "../../lib/ninetone";
 import { renderBio, isAiSpeculative } from "../../lib/markdown";
+import { url } from "../../lib/url";
 
 export async function getStaticPaths() {
   const team = await getTeam();
@@ -34,7 +35,7 @@ const phone = String(member.Phone ?? "");
   <section class="bg-ninetone-paper">
     <div class="mx-auto max-w-7xl px-6 pb-12 pt-12 md:pt-16">
       <p class="mb-8">
-        <a href="/team" class="kicker text-ninetone-ink/55 hover:text-ninetone-ink">← Team</a>
+        <a href={url("/team")} class="kicker text-ninetone-ink/55 hover:text-ninetone-ink">← Team</a>
       </p>
 
       <div class="grid gap-10 md:grid-cols-12 md:gap-16">

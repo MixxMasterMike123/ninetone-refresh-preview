@@ -7,6 +7,7 @@ import RosterStrip from "../../components/RosterStrip.astro";
 import { getBookingRoster, getNewsForArtist, pickRelatedArtists } from "../../lib/ninetone";
 import { getProducts } from "../../lib/shopify";
 import { renderBio } from "../../lib/markdown";
+import { url } from "../../lib/url";
 
 export async function getStaticPaths() {
   const roster = await getBookingRoster();
@@ -73,7 +74,7 @@ const ytLinks = [ytOne, ytTwo].filter(Boolean);
   <section class="bg-ninetone-paper">
     <div class="mx-auto max-w-7xl px-6 pb-12 pt-12 md:pt-16">
       <p class="mb-8">
-        <a href="/ninetone-nation/booking" class="kicker text-ninetone-ink/55 hover:text-ninetone-ink">← Nation · Booking</a>
+        <a href={url("/ninetone-nation/booking")} class="kicker text-ninetone-ink/55 hover:text-ninetone-ink">← Nation · Booking</a>
       </p>
 
       <div class="grid gap-10 md:grid-cols-12 md:gap-16">
@@ -87,7 +88,7 @@ const ytLinks = [ytOne, ytTwo].filter(Boolean);
               <StreamingRow socials={socials} />
             </div>
             <a
-              href="/ninetone-nation/contact-ninetone-nation"
+              href={url("/ninetone-nation/contact-ninetone-nation")}
               class="mt-6 hidden w-full items-center justify-center gap-2 bg-ninetone-green px-4 py-3 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-green-dark md:inline-flex"
             >
               Book {name} <span aria-hidden>→</span>
@@ -118,7 +119,7 @@ const ytLinks = [ytOne, ytTwo].filter(Boolean);
           </div>
 
           <a
-            href="/ninetone-nation/contact-ninetone-nation"
+            href={url("/ninetone-nation/contact-ninetone-nation")}
             class="mt-6 inline-flex items-center gap-2 bg-ninetone-green px-4 py-3 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-green-dark md:hidden"
           >
             Book {name} <span aria-hidden>→</span>
@@ -153,7 +154,7 @@ const ytLinks = [ytOne, ytTwo].filter(Boolean);
               </div>
               <div class="flex flex-col gap-3 md:items-end md:text-right">
                 <a
-                  href="/ninetone-nation/contact-ninetone-nation"
+                  href={url("/ninetone-nation/contact-ninetone-nation")}
                   class="inline-flex items-center gap-2 self-start bg-ninetone-green px-4 py-3 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-green-dark md:self-end"
                 >
                   Send booking request <span aria-hidden>→</span>

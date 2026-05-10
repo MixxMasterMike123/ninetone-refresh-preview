@@ -1,4 +1,6 @@
 ---
+import { url } from "../lib/url";
+
 interface Props {
   currentPage: number;
   lastPage: number;
@@ -11,7 +13,7 @@ if (lastPage <= 1) return Astro.redirect("");
 
 // Page 1 is the bare baseUrl; subsequent pages are /baseUrl/2, /baseUrl/3, etc.
 function urlFor(p: number): string {
-  return p === 1 ? baseUrl : `${baseUrl}/${p}`;
+  return url(p === 1 ? baseUrl : `${baseUrl}/${p}`);
 }
 
 // Build a compact page list: 1 ... (current-1) current (current+1) ... last

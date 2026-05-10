@@ -2,6 +2,7 @@
 import type { Artist } from "../lib/ninetone";
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent } from "../lib/sections";
+import { url } from "../lib/url";
 
 interface Props {
   artists: Artist[];
@@ -31,7 +32,7 @@ const accent = sectionAccent[theme];
         <span class={`kicker ${accent.text}`}>{kicker}</span>
         <h2 class="mt-3 font-display text-4xl leading-[1.05] tracking-tight md:text-5xl">{heading}</h2>
       </div>
-      <a href={cta.href} class="inline-flex items-center gap-2 self-start text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink">
+      <a href={url(cta.href)} class="inline-flex items-center gap-2 self-start text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink">
         {cta.label} <span aria-hidden>→</span>
       </a>
     </div>
@@ -46,7 +47,7 @@ const accent = sectionAccent[theme];
         const name = String(a["Head Artist"] ?? "");
         const slug = String(a.SLUG ?? "");
         const img = a.artistPicture_small ? String(a.artistPicture_small) : undefined;
-        const href = `${hrefBase}/${slug}`;
+        const href = url(`${hrefBase}/${slug}`);
         return (
           <li class="snap-start shrink-0">
             <a href={href} class="group block w-[180px] md:w-[220px] lg:w-[240px]">

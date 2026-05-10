@@ -1,5 +1,6 @@
 ---
 import Base from "../layouts/Base.astro";
+import { url } from "../lib/url";
 ---
 
 <Base title="Search">
@@ -13,7 +14,7 @@ import Base from "../layouts/Base.astro";
         Press <kbd class="rounded border border-ninetone-ink/15 px-1.5 py-0.5 text-xs font-medium text-ninetone-ink/70">⌘K</kbd> from anywhere on the site to open the command palette.
       </p>
 
-      <form method="get" action="/search-result" class="mt-10 flex max-w-2xl items-center gap-3 border-b border-ninetone-ink/20 pb-3">
+      <form method="get" action={url("/search-result")} class="mt-10 flex max-w-2xl items-center gap-3 border-b border-ninetone-ink/20 pb-3">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-ninetone-ink/55">
           <circle cx="11" cy="11" r="7"></circle>
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -66,7 +67,8 @@ import Base from "../layouts/Base.astro";
   let indexPromise: Promise<SearchEntry[]> | null = null;
   function loadIndex(): Promise<SearchEntry[]> {
     if (!indexPromise) {
-      indexPromise = fetch("/search-index.json").then((r) => r.json());
+      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+      indexPromise = fetch(`${base}/search-index.json`).then((r) => r.json());
     }
     return indexPromise;
   }

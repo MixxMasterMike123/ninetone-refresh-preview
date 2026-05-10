@@ -1,5 +1,6 @@
 ---
 import Base from "../layouts/Base.astro";
+import { url } from "../lib/url";
 ---
 
 <Base title="Page not found" theme="group">
@@ -15,10 +16,10 @@ import Base from "../layouts/Base.astro";
             It may have moved, been renamed, or never existed at all.
           </p>
           <div class="mt-10 flex flex-wrap gap-3">
-            <a href="/" class="inline-flex items-center gap-2 bg-ninetone-ink px-5 py-3 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-ink-soft">
+            <a href={url("/")} class="inline-flex items-center gap-2 bg-ninetone-ink px-5 py-3 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-ink-soft">
               Back to home <span aria-hidden>→</span>
             </a>
-            <a href="/search-result" class="inline-flex items-center gap-2 border border-ninetone-ink/20 px-5 py-3 text-sm font-semibold text-ninetone-ink transition-colors hover:border-ninetone-ink hover:bg-ninetone-ink hover:text-ninetone-paper">
+            <a href={url("/search-result")} class="inline-flex items-center gap-2 border border-ninetone-ink/20 px-5 py-3 text-sm font-semibold text-ninetone-ink transition-colors hover:border-ninetone-ink hover:bg-ninetone-ink hover:text-ninetone-paper">
               Search the site <span aria-hidden>↗</span>
             </a>
           </div>
@@ -30,17 +31,17 @@ import Base from "../layouts/Base.astro";
       <div class="mt-10">
         <span class="kicker text-ninetone-ink/55">Or jump to</span>
         <div class="mt-6 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <a href="/records" class="group flex flex-col gap-1 border border-ninetone-rule p-6 transition-colors hover:border-ninetone-red">
+          <a href={url("/records")} class="group flex flex-col gap-1 border border-ninetone-rule p-6 transition-colors hover:border-ninetone-red">
             <span class="kicker text-ninetone-red">Records</span>
             <p class="mt-2 font-display text-2xl font-medium leading-tight tracking-tight">Artists &amp; releases</p>
             <span class="mt-auto pt-4 text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink/60 transition-colors group-hover:text-ninetone-ink">Open <span aria-hidden>→</span></span>
           </a>
-          <a href="/management" class="group flex flex-col gap-1 border border-ninetone-rule p-6 transition-colors hover:border-ninetone-navy">
+          <a href={url("/management")} class="group flex flex-col gap-1 border border-ninetone-rule p-6 transition-colors hover:border-ninetone-navy">
             <span class="kicker text-ninetone-navy">Management</span>
             <p class="mt-2 font-display text-2xl font-medium leading-tight tracking-tight">Talent &amp; clients</p>
             <span class="mt-auto pt-4 text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink/60 transition-colors group-hover:text-ninetone-ink">Open <span aria-hidden>→</span></span>
           </a>
-          <a href="/ninetone-nation" class="group flex flex-col gap-1 border border-ninetone-rule p-6 transition-colors hover:border-ninetone-green">
+          <a href={url("/ninetone-nation")} class="group flex flex-col gap-1 border border-ninetone-rule p-6 transition-colors hover:border-ninetone-green">
             <span class="kicker text-ninetone-green">Nation</span>
             <p class="mt-2 font-display text-2xl font-medium leading-tight tracking-tight">Booking &amp; events</p>
             <span class="mt-auto pt-4 text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink/60 transition-colors group-hover:text-ninetone-ink">Open <span aria-hidden>→</span></span>

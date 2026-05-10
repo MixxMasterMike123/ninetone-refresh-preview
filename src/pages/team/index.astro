@@ -2,6 +2,7 @@
 import Base from "../../layouts/Base.astro";
 import { getTeam, getWebPostSection } from "../../lib/ninetone";
 import { renderBio } from "../../lib/markdown";
+import { url } from "../../lib/url";
 
 let team: Awaited<ReturnType<typeof getTeam>> = [];
 let fetchError: string | null = null;
@@ -69,7 +70,7 @@ team = [...team].sort((a, b) => {
           const photo = m.userPhotoSmall ? String(m.userPhotoSmall) : undefined;
           const title = String(m.title ?? "");
           return (
-            <a href={`/team/${slug}`} class="group flex flex-col">
+            <a href={url(`/team/${slug}`)} class="group flex flex-col">
               <div class="relative aspect-[3/4] w-full overflow-hidden bg-ninetone-paper-warm">
                 {photo && (
                   <img

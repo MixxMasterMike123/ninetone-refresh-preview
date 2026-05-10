@@ -9,6 +9,7 @@ import MarqueeBand from "../components/MarqueeBand.astro";
 import MerchSection from "../components/MerchSection.astro";
 import WebPostsSection from "../components/WebPostsSection.astro";
 import { sectionAccent } from "../lib/sections";
+import { url } from "../lib/url";
 import {
   getFeaturedArtists,
   getNews,
@@ -58,10 +59,10 @@ const portals = [
             We make records. We manage influence. We book the room. Three studios, one address — built for artists who play the long game.
           </p>
           <div class="flex flex-wrap gap-3 pt-2">
-            <a href="/records/contact-records" class="inline-flex items-center gap-2 bg-ninetone-ink px-4 py-3 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-ink-soft">
+            <a href={url("/records/contact-records")} class="inline-flex items-center gap-2 bg-ninetone-ink px-4 py-3 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-ink-soft">
               Submit a demo <span aria-hidden>→</span>
             </a>
-            <a href="/ninetone-nation/booking" class="inline-flex items-center gap-2 border border-ninetone-ink px-4 py-3 text-sm font-semibold text-ninetone-ink transition-colors hover:bg-ninetone-ink hover:text-ninetone-paper">
+            <a href={url("/ninetone-nation/booking")} class="inline-flex items-center gap-2 border border-ninetone-ink px-4 py-3 text-sm font-semibold text-ninetone-ink transition-colors hover:bg-ninetone-ink hover:text-ninetone-paper">
               Book talent <span aria-hidden>→</span>
             </a>
           </div>
@@ -82,7 +83,7 @@ const portals = [
             <div class={`absolute inset-0 ${accent.bg} opacity-0 group-hover:opacity-100`} aria-hidden></div>
             <div
               class="absolute inset-0 bg-cover bg-center opacity-0 mix-blend-multiply transition-opacity duration-700 ease-out group-hover:opacity-50"
-              style={`background-image: url(${p.banner});`}
+              style={`background-image: url(${url(p.banner)});`}
               aria-hidden
             ></div>
 
@@ -101,7 +102,7 @@ const portals = [
               </div>
             </div>
 
-            <a href={p.href} class="absolute inset-0 z-20" aria-label={`Ninetone ${p.title}`}></a>
+            <a href={url(p.href)} class="absolute inset-0 z-20" aria-label={`Ninetone ${p.title}`}></a>
           </li>
         );
       })}

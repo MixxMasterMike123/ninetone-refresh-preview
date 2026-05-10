@@ -5,6 +5,7 @@ import ArtistsTabs from "../../../../components/ArtistsTabs.astro";
 import Pagination from "../../../../components/Pagination.astro";
 import SectionIntro from "../../../../components/SectionIntro.astro";
 import { getArtists, getPreviousArtists, getWebPostSection } from "../../../../lib/ninetone";
+import { url } from "../../../../lib/url";
 
 export async function getStaticPaths({ paginate }: { paginate: any }) {
   const artists = await getPreviousArtists();

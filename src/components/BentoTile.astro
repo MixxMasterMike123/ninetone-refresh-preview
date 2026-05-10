@@ -1,6 +1,7 @@
 ---
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent } from "../lib/sections";
+import { url } from "../lib/url";
 
 interface Props {
   /** Optional href — turns the whole tile into an anchor. */
@@ -62,7 +63,7 @@ const hoverClass = href ? "transition-colors hover:bg-opacity-95" : "";
 
 const Tag = href ? "a" : "div";
 const linkProps = href
-  ? { href, ...(external ? { target: "_blank", rel: "noopener" } : {}) }
+  ? { href: external ? href : url(href), ...(external ? { target: "_blank", rel: "noopener" } : {}) }
   : {};
 ---
 

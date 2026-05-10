@@ -1,5 +1,6 @@
 ---
 import type { Promo } from "../lib/ninetone";
+import { url } from "../lib/url";
 
 interface Props {
   promo: Promo | null;
@@ -24,7 +25,7 @@ const stableId = promo ? promo.label + "·" + promo.message : "";
       </span>
       {promo.href ? (
         <a
-          href={promo.href}
+          href={url(promo.href)}
           class="truncate hover:underline"
         >
           {promo.message} <span aria-hidden class="ml-1 opacity-70">→</span>

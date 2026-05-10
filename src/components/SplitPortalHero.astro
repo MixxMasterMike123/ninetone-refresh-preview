@@ -1,6 +1,7 @@
 ---
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent } from "../lib/sections";
+import { url } from "../lib/url";
 
 interface Side {
   href: string;
@@ -31,7 +32,7 @@ const accent = sectionAccent[theme];
         {side.bgImage && (
           <div
             class="absolute inset-0 bg-cover bg-center opacity-0 mix-blend-multiply transition-opacity duration-700 ease-out group-hover:opacity-50"
-            style={`background-image: url(${side.bgImage});`}
+            style={`background-image: url(${url(side.bgImage)});`}
             aria-hidden
           ></div>
         )}
@@ -55,7 +56,7 @@ const accent = sectionAccent[theme];
           </div>
         </div>
 
-        <a href={side.href} class="absolute inset-0 z-20" aria-label={side.label}></a>
+        <a href={url(side.href)} class="absolute inset-0 z-20" aria-label={side.label}></a>
       </div>
     ))}
   </div>

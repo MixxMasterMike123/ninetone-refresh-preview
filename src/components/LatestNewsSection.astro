@@ -1,6 +1,7 @@
 ---
 import NewsCard from "./NewsCard.astro";
 import { getNews } from "../lib/ninetone";
+import { url } from "../lib/url";
 
 interface Props {
   /** How many posts to show. Defaults to 2. */
@@ -28,7 +29,7 @@ if (posts.length === 0) return Astro.redirect("");
         <span class="kicker text-ninetone-ink/55">Latest stories</span>
         <h2 class="mt-3 font-display text-4xl leading-[1.05] tracking-tight md:text-5xl">{heading}</h2>
       </div>
-      <a href="/news" class="inline-flex items-center gap-2 self-start text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink">
+      <a href={url("/news")} class="inline-flex items-center gap-2 self-start text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink">
         All news <span aria-hidden>→</span>
       </a>
     </div>

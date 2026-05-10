@@ -1,4 +1,6 @@
 ---
+import { url } from "../lib/url";
+
 interface Props {
   title: string;
   slug: string;
@@ -14,6 +16,7 @@ interface Props {
 
 const { title, slug, image, excerpt, date, author, category, lang = "en", size = "md" } = Astro.props;
 const readMore = lang === "sv" ? "Läs" : "Read";
+const href = url(`/news/${slug}`);
 
 const titleClass = size === "lg"
   ? "font-display text-3xl font-medium leading-[1.1] tracking-tight md:text-5xl"
@@ -25,7 +28,7 @@ const aspectClass = size === "lg" ? "aspect-[16/9]" : "aspect-[16/10]";
 ---
 
 <article class="group flex flex-col">
-  <a href={`/news/${slug}`} class={`relative block ${aspectClass} overflow-hidden bg-ninetone-ink/5`}>
+  <a href={href} class={`relative block ${aspectClass} overflow-hidden bg-ninetone-ink/5`}>
     {image && (
       <img
         src={image}
@@ -47,7 +50,7 @@ const aspectClass = size === "lg" ? "aspect-[16/9]" : "aspect-[16/10]";
     )}
 
     <h3 class={titleClass}>
-      <a href={`/news/${slug}`} class="transition-colors hover:opacity-70">{title}</a>
+      <a href={href} class="transition-colors hover:opacity-70">{title}</a>
     </h3>
 
     {excerpt && (
@@ -59,7 +62,7 @@ const aspectClass = size === "lg" ? "aspect-[16/9]" : "aspect-[16/10]";
     )}
 
     <a
-      href={`/news/${slug}`}
+      href={href}
       class="mt-auto inline-flex items-center gap-2 pt-2 text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink"
     >
       {readMore} <span aria-hidden>→</span>

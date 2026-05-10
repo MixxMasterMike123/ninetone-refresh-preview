@@ -1,6 +1,7 @@
 ---
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent } from "../lib/sections";
+import { url } from "../lib/url";
 
 export interface ArtistSocials {
   spotify?: string;
@@ -44,11 +45,11 @@ const {
 
 const accent = sectionAccent[theme];
 
-const href = hrefOverride ?? (
+const href = url(hrefOverride ?? (
   theme === "management" ? `/management/clients/${slug}` :
   theme === "nation" ? `/ninetone-nation/${slug}` :
   `/records/artists/${slug}`
-);
+));
 
 const socialEntries: Array<{ label: string; href: string; glyph: string }> = [];
 if (socials?.spotify) socialEntries.push({ label: "Spotify", href: socials.spotify, glyph: "S" });

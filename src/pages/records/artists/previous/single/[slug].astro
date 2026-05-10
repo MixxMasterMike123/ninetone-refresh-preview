@@ -6,6 +6,7 @@ import NewsCard from "../../../../../components/NewsCard.astro";
 import { getPreviousArtists, getNewsForArtist } from "../../../../../lib/ninetone";
 import { getProducts } from "../../../../../lib/shopify";
 import { renderBio } from "../../../../../lib/markdown";
+import { url } from "../../../../../lib/url";
 
 export async function getStaticPaths() {
   const artists = await getPreviousArtists();
@@ -58,7 +59,7 @@ const ytLinks = [String(artist.yotubeHighlight_one ?? ""), String(artist.yotubeH
   <section class="bg-ninetone-paper">
     <div class="mx-auto max-w-7xl px-6 pb-12 pt-12 md:pt-16">
       <p class="mb-8">
-        <a href="/records/artists/previous" class="kicker text-ninetone-ink/55 hover:text-ninetone-ink">← Records · Previous artists</a>
+        <a href={url("/records/artists/previous")} class="kicker text-ninetone-ink/55 hover:text-ninetone-ink">← Records · Previous artists</a>
       </p>
 
       <div class="grid gap-10 md:grid-cols-12 md:gap-16">

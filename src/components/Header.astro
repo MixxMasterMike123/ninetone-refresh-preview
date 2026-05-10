@@ -1,6 +1,7 @@
 ---
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent, sectionCta } from "../lib/sections";
+import { url } from "../lib/url";
 
 interface Props {
   theme?: SectionTheme;
@@ -32,9 +33,9 @@ const isActive = (matches: string[]) =>
   class="sticky top-0 z-40 border-b border-ninetone-rule bg-ninetone-paper/85 text-ninetone-ink backdrop-blur-md transition-[padding,background-color] duration-200"
 >
   <div class="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-4 transition-[padding] duration-200" id="site-header-inner">
-    <a href="/" class="flex shrink-0 items-center gap-3" aria-label="Ninetone Group">
+    <a href={url("/")} class="flex shrink-0 items-center gap-3" aria-label="Ninetone Group">
       <img
-        src="/images/LogoDark.svg"
+        src={url("/images/LogoDark.svg")}
         alt="Ninetone Group"
         class="h-10 w-auto transition-[height] duration-200"
         id="site-header-logo"
@@ -49,7 +50,7 @@ const isActive = (matches: string[]) =>
           return (
             <li>
               <a
-                href={item.href}
+                href={url(item.href)}
                 class={`relative inline-flex min-h-11 items-center px-3 py-2 font-medium transition-colors hover:text-ninetone-ink ${active ? accent.text : "text-ninetone-ink/65"}`}
                 aria-current={active ? "page" : undefined}
               >
@@ -83,7 +84,7 @@ const isActive = (matches: string[]) =>
       </button>
 
       <a
-        href={cta.href}
+        href={url(cta.href)}
         class={`inline-flex min-h-11 items-center gap-2 px-4 py-2 text-sm font-semibold ${accent.cta} transition-colors`}
       >
         {ctaLabel}

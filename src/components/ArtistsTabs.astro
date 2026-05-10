@@ -1,4 +1,6 @@
 ---
+import { url } from "../lib/url";
+
 interface Props {
   active: "current" | "previous";
 }
@@ -16,7 +18,7 @@ const tabs: { key: "current" | "previous"; label: string; href: string }[] = [
     const isActive = t.key === active;
     return (
       <a
-        href={t.href}
+        href={url(t.href)}
         class={
           isActive
             ? "relative -mb-3 border-b-2 border-ninetone-red pb-3 text-sm font-semibold text-ninetone-ink"

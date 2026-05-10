@@ -1,6 +1,7 @@
 ---
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent } from "../lib/sections";
+import { url } from "../lib/url";
 
 export interface ContactField {
   type: "text" | "email" | "tel" | "textarea";
@@ -50,8 +51,10 @@ const {
   formBlurb,
   fields,
   submitLabel,
-  action = "/api/contact",
+  action: actionProp = "/api/contact",
 } = Astro.props as Props;
+
+const action = url(actionProp);
 
 const accent = sectionAccent[theme];
 ---
