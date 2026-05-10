@@ -1,133 +1,142 @@
 # Deploy guide — preview environment
 
-Stack: Cloudflare Pages (static build) + Cloudflare Access (auth) + FileMaker → Pages deploy hook (auto-rebuild on content change).
+**Live preview:** https://mixxmastermike123.github.io/ninetone-refresh-preview/
 
-This doc covers the **preview** deployment only. When the site is ready to replace the live `www.ninetone.com`, repeat the Pages step against a separate project (or swap the custom domain) and remove the noindex layers (see "Going public" at the bottom).
+Stack:
+- **Build + host:** GitHub Actions builds; GitHub Pages serves the static `dist/`
+- **Auth (planned):** Cloudflare Access in front of GH Pages, via DNS proxying
+- **Auto-rebuild on FM content change:** FileMaker → GitHub `repository_dispatch` webhook → Actions rebuilds → Pages republishes
 
----
-
-## Prereqs
-
-- Cloudflare account with a Pages-enabled plan (Free works).
-- A subdomain you can point at Pages, e.g. `preview.ninetone.com`. (Optional — the free `*.pages.dev` URL works too.)
-- The repo on GitHub (private). The `gh` CLI run already pushed `main` to `MixxMasterMike/ninetone-refresh-preview` (or whatever name we used).
-- The FileMaker + Shopify secrets from `.env`.
+This doc covers the **preview** deployment. When the site is ready to replace `www.ninetone.com`, repoint DNS, drop the `base` path in `astro.config.mjs`, set `PUBLIC_NOINDEX=false`, and remove the noindex layers (see "Going public" at the bottom).
 
 ---
 
-## 1. Create the Pages project
+## Why GitHub Pages, not Cloudflare Pages
 
-1. Cloudflare dashboard → **Workers & Pages** → **Create application** → **Pages** → **Connect to Git**.
-2. Pick the GitHub repo. If you don't see it, install the Cloudflare GitHub app and grant access to that one repo.
-3. Build settings:
-   - **Framework preset:** Astro
-   - **Build command:** `npm run build`
-   - **Build output directory:** `dist`
-   - **Root directory:** *(leave blank)*
-   - **Node version:** `22` (Pages defaults to 18 — set this explicitly under Environment variables → `NODE_VERSION=22.12.0`)
-4. **Environment variables** (Production AND Preview branches — set both):
+We initially deployed to Cloudflare Pages. Their build runners returned `500 {"messages":[{"code":"802","message":"Unable to open file"}]}` from the FileMaker session endpoint on every build, while the same call from this laptop, Postman, and GitHub Actions runners (with multiple User-Agents and simulated CF headers) all returned HTTP 200. We never identified what specifically about Cloudflare's build environment trips FM's response — likely a privilege rule or proxy filter — but we don't need to: GitHub Actions runners reach FM fine, so we build there.
 
-   | Name | Value |
-   |---|---|
-   | `NODE_VERSION` | `22.12.0` |
-   | `FM_HOST` | `files.ninetone.com` |
-   | `FM_DB` | `Ninetone Group AB` |
-   | `FM_USER` | *(from .env)* |
-   | `FM_PASS` | *(from .env)* — mark as Secret |
-   | `SHOPIFY_SHOP_DOMAIN` | `fc6d3a-d9.myshopify.com` |
-   | `SHOPIFY_PUBLIC_STORE_URL` | `https://shop.ninetone.com` |
-   | `SHOPIFY_ADMIN_TOKEN` | *(from .env)* — mark as Secret |
-   | `SHOPIFY_HOMEPAGE_COLLECTION_ID` | `514085060873` |
-   | `PUBLIC_NOINDEX` | `true` |
-
-   Anything starting with `PUBLIC_` is exposed to the client — that is intentional for the noindex flag (it gates a `<meta>` tag at render time).
-
-5. **Save & Deploy.** First build takes ~25-30s once the FM API responds.
+The Cloudflare Pages project (if it still exists) can be deleted.
 
 ---
 
-## 2. Custom domain (optional but recommended)
+## How the build runs
 
-1. Pages project → **Custom domains** → **Set up a custom domain**.
-2. Add `preview.ninetone.com`.
-3. Cloudflare auto-creates the CNAME if `ninetone.com` is on Cloudflare DNS. Otherwise add `CNAME preview <project>.pages.dev` at your registrar.
-4. SSL is automatic via Cloudflare's universal cert.
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) does it all. Triggers:
 
----
+- **Push to `main`** — every code change rebuilds.
+- **`repository_dispatch` event `fm-content-changed`** — FM admin POSTs here when content changes (see "FileMaker auto-rebuild" below).
+- **Manual trigger** — Actions tab → Run workflow.
 
-## 3. Cloudflare Access (the login wall)
+Build steps:
+1. Checkout
+2. `actions/setup-node` Node 22.12.0 (cache: npm)
+3. `npm ci`
+4. `npm run build` with all `FM_*` and `SHOPIFY_*` env vars from repo secrets
+5. `touch dist/.nojekyll` (so Pages doesn't strip `_astro/`)
+6. Upload `dist/` artifact and deploy via `actions/deploy-pages@v4`
 
-This is the auth layer. It lives in **Zero Trust** (free for up to 50 users), totally separate from Pages, and gates the URL before any HTML is served.
-
-1. Dashboard → top-right account picker → **Zero Trust** (it's its own console). On first visit it'll prompt you to create a Zero Trust org name — pick anything, e.g. `ninetone`.
-2. **Access** → **Applications** → **Add an application** → **Self-hosted**.
-3. Application configuration:
-   - **Application name:** Ninetone preview
-   - **Session duration:** 24 hours (or longer — auto-logout interval)
-   - **Application domain:** `preview.ninetone.com` (or the `*.pages.dev` host)
-   - Leave path empty (gates the whole site)
-4. **Identity providers:** at minimum keep **One-time PIN** (sends a 6-digit code to whitelisted email addresses — zero setup, works immediately). Add Google/Microsoft/GitHub later if you want SSO.
-5. **Policies** → **Add a policy**:
-   - **Policy name:** Team
-   - **Action:** Allow
-   - **Configure rules** → **Include** → **Emails** → list the addresses you want to give access to. Or use **Emails ending in** → `@ninetone.com` to allow the whole company at once.
-6. Save. Visiting `preview.ninetone.com` now bounces to a Cloudflare login page → enters email → gets a one-time PIN → logged in for 24h.
-
-To revoke access: remove the email from the policy. To shut the wall off entirely: delete the Application (the site stays up, just unauthenticated).
+Concurrency is `group: pages, cancel-in-progress: false` — new runs cancel queued ones, but never abort a running deploy.
 
 ---
 
-## 4. Auto-redeploy on FileMaker content change
+## Required repo secrets
 
-Pages exposes a **Deploy Hook** — a URL you can POST to to trigger a fresh build. We hand that URL to the FileMaker admin and they wire it into the existing publish workflow.
-
-1. Pages project → **Settings** → **Builds & deployments** → **Deploy hooks** → **Add deploy hook**.
-2. Name: `FileMaker publish`. Branch: `main`. Save.
-3. Copy the URL. Looks like `https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/<UUID>`.
-4. **Send the URL to the FM admin with this ask:**
-
-   > Could you add one script step to the existing publish/save workflow?
-   >
-   > Step: **Insert from URL**
-   > URL: `<paste the deploy hook URL>`
-   > Method: POST
-   > No headers, no body needed.
-   >
-   > That's it — every time you publish, the website rebuilds itself within ~30s. The URL is the secret (no auth needed), please don't share it outside FM.
-
-5. Build queue is automatic — even if the script fires 20 times in a minute, Pages dedupes and runs the latest.
-
-**Fallback if the FM admin won't add the script:** add a GitHub Action on cron (e.g. `*/30 * * * *`) that POSTs the deploy hook. Less efficient (rebuilds on a schedule even when nothing changed) but zero FM access required. Let me know and I'll add the workflow file.
-
----
-
-## 5. Verify the noindex is working
-
-After the first deploy:
+Already set on `MixxMasterMike123/ninetone-refresh-preview`. To rotate:
 
 ```bash
-curl -sI https://preview.ninetone.com/ | grep -i robots
-# expect: x-robots-tag: noindex, nofollow, noarchive, nosnippet, noimageindex
-
-curl -s https://preview.ninetone.com/robots.txt
-# expect: User-agent: *  /  Disallow: /
-
-curl -s https://preview.ninetone.com/ | grep -i 'name="robots"'
-# expect: <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+gh secret set <NAME> --body "<value>" --repo MixxMasterMike123/ninetone-refresh-preview
 ```
 
-All three layers are belt-and-braces. Removing any one of them is fine; removing all three is launch day.
+Required:
+
+| Secret | Source |
+|---|---|
+| `FM_HOST` | `files.ninetone.com` |
+| `FM_DB` | `Ninetone Group AB` |
+| `FM_USER` | from `.env` |
+| `FM_PASS` | from `.env` |
+| `SHOPIFY_SHOP_DOMAIN` | `fc6d3a-d9.myshopify.com` |
+| `SHOPIFY_PUBLIC_STORE_URL` | `https://shop.ninetone.com` |
+| `SHOPIFY_ADMIN_TOKEN` | from `.env` |
+| `SHOPIFY_HOMEPAGE_COLLECTION_ID` | `514085060873` |
+
+`PUBLIC_NOINDEX=true` is hardcoded in the workflow until launch — flip it there, not in secrets.
+
+---
+
+## FileMaker auto-rebuild
+
+GitHub fires Actions workflows when you POST to its `dispatches` endpoint with the right event type. The FM admin needs to add **one script step** to the existing publish workflow.
+
+### What to send the FM admin
+
+> Could you add one script step to the publish/save workflow?
+>
+> Step: **Insert from URL**
+> URL: `https://api.github.com/repos/MixxMasterMike123/ninetone-refresh-preview/dispatches`
+> Method: POST
+> Headers:
+> ```
+> Accept: application/vnd.github.v3+json
+> Authorization: Bearer <PASTE THE TOKEN I'M ABOUT TO SEND>
+> Content-Type: application/json
+> ```
+> Body:
+> ```json
+> {"event_type":"fm-content-changed"}
+> ```
+>
+> Every time you publish, the website rebuilds itself within ~90s. Please don't share the token — it's scoped to one repo and one action only.
+
+### Generating the token
+
+GitHub fine-grained PAT scoped to **only** the `ninetone-refresh-preview` repo with **Contents: Read** + **Metadata: Read** + **Actions: Write** permissions. Set expiry to 1 year, store it in the FM admin's password manager. To rotate: regenerate, send the new value, the FM admin updates the script step.
+
+Generate at: https://github.com/settings/personal-access-tokens
+
+(If you don't want to create a fine-grained PAT manually, the workflow currently allows manual triggers in the Actions tab, so any rebuild-from-FM cadence can be deferred until the FM admin is ready.)
+
+---
+
+## Auth: Cloudflare Access in front of GitHub Pages (TODO)
+
+Deferred until needed. When ready, the path is:
+
+1. **Set up Cloudflare DNS for the project** — point a subdomain like `preview.ninetone.com` at GitHub Pages via CNAME `mixxmastermike123.github.io`. Add the custom domain in the GH Pages settings. Drop the `base` from `astro.config.mjs` (now serving from `/`).
+2. **Cloudflare → Zero Trust → Access → Applications → Add → Self-hosted.** Domain: `preview.ninetone.com`. Identity provider: One-time PIN (or Google). Policy: allowlist your email(s). Done.
+
+Until this is in place, the site is publicly reachable but **noindexed at three layers**:
+- `<meta name="robots" content="noindex,...">` in every HTML page
+- `public/robots.txt` sitewide `Disallow: /`
+- `X-Robots-Tag` header in `public/_headers` (note: GH Pages ignores `_headers` — only the meta and robots.txt apply right now)
+
+So nothing gets indexed by Google, but anyone with the URL can view. Treat the URL as semi-private until Access is live.
+
+---
+
+## Verify noindex is working
+
+```bash
+URL="https://mixxmastermike123.github.io/ninetone-refresh-preview/"
+
+curl -s "$URL" | grep -i 'name="robots"'
+# expect: <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+
+curl -s "$URL/robots.txt"
+# expect: User-agent: *  /  Disallow: /
+```
 
 ---
 
 ## Going public (later)
 
-When ready to flip the site live:
+When ready to flip the site live on its real domain:
 
-1. **Pages env vars:** set `PUBLIC_NOINDEX=false`.
-2. **`public/robots.txt`:** delete (Astro will then serve no robots file, defaulting to "crawl everything") OR replace with a real one + `Sitemap: https://www.ninetone.com/sitemap-index.xml`.
-3. **`public/_headers`:** delete the `X-Robots-Tag` block at the top.
-4. **Access:** delete the Application in Zero Trust → Access → Applications.
-5. Trigger a rebuild (push any commit, or hit the deploy hook).
+1. **`astro.config.mjs`:** drop the `base: "/ninetone-refresh-preview"` line; set `site: "https://www.ninetone.com"`.
+2. **Workflow:** flip `PUBLIC_NOINDEX: 'false'` in `.github/workflows/deploy.yml`.
+3. **`public/robots.txt`:** delete (or replace with a real one referencing the real sitemap).
+4. **`public/_headers`:** delete the `X-Robots-Tag` block.
+5. **Cloudflare Access:** delete the Application in Zero Trust.
+6. **DNS:** repoint `www.ninetone.com` from DivHunt to the new host (GH Pages or wherever production lives).
 
-Optional but recommended: at this point repoint the Pages project at the live `www.ninetone.com` domain (Custom domains → add → set as primary), and decommission the old hosting.
+If the production host won't be GitHub Pages: the workflow steps stay almost identical, just swap the `actions/deploy-pages` step for whatever the new host's deploy action is (`netlify`, `vercel`, `wrangler`, etc.).
