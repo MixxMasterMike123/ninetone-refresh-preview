@@ -3,40 +3,49 @@ import Base from "../layouts/Base.astro";
 ---
 
 <Base title="Page not found" theme="group">
-  <section class="bg-ninetone-ink py-24 text-white">
-    <div class="mx-auto max-w-2xl px-6 text-center">
-      <p class="font-display text-7xl font-bold tracking-tight text-ninetone-red">404</p>
-      <h1 class="mt-6 font-display text-4xl">This page took a different gig.</h1>
-      <p class="mt-4 text-white/80">
-        The page you're looking for isn't here. It may have moved, been renamed, or never existed.
-      </p>
-      <div class="mt-10 flex flex-wrap justify-center gap-3">
-        <a
-          href="/"
-          class="inline-flex min-h-11 items-center gap-2 rounded-md bg-white px-5 py-2 text-sm font-semibold text-ninetone-ink hover:bg-neutral-100"
-        >
-          Back to home <span aria-hidden>→</span>
-        </a>
-        <a
-          href="/search-result"
-          class="inline-flex min-h-11 items-center gap-2 rounded-md bg-white/10 px-5 py-2 text-sm font-semibold text-white hover:bg-white/20"
-        >
-          Search the site
-        </a>
+  <section class="bg-ninetone-paper">
+    <div class="mx-auto max-w-7xl px-6 pb-24 pt-20 md:pb-32 md:pt-28">
+      <div class="grid gap-10 md:grid-cols-12 md:gap-16">
+        <div class="md:col-span-8">
+          <span class="kicker text-ninetone-red">Error 404</span>
+          <h1 class="mt-6 font-display text-[clamp(3rem,9vw,8rem)] leading-[0.9] tracking-[-0.04em]">
+            This page took a different gig.
+          </h1>
+          <p class="mt-6 max-w-xl font-display text-2xl italic leading-snug tracking-tight text-ninetone-ink/75 md:text-3xl">
+            It may have moved, been renamed, or never existed at all.
+          </p>
+          <div class="mt-10 flex flex-wrap gap-3">
+            <a href="/" class="inline-flex items-center gap-2 bg-ninetone-ink px-5 py-3 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-ink-soft">
+              Back to home <span aria-hidden>→</span>
+            </a>
+            <a href="/search-result" class="inline-flex items-center gap-2 border border-ninetone-ink/20 px-5 py-3 text-sm font-semibold text-ninetone-ink transition-colors hover:border-ninetone-ink hover:bg-ninetone-ink hover:text-ninetone-paper">
+              Search the site <span aria-hidden>↗</span>
+            </a>
+          </div>
+        </div>
       </div>
-      <div class="mt-12 grid grid-cols-1 gap-3 text-left sm:grid-cols-3">
-        <a href="/records" class="rounded-md bg-ninetone-red/20 p-4 hover:bg-ninetone-red/30">
-          <p class="text-xs uppercase tracking-wider text-white/60">Records</p>
-          <p class="mt-1 font-semibold">Artists & releases</p>
-        </a>
-        <a href="/management" class="rounded-md bg-ninetone-navy/30 p-4 hover:bg-ninetone-navy/40">
-          <p class="text-xs uppercase tracking-wider text-white/60">Management</p>
-          <p class="mt-1 font-semibold">Talent & clients</p>
-        </a>
-        <a href="/ninetone-nation" class="rounded-md bg-ninetone-green/20 p-4 hover:bg-ninetone-green/30">
-          <p class="text-xs uppercase tracking-wider text-white/60">Nation</p>
-          <p class="mt-1 font-semibold">Booking & events</p>
-        </a>
+
+      <div class="mt-16 h-px w-full bg-ninetone-ink/30" aria-hidden></div>
+
+      <div class="mt-10">
+        <span class="kicker text-ninetone-ink/55">Or jump to</span>
+        <div class="mt-6 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <a href="/records" class="group flex flex-col gap-1 border border-ninetone-rule p-6 transition-colors hover:border-ninetone-red">
+            <span class="kicker text-ninetone-red">Records</span>
+            <p class="mt-2 font-display text-2xl font-medium leading-tight tracking-tight">Artists &amp; releases</p>
+            <span class="mt-auto pt-4 text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink/60 transition-colors group-hover:text-ninetone-ink">Open <span aria-hidden>→</span></span>
+          </a>
+          <a href="/management" class="group flex flex-col gap-1 border border-ninetone-rule p-6 transition-colors hover:border-ninetone-navy">
+            <span class="kicker text-ninetone-navy">Management</span>
+            <p class="mt-2 font-display text-2xl font-medium leading-tight tracking-tight">Talent &amp; clients</p>
+            <span class="mt-auto pt-4 text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink/60 transition-colors group-hover:text-ninetone-ink">Open <span aria-hidden>→</span></span>
+          </a>
+          <a href="/ninetone-nation" class="group flex flex-col gap-1 border border-ninetone-rule p-6 transition-colors hover:border-ninetone-green">
+            <span class="kicker text-ninetone-green">Nation</span>
+            <p class="mt-2 font-display text-2xl font-medium leading-tight tracking-tight">Booking &amp; events</p>
+            <span class="mt-auto pt-4 text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink/60 transition-colors group-hover:text-ninetone-ink">Open <span aria-hidden>→</span></span>
+          </a>
+        </div>
       </div>
     </div>
   </section>

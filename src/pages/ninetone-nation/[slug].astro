@@ -1,9 +1,10 @@
 ---
 import Base from "../../layouts/Base.astro";
-import SocialRow from "../../components/SocialRow.astro";
+import StreamingRow from "../../components/StreamingRow.astro";
 import NewsCard from "../../components/NewsCard.astro";
 import MerchCard from "../../components/MerchCard.astro";
-import { getBookingRoster, getNewsForArtist } from "../../lib/ninetone";
+import RosterStrip from "../../components/RosterStrip.astro";
+import { getBookingRoster, getNewsForArtist, pickRelatedArtists } from "../../lib/ninetone";
 import { getProducts } from "../../lib/shopify";
 import { renderBio } from "../../lib/markdown";
 
@@ -11,23 +12,43 @@ export async function getStaticPaths() {
   const roster = await getBookingRoster();
   return roster.map((a) => ({
     params: { slug: String(a.SLUG ?? "") },
-    props: { entertainer: a },
+    props: { entertainer: a, allRoster: roster },
   }));
 }
 
-const { entertainer: e } = Astro.props as { entertainer: Record<string, unknown> };
+const { entertainer: e, allRoster } = Astro.props as { entertainer: Record<string, unknown>; allRoster: Record<string, unknown>[] };
 
 const name = String(e["Head Artist"] ?? "");
-// Nation uses the `bookingPresentation*` family of fields
 const tagline = String(e.bookingPresentationTitle ?? "");
 const bioHtml = renderBio(String(e.bookingPresentationString ?? ""));
-const image = e.artistPicture_big ? String(e.artistPicture_big) : e.artistPicture_small ? String(e.artistPicture_small) : undefined;
-const tags = (e.tags ? String(e.tags).split(/\r|\n/).filter(Boolean)
-  : e.genre ? String(e.genre).split(/\r|\n/).filter(Boolean)
+const heroImage = e.artistPicture_big
+  ? String(e.artistPicture_big)
+  : e.artistPicture_small
+  ? String(e.artistPicture_small)
+  : undefined;
+const tags = (e.tagBooking
+  ? String(e.tagBooking).split(/\r|\n|,/).map((s) => s.trim()).filter(Boolean)
+  : e.tags
+  ? String(e.tags).split(/\r|\n|,/).map((s) => s.trim()).filter(Boolean)
+  : e.genre
+  ? String(e.genre).split(/\r|\n|,/).map((s) => s.trim()).filter(Boolean)
   : []);
 const ytOne = String(e.yotubeHighlight_one ?? "");
 const ytTwo = String(e.yotubeHighlight_two ?? "");
 const collectionId = String(e.collectionId ?? "").trim();
+
+const socials = {
+  spotify: e.url_spotify ? String(e.url_spotify) : undefined,
+  apple: e.url_applemusic ? String(e.url_applemusic) : undefined,
+  amazon: e.url_amazon ? String(e.url_amazon) : undefined,
+  youtubeMusic: e.url_youtube_music ? String(e.url_youtube_music) : undefined,
+  youtube: e.url_youtube_link ? String(e.url_youtube_link) : undefined,
+  instagram: e.url_instagram ? String(e.url_instagram) : undefined,
+  tiktok: e.url_tiktok_artist ? String(e.url_tiktok_artist) : undefined,
+  twitter: e.url_twitter ? String(e.url_twitter) : undefined,
+  facebook: e.url_facebook ? String(e.url_facebook) : undefined,
+  soundcloud: undefined,
+};
 
 let merch: Awaited<ReturnType<typeof getProducts>> = [];
 if (collectionId) {
@@ -35,108 +56,161 @@ if (collectionId) {
 }
 
 let latestNews: Awaited<ReturnType<typeof getNewsForArtist>> = [];
-try { latestNews = await getNewsForArtist(name, 3); } catch {}
+try { latestNews = await getNewsForArtist(name, 4); } catch {}
+
+// "In good company" — same-tag entertainers ranked by overlap, padded with
+// random others if there aren't enough matches.
+function nationTagsOf(r: Record<string, unknown>): string[] {
+  const raw = (r.tagBooking ?? r.tags ?? r.genre ?? "") as string;
+  return String(raw).split(/\r|\n|,/).map((s) => s.trim()).filter(Boolean);
+}
+const related = pickRelatedArtists(e, allRoster, nationTagsOf, 12);
+
+const ytLinks = [ytOne, ytTwo].filter(Boolean);
 ---
 
 <Base title={name} theme="nation" description={tagline || `${name} | Ninetone Nation`}>
-  <section class="relative overflow-hidden bg-ninetone-green py-20 text-white">
-    {image && (
-      <div class="absolute inset-0 opacity-25" style={`background-image: url(${image}); background-size: cover; background-position: center;`}></div>
-    )}
-    <div class="relative mx-auto max-w-7xl px-6">
-      <p class="mb-2 text-xs uppercase tracking-wider opacity-80">
-        <a href="/ninetone-nation/booking" class="hover:underline">← Boka</a>
+  <section class="bg-ninetone-paper">
+    <div class="mx-auto max-w-7xl px-6 pb-12 pt-12 md:pt-16">
+      <p class="mb-8">
+        <a href="/ninetone-nation/booking" class="kicker text-ninetone-ink/55 hover:text-ninetone-ink">← Nation · Booking</a>
       </p>
-      <h1 class="font-display text-5xl">{name}</h1>
-      {tagline && <p class="mt-2 max-w-3xl text-white/90">{tagline}</p>}
-      <a href="/ninetone-nation/contact-ninetone-nation" class="mt-6 inline-flex items-center gap-2 rounded-sm bg-white px-4 py-2 text-sm font-semibold text-ninetone-green">
-        Boka {name} <span aria-hidden>→</span>
-      </a>
-    </div>
-  </section>
 
-  <section class="bg-ninetone-card-sage py-16">
-    <div class="mx-auto grid max-w-7xl grid-cols-1 gap-12 px-6 lg:grid-cols-[1fr_320px]">
-      <article class="text-ninetone-ink">
-        <SocialRow
-          spotify={String(e.url_spotify ?? "")}
-          applemusic={String(e.url_applemusic ?? "")}
-          youtube={String(e.url_youtube_link ?? e.url_youtube_music ?? "")}
-          instagram={String(e.url_instagram ?? "")}
-          tiktok={String(e.url_tiktok_artist ?? "")}
-          facebook={String(e.url_facebook ?? "")}
-          twitter={String(e.url_twitter ?? "")}
-          size="sm"
-        />
-
-        {tags.length > 0 && (
-          <div class="mt-6 flex flex-wrap gap-2">
-            {tags.map((g) => (
-              <span class="rounded bg-ninetone-green/20 px-3 py-1 text-xs uppercase tracking-wider text-ninetone-green-dark">{g}</span>
-            ))}
-          </div>
-        )}
-
-        {image && (
-          <img src={image} alt={name} class="mt-8 w-full rounded-sm object-cover" />
-        )}
-
-        <div class="prose mt-8 max-w-none text-ninetone-ink" set:html={bioHtml}></div>
-
-        {(ytOne || ytTwo) && (
-          <div class="mt-12">
-            <h3 class="mb-4 font-display text-xl">Videos</h3>
-            <div class="grid gap-4 sm:grid-cols-2">
-              {[ytOne, ytTwo].filter(Boolean).map((url) => {
-                const idMatch = url.match(/(?:v=|youtu\.be\/|embed\/)([\w-]{11})/);
-                const id = idMatch ? idMatch[1] : null;
-                return id ? (
-                  <iframe src={`https://www.youtube.com/embed/${id}`} class="aspect-video w-full rounded" title={`${name} video`} loading="lazy" allowfullscreen></iframe>
-                ) : null;
-              })}
+      <div class="grid gap-10 md:grid-cols-12 md:gap-16">
+        <aside class="md:col-span-5 lg:col-span-5">
+          <div class="md:sticky md:top-24">
+            <div class="relative aspect-[4/5] w-full overflow-hidden bg-ninetone-paper-warm">
+              {heroImage && <img src={heroImage} alt={name} class="h-full w-full object-cover" />}
+              <span class="absolute left-0 top-0 h-1 w-16 bg-ninetone-green" aria-hidden></span>
             </div>
+            <div class="mt-6 hidden md:block">
+              <StreamingRow socials={socials} />
+            </div>
+            <a
+              href="/ninetone-nation/contact-ninetone-nation"
+              class="mt-6 hidden w-full items-center justify-center gap-2 bg-ninetone-green px-4 py-3 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-green-dark md:inline-flex"
+            >
+              Book {name} <span aria-hidden>→</span>
+            </a>
           </div>
-        )}
-      </article>
+        </aside>
 
-      <aside class="flex flex-col gap-6">
-        <div class="rounded bg-ninetone-green p-5 text-white">
-          <h3 class="font-display text-lg">Bokningsförfrågan</h3>
-          <p class="mt-2 text-sm opacity-90">Boka {name} via länken nedan eller maila till booking@ninetone.com</p>
-          <a href="/ninetone-nation/contact-ninetone-nation" class="mt-4 inline-flex items-center gap-2 rounded-sm bg-white px-3 py-1.5 text-xs font-semibold text-ninetone-green">
-            Boka {name} <span aria-hidden>→</span>
-          </a>
-        </div>
+        <div class="md:col-span-7 lg:col-span-7">
+          <span class="kicker text-ninetone-green">Nation — Booking</span>
+          <h1 class="mt-4 font-display text-[clamp(3rem,8vw,7rem)] leading-[0.9] tracking-[-0.045em]">{name}</h1>
 
-        {latestNews.length > 0 && (
-          <div>
-            <h3 class="mb-2 font-display text-lg">Senaste nyheterna</h3>
-            <div class="grid gap-3">
-              {latestNews.map((p) => (
-                <NewsCard
-                  title={String(p.Title ?? "")}
-                  slug={String(p.slug ?? "")}
-                  image={p.image_webp ? String(p.image_webp) : undefined}
-                  excerpt={String(p.shortMessage ?? "").slice(0, 80)}
-                  date={String(p.Date ?? "")}
-                  lang="sv"
-                />
+          {tagline && (
+            <p class="mt-6 max-w-xl font-display text-2xl italic leading-snug tracking-tight text-ninetone-ink/75 md:text-3xl">
+              {tagline}
+            </p>
+          )}
+
+          {tags.length > 0 && (
+            <div class="mt-6 flex flex-wrap gap-x-4 gap-y-2 text-xs uppercase tracking-[0.16em] text-ninetone-ink/60">
+              {tags.slice(0, 6).map((g, i) => (
+                <span>{i > 0 && <span aria-hidden class="mr-4 opacity-40">·</span>}{g}</span>
               ))}
             </div>
+          )}
+
+          <div class="mt-8 md:hidden">
+            <StreamingRow socials={socials} />
           </div>
-        )}
-      </aside>
+
+          <a
+            href="/ninetone-nation/contact-ninetone-nation"
+            class="mt-6 inline-flex items-center gap-2 bg-ninetone-green px-4 py-3 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-green-dark md:hidden"
+          >
+            Book {name} <span aria-hidden>→</span>
+          </a>
+
+          <div class="mt-12 prose lede max-w-none" set:html={bioHtml}></div>
+
+          {ytLinks.length > 0 && (
+            <div class="mt-16 border-t border-ninetone-rule pt-10">
+              <span class="kicker text-ninetone-ink/55">Watch</span>
+              <div class="mt-6 grid gap-4 sm:grid-cols-2">
+                {ytLinks.map((url) => {
+                  const idMatch = url.match(/(?:v=|youtu\.be\/|embed\/)([\w-]{11})/);
+                  const id = idMatch ? idMatch[1] : null;
+                  return id ? (
+                    <iframe src={`https://www.youtube.com/embed/${id}`} class="aspect-video w-full" title={`${name} video`} loading="lazy" allowfullscreen></iframe>
+                  ) : null;
+                })}
+              </div>
+            </div>
+          )}
+
+          <!-- Booking technical / inquiry block -->
+          <div class="mt-16 border-t border-ninetone-rule pt-10">
+            <span class="kicker text-ninetone-green">Booking</span>
+            <div class="mt-4 grid gap-6 md:grid-cols-2">
+              <div>
+                <p class="font-display text-2xl font-medium leading-tight tracking-tight">Ready to book {name}?</p>
+                <p class="mt-3 text-sm text-ninetone-ink/65">
+                  Get availability, fee structure, and technical requirements within one business day.
+                </p>
+              </div>
+              <div class="flex flex-col gap-3 md:items-end md:text-right">
+                <a
+                  href="/ninetone-nation/contact-ninetone-nation"
+                  class="inline-flex items-center gap-2 self-start bg-ninetone-green px-4 py-3 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-green-dark md:self-end"
+                >
+                  Send booking request <span aria-hidden>→</span>
+                </a>
+                <a href="mailto:booking@ninetone.com" class="text-sm text-ninetone-ink/70 underline-offset-4 hover:underline">
+                  booking@ninetone.com
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {latestNews.length > 0 && (
+            <div class="mt-16 border-t border-ninetone-rule pt-10">
+              <span class="kicker text-ninetone-ink/55">In the news</span>
+              <ul class="mt-6 grid gap-x-8 gap-y-10 md:grid-cols-2">
+                {latestNews.map((p) => (
+                  <li>
+                    <NewsCard
+                      title={String(p.Title ?? "")}
+                      slug={String(p.slug ?? "")}
+                      image={p.image_webp ? String(p.image_webp) : undefined}
+                      date={String(p.Date ?? "")}
+                      category={String(p.category ?? "")}
+                      size="sm"
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   </section>
 
   {merch.length > 0 && (
-    <section class="bg-ninetone-ink py-16">
+    <section class="bg-ninetone-paper-warm py-20">
       <div class="mx-auto max-w-7xl px-6">
-        <h2 class="font-display text-2xl uppercase tracking-wider text-white">{name} Merch</h2>
-        <div class="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-          {merch.map((p) => <MerchCard product={p} lang="sv" />)}
+        <div class="mb-10">
+          <span class="kicker text-ninetone-green">Merch</span>
+          <h2 class="mt-3 font-display text-4xl leading-[1.05] tracking-tight md:text-5xl">{name} — official.</h2>
+        </div>
+        <div class="grid grid-cols-2 gap-x-6 gap-y-12 md:grid-cols-3 lg:grid-cols-4">
+          {merch.map((p) => <MerchCard product={p} />)}
         </div>
       </div>
     </section>
+  )}
+
+  {related.length > 0 && (
+    <RosterStrip
+      artists={related}
+      theme="nation"
+      hrefBase="/ninetone-nation"
+      kicker="More from Nation"
+      heading="Available now."
+      cta={{ label: "All entertainers", href: "/ninetone-nation/booking" }}
+    />
   )}
 </Base>

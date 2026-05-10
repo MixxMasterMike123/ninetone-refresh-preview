@@ -11,60 +11,120 @@
   --color-ninetone-card: #1a2b3f;
   --color-ninetone-card-sage: #b8c9b3;
   --color-ninetone-ink: #0a1420;
+  --color-ninetone-ink-soft: #1a2230;
   --color-ninetone-paper: #f5f3ee;
+  --color-ninetone-paper-warm: #ece8de;
+  --color-ninetone-rule: #d9d4c5;
 
-  /* Typography */
-  --font-display: "Ubuntu", system-ui, sans-serif;
-  --font-sans: "Rubik", system-ui, sans-serif;
-  --font-menu: "Ubuntu", system-ui, sans-serif;
+  /* Typography
+     - display: Newsreader (free Hatton substitute — soft humanist serif w/ optical sizing)
+     - sans:    Space Grotesk (free Supply substitute — engineered geometric grotesque)
+     - mono:    Space Mono (free Supply Mono substitute — used for kickers + metadata) */
+  --font-display: "Newsreader", "Times New Roman", Georgia, serif;
+  --font-sans: "Space Grotesk", system-ui, sans-serif;
+  --font-menu: "Space Grotesk", system-ui, sans-serif;
+  --font-mono: "Space Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 html {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 body {
-  background: white;
-  color: #111;
+  background: var(--color-ninetone-paper);
+  color: var(--color-ninetone-ink);
   font-weight: 400;
+  font-feature-settings: "kern", "liga", "calt";
 }
 
 @layer base {
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    line-height: 1.15;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
     text-wrap: balance;
+    font-variation-settings: "opsz" 72;
   }
 
-  /* Default type scale (Major Third, 1.25×) — Tailwind text-* utilities override.
+  /* Fluid editorial scale — display headlines breathe with the viewport.
      Card titles and other small-context headings should set their own size class
      but never below 1rem. */
-  h1 { font-size: 3rem; }     /* 48px */
-  h2 { font-size: 2rem; }     /* 32px */
-  h3 { font-size: 1.5rem; }   /* 24px */
-  h4 { font-size: 1.25rem; }  /* 20px */
-  h5 { font-size: 1rem; }     /* 16px */
-  h6 { font-size: 0.875rem; letter-spacing: 0.05em; text-transform: uppercase; }
+  h1 { font-size: clamp(2.75rem, 7vw, 6.5rem); letter-spacing: -0.035em; }
+  h2 { font-size: clamp(2rem, 4.5vw, 4rem); letter-spacing: -0.03em; }
+  h3 { font-size: clamp(1.5rem, 2.4vw, 2rem); letter-spacing: -0.02em; }
+  h4 { font-size: 1.375rem; letter-spacing: -0.015em; }
+  h5 { font-size: 1.0625rem; }
+  h6 {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1.4;
+  }
+
+  ::selection {
+    background: var(--color-ninetone-ink);
+    color: var(--color-ninetone-paper);
+  }
 }
 
-/* Menu items: Ubuntu Light (300) */
+/* Menu items: Rubik medium, looser tracking */
 nav, header nav a, footer nav a {
   font-family: var(--font-menu);
-  font-weight: 300;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
+/* Editorial utilities */
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.kicker::before {
+  content: "";
+  width: 1.5rem;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.6;
+}
+
+.display-italic {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-variation-settings: "opsz" 144;
+}
+
+.rule-top { border-top: 1px solid var(--color-ninetone-rule); }
+.rule-bottom { border-bottom: 1px solid var(--color-ninetone-rule); }
+
 /* Bio rendering — matches DivHunt's "markdown" function output */
+.prose {
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  color: var(--color-ninetone-ink);
+}
 .prose h1, .prose h2, .prose h3, .prose h4 {
   font-family: var(--font-display);
+  font-weight: 500;
   margin-top: 2rem;
   margin-bottom: 0.75rem;
-  line-height: 1.2;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
 }
-.prose h2 { font-size: 1.875rem; font-weight: 700; }
-.prose h3 { font-size: 1.5rem; font-weight: 700; }
+.prose h2 { font-size: 2rem; }
+.prose h3 { font-size: 1.5rem; }
 .prose h4 { font-size: 1.25rem; font-weight: 600; }
 .prose p {
   margin-top: 0;
@@ -74,9 +134,11 @@ nav, header nav a, footer nav a {
 .prose a {
   color: var(--color-ninetone-red);
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  transition: opacity 0.15s ease;
 }
-.prose a:hover { opacity: 0.8; }
+.prose a:hover { opacity: 0.65; }
 .prose ul, .prose ol {
   margin: 1em 0;
   padding-left: 1.5rem;
@@ -84,17 +146,37 @@ nav, header nav a, footer nav a {
 .prose ul { list-style: disc; }
 .prose ol { list-style: decimal; }
 .prose li { margin: 0.4em 0; }
-.prose strong { font-weight: 700; }
+.prose strong { font-weight: 600; }
 .prose em { font-style: italic; }
 .prose blockquote {
-  border-left: 3px solid var(--color-ninetone-red);
-  padding-left: 1rem;
+  border-left: 2px solid var(--color-ninetone-ink);
+  padding: 0.25rem 0 0.25rem 1.25rem;
+  font-family: var(--font-display);
   font-style: italic;
-  margin: 1.25em 0;
+  font-size: 1.375rem;
+  line-height: 1.4;
+  color: var(--color-ninetone-ink);
+  margin: 1.75em 0;
+  font-variation-settings: "opsz" 144;
 }
 .prose hr {
-  border-top: 1px solid #e5e5e5;
-  margin: 2em 0;
+  border-top: 1px solid var(--color-ninetone-rule);
+  margin: 2.5em 0;
 }
-.prose-invert a { color: white; }
-.prose-invert blockquote { border-color: white; }
+.prose-invert { color: var(--color-ninetone-paper); }
+.prose-invert a { color: var(--color-ninetone-paper); }
+.prose-invert blockquote {
+  border-color: var(--color-ninetone-paper);
+  color: var(--color-ninetone-paper);
+}
+
+/* Drop-cap for editorial article ledes */
+.lede::first-letter {
+  font-family: var(--font-display);
+  font-weight: 500;
+  float: left;
+  font-size: 4.25em;
+  line-height: 0.85;
+  margin: 0.05em 0.08em 0 -0.04em;
+  font-variation-settings: "opsz" 144;
+}

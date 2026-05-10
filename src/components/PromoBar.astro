@@ -1,0 +1,67 @@
+---
+import type { Promo } from "../lib/ninetone";
+
+interface Props {
+  promo: Promo | null;
+}
+
+const { promo } = Astro.props as Props;
+
+const stableId = promo ? promo.label + "·" + promo.message : "";
+---
+
+{promo && (
+
+<div
+  id="promo-bar"
+  data-promo-id={stableId}
+  class="bg-ninetone-ink text-ninetone-paper"
+>
+  <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-2.5 text-sm">
+    <div class="flex min-w-0 items-center gap-3">
+      <span class="inline-flex shrink-0 items-center bg-ninetone-paper px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-ninetone-ink">
+        {promo.label}
+      </span>
+      {promo.href ? (
+        <a
+          href={promo.href}
+          class="truncate hover:underline"
+        >
+          {promo.message} <span aria-hidden class="ml-1 opacity-70">→</span>
+        </a>
+      ) : (
+        <span class="truncate">{promo.message}</span>
+      )}
+    </div>
+    <button
+      type="button"
+      id="promo-dismiss"
+      class="shrink-0 rounded-none p-1 text-ninetone-paper/60 hover:text-ninetone-paper"
+      aria-label="Dismiss"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+  </div>
+</div>
+)}
+
+<script>
+  const KEY = "ninetone:promo-dismissed";
+  const bar = document.getElementById("promo-bar");
+  if (bar) {
+    const id = bar.dataset.promoId ?? "";
+    const dismissed = localStorage.getItem(KEY);
+    if (dismissed && dismissed === id) {
+      bar.remove();
+    } else {
+      const btn = document.getElementById("promo-dismiss");
+      btn?.addEventListener("click", () => {
+        localStorage.setItem(KEY, id);
+        bar.remove();
+      });
+    }
+  }
+</script>

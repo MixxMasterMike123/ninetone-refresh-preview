@@ -2,7 +2,10 @@
 import Base from "../../layouts/Base.astro";
 import ArtistCard from "../../components/ArtistCard.astro";
 import ArtistsTabs from "../../components/ArtistsTabs.astro";
-import { getArtists } from "../../lib/ninetone";
+import SectionIntro from "../../components/SectionIntro.astro";
+import RosterFilters from "../../components/RosterFilters.astro";
+import RosterIndex from "../../components/RosterIndex.astro";
+import { getArtists, getWebPostSection } from "../../lib/ninetone";
 
 let artists: Awaited<ReturnType<typeof getArtists>> = [];
 let fetchError: string | null = null;
@@ -11,36 +14,85 @@ try {
 } catch (e) {
   fetchError = (e as Error).message;
 }
+const introBody = String((artists[0] as Record<string, unknown> | undefined)?.readMore ?? "");
+const webPosts = await getWebPostSection("Ninetone Records").catch(() => null);
+
+// Distinct tag set across the roster, sorted by frequency desc, capped at 12
+const tagCounts = new Map<string, number>();
+for (const a of artists) {
+  const tags = a.genre ? String(a.genre).split(/\r|\n/).map((s) => s.trim()).filter(Boolean) : [];
+  for (const t of tags) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+}
+const sortedTags = Array.from(tagCounts.entries())
+  .sort((a, b) => b[1] - a[1])
+  .slice(0, 12)
+  .map(([t]) => t);
 ---
 
 <Base title="Artists" theme="records">
-  <section class="bg-ninetone-ink py-12 text-white">
-    <div class="mx-auto max-w-7xl px-6">
-      <h1 class="font-display text-5xl">Artists</h1>
-      <p class="mt-4 text-neutral-300">Top Music Production &amp; Artist Branding | Ninetone Records</p>
-    </div>
-  </section>
+  <SectionIntro
+    title="Artists"
+    tagline={webPosts?.title}
+    readMore={introBody}
+    theme="records"
+    logo="/images/recordsLogo.png"
+    logoAlt="Ninetone Records"
+  />
 
-  <section class="bg-ninetone-ink pb-20">
+  <section class="bg-ninetone-paper pb-20">
     <div class="mx-auto max-w-7xl px-6">
       <ArtistsTabs active="current" />
       {fetchError && (
-        <p class="rounded bg-yellow-200/10 p-4 text-sm text-yellow-200">
+        <p class="border-l-2 border-ninetone-red bg-ninetone-paper-warm p-4 text-sm text-ninetone-ink/80">
           Couldn't load artists yet — set FM_USER / FM_PASS in .env to enable. ({fetchError})
         </p>
       )}
-      <div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
-        {artists.map((a) => (
-          <ArtistCard
-            theme="records"
-            name={String(a["Head Artist"] ?? "")}
-            slug={String(a.SLUG ?? "")}
-            blurb={String(a.artistPresentationShort ?? "")}
-            image={a.artistPicture_small ? String(a.artistPicture_small) : undefined}
-            tags={a.genre ? String(a.genre).split(/\r|\n/).filter(Boolean) : []}
-          />
-        ))}
+
+      <RosterFilters
+        tags={sortedTags}
+        theme="records"
+        total={artists.length}
+        showLayoutSwitch
+      />
+
+      <div
+        data-roster-grid
+        class="grid grid-cols-2 gap-x-6 gap-y-12 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+      >
+        {artists.map((a) => {
+          const name = String(a["Head Artist"] ?? "");
+          const tags = a.genre ? String(a.genre).split(/\r|\n/).map((s) => s.trim()).filter(Boolean) : [];
+          return (
+            <div
+              data-roster-item
+              data-name={name}
+              data-letter={(name[0] ?? "").toLowerCase()}
+              data-tags={tags.join("|")}
+            >
+              <ArtistCard
+                theme="records"
+                name={name}
+                slug={String(a.SLUG ?? "")}
+                blurb={String(a.artistPresentationShort ?? "")}
+                image={a.artistPicture_small ? String(a.artistPicture_small) : undefined}
+                tags={tags}
+                socials={{
+                  spotify: a.url_spotify ? String(a.url_spotify) : undefined,
+                  apple: a.url_applemusic ? String(a.url_applemusic) : undefined,
+                  youtubeMusic: a.url_youtube_music ? String(a.url_youtube_music) : undefined,
+                  youtube: a.url_youtube_link ? String(a.url_youtube_link) : undefined,
+                  instagram: a.url_instagram ? String(a.url_instagram) : undefined,
+                  tiktok: a.url_tiktok_artist ? String(a.url_tiktok_artist) : undefined,
+                  twitter: a.url_twitter ? String(a.url_twitter) : undefined,
+                  facebook: a.url_facebook ? String(a.url_facebook) : undefined,
+                }}
+              />
+            </div>
+          );
+        })}
       </div>
+
+      <RosterIndex artists={artists} hrefBase="/records/artists" />
     </div>
   </section>
 </Base>

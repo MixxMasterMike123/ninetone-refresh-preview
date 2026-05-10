@@ -3,27 +3,38 @@ import Base from "../layouts/Base.astro";
 ---
 
 <Base title="Search">
-  <section class="bg-ninetone-ink py-12 text-white">
-    <div class="mx-auto max-w-7xl px-6">
-      <h1 class="font-display text-5xl">Search</h1>
-      <form method="get" action="/search-result" class="mt-6 flex max-w-xl gap-2">
+  <section class="bg-ninetone-paper">
+    <div class="mx-auto max-w-7xl px-6 pb-12 pt-16 md:pt-24">
+      <span class="kicker text-ninetone-ink/55">Search</span>
+      <h1 class="mt-4 font-display text-[clamp(2.75rem,7vw,6rem)] leading-[0.95] tracking-[-0.035em]">
+        Find anything.
+      </h1>
+      <p class="mt-4 max-w-xl text-base text-ninetone-ink/65">
+        Press <kbd class="rounded border border-ninetone-ink/15 px-1.5 py-0.5 text-xs font-medium text-ninetone-ink/70">⌘K</kbd> from anywhere on the site to open the command palette.
+      </p>
+
+      <form method="get" action="/search-result" class="mt-10 flex max-w-2xl items-center gap-3 border-b border-ninetone-ink/20 pb-3">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-ninetone-ink/55">
+          <circle cx="11" cy="11" r="7"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
         <input
           id="search-input"
           type="search"
           name="q"
           placeholder="Search artists, news, team…"
-          class="w-full rounded-sm border border-white/20 bg-white/10 px-4 py-2 text-white placeholder-white/50 focus:border-white focus:outline-none"
+          class="w-full border-0 bg-transparent font-display text-2xl text-ninetone-ink placeholder-ninetone-ink/35 focus:outline-none"
           autocomplete="off"
         />
-        <button type="submit" class="rounded-sm bg-white px-5 py-2 text-sm font-semibold text-ninetone-ink hover:bg-white/90">
-          Go
+        <button type="submit" class="bg-ninetone-ink px-4 py-2 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-ink-soft">
+          Search
         </button>
       </form>
-      <p id="search-status" class="mt-3 text-sm text-white/60">Type a query and press Go.</p>
+      <p id="search-status" class="mt-4 text-xs uppercase tracking-[0.16em] text-ninetone-ink/55">Type a query and press search.</p>
     </div>
   </section>
 
-  <section class="bg-ninetone-ink pb-20 text-white">
+  <section class="bg-ninetone-paper pb-24">
     <div id="search-results" class="mx-auto max-w-7xl px-6"></div>
   </section>
 </Base>
@@ -42,10 +53,10 @@ import Base from "../layouts/Base.astro";
   };
 
   const SECTION_LABELS: Record<SearchSection, string> = {
-    records: "Ninetone Records",
-    previous: "Previous Artists",
-    management: "Ninetone Management",
-    nation: "Ninetone Nation",
+    records: "Records",
+    previous: "Previous artists",
+    management: "Management",
+    nation: "Nation",
     team: "Team",
     news: "News",
   };
@@ -61,16 +72,12 @@ import Base from "../layouts/Base.astro";
   }
 
   function escapeHtml(s: string): string {
-    return s
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
   function renderResults(query: string, hits: SearchEntry[]): string {
     if (hits.length === 0) {
-      return `<p class="text-white/70">No results for <strong>${escapeHtml(query)}</strong>.</p>`;
+      return `<p class="text-base text-ninetone-ink/65">No results for <strong>${escapeHtml(query)}</strong>.</p>`;
     }
 
     const grouped = new Map<SearchSection, SearchEntry[]>();
@@ -87,24 +94,23 @@ import Base from "../layouts/Base.astro";
         const cards = items
           .map(
             (e) => `
-              <a href="${escapeHtml(e.href)}" class="group block rounded-sm border border-white/10 bg-white/5 p-4 hover:border-white/30 hover:bg-white/10">
-                <div class="flex gap-4">
-                  ${e.image ? `<img src="${escapeHtml(e.image)}" alt="" class="h-16 w-16 shrink-0 rounded-sm object-cover" loading="lazy" />` : ""}
-                  <div class="min-w-0">
-                    <h3 class="truncate font-semibold text-white group-hover:underline">${escapeHtml(e.name)}</h3>
-                    ${e.blurb ? `<p class="mt-1 line-clamp-2 text-sm text-white/70">${escapeHtml(e.blurb)}</p>` : ""}
-                    ${e.tags.length ? `<div class="mt-2 flex flex-wrap gap-1">${e.tags.slice(0, 3).map((t) => `<span class="rounded bg-white/10 px-2 py-0.5 text-xs uppercase tracking-wider text-white/70">${escapeHtml(t)}</span>`).join("")}</div>` : ""}
-                  </div>
+              <a href="${escapeHtml(e.href)}" class="group flex flex-col gap-3 border-t border-ninetone-rule pt-4 transition-colors">
+                ${e.image ? `<div class="aspect-[4/3] w-full overflow-hidden bg-ninetone-paper-warm"><img src="${escapeHtml(e.image)}" alt="" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" loading="lazy" /></div>` : ""}
+                <div>
+                  <h3 class="font-display text-xl font-medium leading-tight tracking-tight transition-colors group-hover:opacity-70">${escapeHtml(e.name)}</h3>
+                  ${e.blurb ? `<p class="mt-2 line-clamp-2 text-sm text-ninetone-ink/65">${escapeHtml(e.blurb)}</p>` : ""}
+                  ${e.tags.length ? `<div class="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[0.6875rem] uppercase tracking-[0.12em] text-ninetone-ink/55">${e.tags.slice(0, 3).map((t, i) => `${i > 0 ? '<span class="opacity-40">·</span>' : ""}<span>${escapeHtml(t)}</span>`).join("")}</div>` : ""}
                 </div>
               </a>`,
           )
           .join("");
         return `
-          <div class="mb-10">
-            <h2 class="mb-4 text-xs font-semibold uppercase tracking-wider text-white/60">
-              ${SECTION_LABELS[s]} <span class="text-white/40">(${items.length})</span>
-            </h2>
-            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">${cards}</div>
+          <div class="mb-12">
+            <div class="mb-6 flex items-center justify-between">
+              <span class="kicker text-ninetone-ink/55">${SECTION_LABELS[s]}</span>
+              <span class="text-xs text-ninetone-ink/55">${items.length}</span>
+            </div>
+            <div class="grid gap-x-8 gap-y-12 md:grid-cols-3 lg:grid-cols-4">${cards}</div>
           </div>`;
       })
       .join("");
@@ -116,7 +122,7 @@ import Base from "../layouts/Base.astro";
     if (!status || !out) return;
 
     if (!query) {
-      status.textContent = "Type a query and press Go.";
+      status.textContent = "Type a query and press search.";
       out.innerHTML = "";
       return;
     }

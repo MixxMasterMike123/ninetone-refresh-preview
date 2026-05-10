@@ -1,0 +1,203 @@
+---
+import type { SectionTheme } from "../lib/sections";
+import { sectionAccent } from "../lib/sections";
+
+interface Props {
+  /** All distinct tag/genre values that should appear as filter chips. */
+  tags: string[];
+  /** Section theme for accent color. */
+  theme?: SectionTheme;
+  /** Total count of items being filtered (shown as "Showing N of TOTAL"). */
+  total: number;
+  /** Show the alphabet bar (useful on long lists like Previous Artists). */
+  showAlphabet?: boolean;
+  /** Show the layout switcher (Editorial / Index views). */
+  showLayoutSwitch?: boolean;
+}
+
+const {
+  tags,
+  theme = "records",
+  total,
+  showAlphabet = false,
+  showLayoutSwitch = false,
+} = Astro.props as Props;
+
+const accent = sectionAccent[theme];
+const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+---
+
+<div
+  class="mb-12 flex flex-col gap-5 border-b border-ninetone-rule pb-6"
+  data-roster-filters
+  data-accent={accent.hex}
+>
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <span class="kicker text-ninetone-ink/55">Filter</span>
+      <span data-roster-count class="text-xs text-ninetone-ink/55">{total} artists</span>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <label class="relative">
+        <input
+          type="search"
+          placeholder="Search by name…"
+          data-roster-search
+          class="w-48 border-b border-ninetone-ink/20 bg-transparent py-1.5 text-sm placeholder-ninetone-ink/40 focus:border-ninetone-ink focus:outline-none md:w-64"
+        />
+      </label>
+      {showLayoutSwitch && (
+        <div class="flex items-center gap-1 border border-ninetone-ink/15 p-0.5" data-roster-layout-switch>
+          <button
+            type="button"
+            data-layout="grid"
+            class="bg-ninetone-ink px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-ninetone-paper"
+            aria-pressed="true"
+          >Grid</button>
+          <button
+            type="button"
+            data-layout="index"
+            class="px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-ninetone-ink/60"
+            aria-pressed="false"
+          >Index</button>
+        </div>
+      )}
+    </div>
+  </div>
+
+  {tags.length > 0 && (
+    <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Filter by tag">
+      <button
+        type="button"
+        data-roster-tag=""
+        class={`border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${accent.border} ${accent.bg} text-ninetone-paper`}
+        aria-pressed="true"
+      >All</button>
+      {tags.map((t) => (
+        <button
+          type="button"
+          data-roster-tag={t}
+          class="border border-ninetone-ink/15 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-ninetone-ink/65 transition-colors hover:border-ninetone-ink hover:text-ninetone-ink"
+          aria-pressed="false"
+        >{t}</button>
+      ))}
+    </div>
+  )}
+
+  {showAlphabet && (
+    <div class="flex flex-wrap items-center gap-1 pt-1" role="group" aria-label="Filter by first letter">
+      <button
+        type="button"
+        data-roster-letter=""
+        class={`px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] ${accent.text}`}
+        aria-pressed="true"
+      >All</button>
+      {letters.map((l) => (
+        <button
+          type="button"
+          data-roster-letter={l.toLowerCase()}
+          class="px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-ninetone-ink/55 hover:text-ninetone-ink"
+          aria-pressed="false"
+        >{l}</button>
+      ))}
+    </div>
+  )}
+</div>
+
+<script>
+  type RosterRoot = HTMLElement & { dataset: { rosterRoot?: string } };
+
+  document.querySelectorAll<HTMLElement>("[data-roster-filters]").forEach((filtersEl) => {
+    const accent = filtersEl.dataset.accent || "#0a1420";
+    const root = (filtersEl.parentElement?.querySelector<HTMLElement>("[data-roster-grid]") ?? null) as HTMLElement | null;
+    const indexRoot = (filtersEl.parentElement?.querySelector<HTMLElement>("[data-roster-index]") ?? null) as HTMLElement | null;
+    const countEl = filtersEl.querySelector<HTMLElement>("[data-roster-count]");
+    const searchEl = filtersEl.querySelector<HTMLInputElement>("[data-roster-search]");
+    if (!root) return;
+
+    const items = Array.from(root.querySelectorAll<HTMLElement>("[data-roster-item]"));
+    const total = items.length;
+
+    const state = { tag: "", letter: "", search: "" };
+
+    function apply() {
+      let visible = 0;
+      const needle = state.search.trim().toLowerCase();
+      for (const el of items) {
+        const tags = (el.dataset.tags || "").toLowerCase();
+        const name = (el.dataset.name || "").toLowerCase();
+        const letter = (el.dataset.letter || "").toLowerCase();
+        const tagOK = !state.tag || tags.includes(state.tag.toLowerCase());
+        const letterOK = !state.letter || letter === state.letter;
+        const searchOK = !needle || name.includes(needle);
+        const show = tagOK && letterOK && searchOK;
+        el.style.display = show ? "" : "none";
+        if (show) visible++;
+      }
+      if (countEl) countEl.textContent = `${visible} of ${total}`;
+    }
+
+    function setActive(group: string, value: string) {
+      filtersEl.querySelectorAll<HTMLButtonElement>(`[data-roster-${group}]`).forEach((btn) => {
+        const isActive = (btn.dataset[`roster${group.charAt(0).toUpperCase()}${group.slice(1)}` as keyof DOMStringMap] || "") === value;
+        btn.setAttribute("aria-pressed", String(isActive));
+        if (group === "tag") {
+          if (isActive) {
+            btn.style.backgroundColor = accent;
+            btn.style.borderColor = accent;
+            btn.style.color = "#f5f3ee";
+          } else {
+            btn.style.backgroundColor = "";
+            btn.style.borderColor = "";
+            btn.style.color = "";
+          }
+        } else if (group === "letter") {
+          btn.style.color = isActive ? accent : "";
+          btn.style.fontWeight = isActive ? "700" : "";
+        }
+      });
+    }
+
+    filtersEl.querySelectorAll<HTMLButtonElement>("[data-roster-tag]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.tag = btn.dataset.rosterTag || "";
+        setActive("tag", state.tag);
+        apply();
+      });
+    });
+    filtersEl.querySelectorAll<HTMLButtonElement>("[data-roster-letter]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.letter = btn.dataset.rosterLetter || "";
+        setActive("letter", state.letter);
+        apply();
+      });
+    });
+    searchEl?.addEventListener("input", () => {
+      state.search = searchEl.value;
+      apply();
+    });
+
+    // Layout switch
+    const layoutBtns = filtersEl.querySelectorAll<HTMLButtonElement>("[data-layout]");
+    layoutBtns.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const layout = btn.dataset.layout;
+        layoutBtns.forEach((b) => {
+          const active = b === btn;
+          b.setAttribute("aria-pressed", String(active));
+          b.classList.toggle("bg-ninetone-ink", active);
+          b.classList.toggle("text-ninetone-paper", active);
+          b.classList.toggle("text-ninetone-ink/60", !active);
+        });
+        if (layout === "index" && indexRoot) {
+          root.style.display = "none";
+          indexRoot.style.display = "";
+        } else {
+          root.style.display = "";
+          if (indexRoot) indexRoot.style.display = "none";
+        }
+      });
+    });
+  });
+</script>

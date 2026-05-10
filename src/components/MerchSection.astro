@@ -1,0 +1,65 @@
+---
+import MerchCard from "./MerchCard.astro";
+import { getProducts } from "../lib/shopify";
+
+interface Props {
+  /** Shopify collection id to fetch products from. */
+  collectionId: string;
+  /** Section heading. */
+  heading?: string;
+  /** Optional kicker label rendered above the heading. */
+  kicker?: string;
+  /** Optional one-line description rendered next to the heading. */
+  blurb?: string;
+  /** Max products to show. Defaults to 12. */
+  limit?: number;
+}
+
+const {
+  collectionId,
+  heading = "Shop",
+  kicker,
+  blurb,
+  limit = 12,
+} = Astro.props as Props;
+
+let products: Awaited<ReturnType<typeof getProducts>> = [];
+let merchError: string | null = null;
+try {
+  products = await getProducts({ collectionId, limit });
+} catch (e) {
+  merchError = (e as Error).message;
+}
+
+if (!merchError && products.length === 0) return Astro.redirect("");
+---
+
+<section class="bg-ninetone-paper py-20">
+  <div class="mx-auto max-w-7xl px-6">
+    <div class="mb-10 grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+      <div>
+        {kicker && <span class="kicker text-ninetone-ink/55">{kicker}</span>}
+        <h2 class="mt-3 font-display text-4xl leading-[1.05] tracking-tight md:text-5xl">{heading}</h2>
+        {blurb && <p class="mt-3 max-w-xl text-base text-ninetone-ink/65">{blurb}</p>}
+      </div>
+      <a
+        href="https://shop.ninetone.com"
+        target="_blank"
+        rel="noopener"
+        class="inline-flex items-center gap-2 self-start text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink"
+      >
+        Visit the shop <span aria-hidden>→</span>
+      </a>
+    </div>
+
+    {merchError && (
+      <p class="mb-6 border-l-2 border-ninetone-ink bg-ninetone-paper-warm p-4 text-sm text-ninetone-ink/80">
+        Couldn't load Shopify products — set SHOPIFY_ADMIN_TOKEN in .env.
+      </p>
+    )}
+
+    <div class="grid grid-cols-2 gap-x-6 gap-y-12 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+      {products.map((p) => <MerchCard product={p} />)}
+    </div>
+  </div>
+</section>

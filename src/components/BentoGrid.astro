@@ -1,0 +1,21 @@
+---
+/**
+ * BentoGrid — 4-column asymmetric tile container.
+ *
+ * Children should be <BentoTile size="..."> elements. Sizes:
+ *   - "feature"   : 2 cols × 2 rows (large hero tile)
+ *   - "wide"      : 2 cols × 1 row
+ *   - "tall"      : 1 col × 2 rows
+ *   - "default"   : 1 col × 1 row
+ *
+ * On mobile everything stacks into a single column.
+ */
+---
+
+<!-- Mobile stacks single-column with each tile sized to its own content. The
+     asymmetric bento layout only kicks in at lg (1024+) where there is room for
+     the 4-col grid + clamped row heights. Below lg we still stack so feature
+     tiles breathe and image-on-text doesn't clip. -->
+<div class="grid grid-cols-1 gap-3 lg:grid-cols-4 lg:auto-rows-[clamp(160px,18vw,260px)]">
+  <slot />
+</div>

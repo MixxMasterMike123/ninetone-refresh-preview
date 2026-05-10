@@ -6,30 +6,62 @@ interface Props {
   excerpt?: string;
   date?: string;
   author?: string;
+  category?: string;
   lang?: "en" | "sv";
+  /** Visual scale — sm/md/lg drive type sizes for grid hierarchy. */
+  size?: "sm" | "md" | "lg";
 }
 
-const { title, slug, image, excerpt, date, author, lang = "en" } = Astro.props;
-const readMore = lang === "sv" ? "Läs mer" : "Read more";
+const { title, slug, image, excerpt, date, author, category, lang = "en", size = "md" } = Astro.props;
+const readMore = lang === "sv" ? "Läs" : "Read";
+
+const titleClass = size === "lg"
+  ? "font-display text-3xl font-medium leading-[1.1] tracking-tight md:text-5xl"
+  : size === "sm"
+  ? "font-display text-lg font-medium leading-tight tracking-tight"
+  : "font-display text-2xl font-medium leading-tight tracking-tight";
+
+const aspectClass = size === "lg" ? "aspect-[16/9]" : "aspect-[16/10]";
 ---
 
-<article class="flex flex-col overflow-hidden rounded-sm bg-white shadow-sm transition hover:shadow-md">
-  <a href={`/news/${slug}`} class="relative block aspect-[16/10] overflow-hidden bg-neutral-200">
-    {image && <img src={image} alt={title} class="h-full w-full object-cover" loading="lazy" />}
-    <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
-    <h3 class="absolute bottom-3 left-3 right-3 font-display text-lg font-semibold leading-tight text-white">
-      {title}
-    </h3>
+<article class="group flex flex-col">
+  <a href={`/news/${slug}`} class={`relative block ${aspectClass} overflow-hidden bg-ninetone-ink/5`}>
+    {image && (
+      <img
+        src={image}
+        alt={title}
+        class="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
+        loading="lazy"
+      />
+    )}
+    <span class="absolute left-0 top-0 h-1 w-12 bg-ninetone-red transition-[width] duration-300 ease-out group-hover:w-full" aria-hidden></span>
   </a>
-  <div class="flex flex-1 flex-col gap-3 p-4">
-    {(author || date) && (
-      <div class="text-xs text-neutral-500">
-        {author && <>By <span class="underline">{author}</span></>}
-        {date && <span class="ml-2">{date}</span>}
+
+  <div class="flex flex-1 flex-col gap-3 pt-4">
+    {(category || date) && (
+      <div class="flex items-center gap-3 text-[0.6875rem] uppercase tracking-[0.16em] text-ninetone-ink/55">
+        {category && <span>{category}</span>}
+        {category && date && <span class="opacity-40">·</span>}
+        {date && <time>{date}</time>}
       </div>
     )}
-    {excerpt && <p class="text-sm text-neutral-700 line-clamp-3">{excerpt}</p>}
-    <a href={`/news/${slug}`} class="mt-auto inline-flex items-center gap-2 self-start text-sm font-semibold text-ninetone-red hover:underline">
+
+    <h3 class={titleClass}>
+      <a href={`/news/${slug}`} class="transition-colors hover:opacity-70">{title}</a>
+    </h3>
+
+    {excerpt && (
+      <p class="text-[0.9375rem] leading-relaxed text-ninetone-ink/70 line-clamp-3">{excerpt}</p>
+    )}
+
+    {author && (
+      <p class="text-xs uppercase tracking-[0.12em] text-ninetone-ink/55">{lang === "sv" ? "Av" : "By"} {author}</p>
+    )}
+
+    <a
+      href={`/news/${slug}`}
+      class="mt-auto inline-flex items-center gap-2 pt-2 text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink"
+    >
       {readMore} <span aria-hidden>→</span>
     </a>
   </div>

@@ -1,7 +1,7 @@
 ---
 import Base from "../../layouts/Base.astro";
-import WebPostsSection from "../../components/WebPostsSection.astro";
 import { getTeam, getWebPostSection } from "../../lib/ninetone";
+import { renderBio } from "../../lib/markdown";
 
 let team: Awaited<ReturnType<typeof getTeam>> = [];
 let fetchError: string | null = null;
@@ -10,30 +10,87 @@ try {
 } catch (e) {
   fetchError = (e as Error).message;
 }
-let webPosts = await getWebPostSection("Ninetone Group Team").catch(() => null);
+const webPosts = await getWebPostSection("Ninetone Group Team").catch(() => null);
+const introBlock = webPosts?.blocks?.[0];
+const ledeHtml = introBlock?.message ? renderBio(introBlock.message) : "";
+
+// Display order: CEO first, then Stefan, then everyone else with a photo
+// (preserving FM sortOrder), then everyone without a photo at the end.
+function priority(m: Record<string, unknown>): number {
+  const title = String(m.title ?? "").toLowerCase();
+  const name = String(m.userNameCalc ?? "").toLowerCase();
+  const hasPhoto = Boolean(m.userPhotoSmall || m.userPhoto);
+  if (title.includes("ceo")) return 0;
+  if (name.startsWith("stefan")) return 1;
+  if (hasPhoto) return 2;
+  return 3;
+}
+team = [...team].sort((a, b) => {
+  const pa = priority(a), pb = priority(b);
+  if (pa !== pb) return pa - pb;
+  // Same bucket: respect FM sortOrder, then name
+  const sa = String(a.sortOrder ?? "");
+  const sb = String(b.sortOrder ?? "");
+  if (sa !== sb) return sa.localeCompare(sb);
+  return String(a.userNameCalc ?? "").localeCompare(String(b.userNameCalc ?? ""));
+});
 ---
 
 <Base title="Team">
-  <WebPostsSection data={webPosts} />
-  <section class="mx-auto max-w-7xl px-6 py-12">
-    {fetchError && (
-      <p class="mx-auto mt-6 max-w-xl rounded bg-yellow-100 p-4 text-sm text-yellow-800">
-        Couldn't load team yet — set FM_USER / FM_PASS in .env to enable.
-      </p>
-    )}
-    <div class="mt-12 grid gap-6 sm:grid-cols-2 md:grid-cols-3">
-      {team.map((m) => (
-        <div class="flex items-center gap-4 border border-neutral-200 p-4">
-          <div class="aspect-square w-24 shrink-0 overflow-hidden bg-neutral-300">
-            {m.userPhotoSmall && <img src={String(m.userPhotoSmall)} alt={String(m.userNameCalc ?? "")} class="h-full w-full object-cover grayscale" loading="lazy" />}
-          </div>
-          <div>
-            <h3 class="font-semibold">{String(m.userNameCalc ?? "")}</h3>
-            <p class="text-sm text-neutral-600">{String(m.title ?? "")}</p>
-            <a href={`/team/${String(m.SLUG ?? "")}`} class="text-sm text-ninetone-red hover:underline">View profile →</a>
-          </div>
+  <section class="bg-ninetone-paper">
+    <div class="mx-auto max-w-7xl px-6 pb-12 pt-16 md:pt-24">
+      <div class="grid gap-10 md:grid-cols-12 md:gap-16">
+        <div class="md:col-span-8">
+          <span class="kicker text-ninetone-ink/55">Ninetone — Team</span>
+          <h1 class="mt-6 font-display text-[clamp(2.75rem,7vw,6rem)] leading-[0.95] tracking-[-0.035em]">
+            {webPosts?.title || "The people behind the work."}
+          </h1>
         </div>
-      ))}
+        {ledeHtml && (
+          <div class="md:col-span-4 md:pt-4 prose max-w-none text-base text-ninetone-ink/75" set:html={ledeHtml}></div>
+        )}
+      </div>
+      <div class="mt-12 h-px w-full bg-ninetone-ink/30" aria-hidden></div>
+    </div>
+  </section>
+
+  <section class="bg-ninetone-paper pb-24">
+    <div class="mx-auto max-w-7xl px-6">
+      {fetchError && (
+        <p class="mb-8 border-l-2 border-ninetone-ink bg-ninetone-paper-warm p-4 text-sm text-ninetone-ink/80">
+          Couldn't load team yet — set FM_USER / FM_PASS in .env to enable.
+        </p>
+      )}
+
+      <div class="grid grid-cols-2 gap-x-6 gap-y-12 md:grid-cols-3 lg:grid-cols-4">
+        {team.map((m) => {
+          const name = String(m.userNameCalc ?? "");
+          const slug = String(m.SLUG ?? "");
+          const photo = m.userPhotoSmall ? String(m.userPhotoSmall) : undefined;
+          const title = String(m.title ?? "");
+          return (
+            <a href={`/team/${slug}`} class="group flex flex-col">
+              <div class="relative aspect-[3/4] w-full overflow-hidden bg-ninetone-paper-warm">
+                {photo && (
+                  <img
+                    src={photo}
+                    alt={name}
+                    class="h-full w-full object-cover grayscale transition-all duration-700 ease-out group-hover:scale-[1.04] group-hover:grayscale-0"
+                    loading="lazy"
+                  />
+                )}
+                <span class="absolute left-0 top-0 h-1 w-12 bg-ninetone-ink transition-[width] duration-300 ease-out group-hover:w-full" aria-hidden></span>
+              </div>
+              <div class="mt-3">
+                <h3 class="font-display text-lg font-medium leading-tight tracking-tight transition-colors group-hover:opacity-70">{name}</h3>
+                {title && (
+                  <p class="mt-1 font-mono text-[0.6875rem] uppercase tracking-[0.12em] text-ninetone-ink/55">{title}</p>
+                )}
+              </div>
+            </a>
+          );
+        })}
+      </div>
     </div>
   </section>
 </Base>

@@ -1,72 +1,230 @@
 ---
 import Base from "../layouts/Base.astro";
-import MerchCard from "../components/MerchCard.astro";
+import BentoGrid from "../components/BentoGrid.astro";
+import BentoTile from "../components/BentoTile.astro";
+import RosterStrip from "../components/RosterStrip.astro";
+import MetricsPanel from "../components/MetricsPanel.astro";
+import EditorialNewsBlock from "../components/EditorialNewsBlock.astro";
+import MarqueeBand from "../components/MarqueeBand.astro";
+import MerchSection from "../components/MerchSection.astro";
 import WebPostsSection from "../components/WebPostsSection.astro";
-import { getProducts } from "../lib/shopify";
-import { getWebPostSection } from "../lib/ninetone";
+import { sectionAccent } from "../lib/sections";
+import {
+  getFeaturedArtists,
+  getNews,
+  getWebPostSection,
+} from "../lib/ninetone";
 
 const collectionId = import.meta.env.SHOPIFY_HOMEPAGE_COLLECTION_ID;
-let products: Awaited<ReturnType<typeof getProducts>> = [];
-let merchError: string | null = null;
-try {
-  products = await getProducts({ collectionId, limit: 12 });
-} catch (e) {
-  merchError = (e as Error).message;
-}
-let webPosts = await getWebPostSection("Ninetone Group").catch(() => null);
+
+const [featuredArtists, latestNews, webPosts] = await Promise.all([
+  getFeaturedArtists(20).catch(() => []),
+  getNews().then((p) => p.slice(0, 4)).catch(() => []),
+  getWebPostSection("Ninetone Group").catch(() => null),
+]);
+
+const heroArtist = featuredArtists[0];
+const heroArtistImage = heroArtist?.artistPicture_big ?? heroArtist?.artistPicture_small;
+const heroArtistName = String(heroArtist?.["Head Artist"] ?? "");
+
+const featuredNewsItem = latestNews[0];
+
+// Marquee names — top 12 active artists
+const marqueeNames = featuredArtists
+  .slice(0, 12)
+  .map((a) => String(a["Head Artist"] ?? ""))
+  .filter(Boolean);
+
+const portals = [
+  { theme: "records" as const, title: "Records", href: "/records", banner: "/images/recordsBanner.png", blurb: "A&R, production, and global distribution. Home of the artists shaping Sweden's sound." },
+  { theme: "management" as const, title: "Management", href: "/management", banner: "/images/managementBanner.png", blurb: "Day-to-day partners for some of the country's most extraordinary creators and influencers." },
+  { theme: "nation" as const, title: "Nation", href: "/ninetone-nation", banner: "/images/nationBanner.png", blurb: "Booking the artists, speakers, and entertainers that make events unforgettable." },
+];
 ---
 
 <Base title="Ninetone Group" theme="group">
-  <section class="grid grid-cols-1 md:grid-cols-3">
-    <a
-      href="/records"
-      class="group relative flex h-[60vh] items-center justify-center overflow-hidden bg-ninetone-red text-white"
-      style="background-image: url(/images/recordsBanner.png); background-size: cover; background-position: center;"
-    >
-      <div class="absolute inset-0 bg-ninetone-red/60 transition-opacity group-hover:opacity-50"></div>
-      <div class="relative flex flex-col items-center gap-4">
-        <img src="/images/recordsLogo.png" alt="Ninetone Records" class="h-32 w-auto" />
-        <span class="mt-4 text-4xl" aria-hidden>→</span>
+  <!-- Typographic hero -->
+  <section class="relative overflow-hidden bg-ninetone-paper">
+    <div class="mx-auto max-w-7xl px-6 pb-16 pt-20 md:pb-24 md:pt-28">
+      <div class="grid gap-10 md:grid-cols-12 md:gap-16">
+        <div class="md:col-span-8">
+          <span class="kicker text-ninetone-ink/55">Sundsvall — since 2008</span>
+          <h1 class="mt-6 font-display text-[clamp(3rem,9vw,8rem)] leading-[0.9] tracking-[-0.04em]">
+            A house for music, talent, and the people who move them.
+          </h1>
+        </div>
+        <div class="flex flex-col justify-end gap-4 md:col-span-4">
+          <p class="text-lg leading-relaxed text-ninetone-ink/75">
+            We make records. We manage influence. We book the room. Three studios, one address — built for artists who play the long game.
+          </p>
+          <div class="flex flex-wrap gap-3 pt-2">
+            <a href="/records/contact-records" class="inline-flex items-center gap-2 bg-ninetone-ink px-4 py-3 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-ink-soft">
+              Submit a demo <span aria-hidden>→</span>
+            </a>
+            <a href="/ninetone-nation/booking" class="inline-flex items-center gap-2 border border-ninetone-ink px-4 py-3 text-sm font-semibold text-ninetone-ink transition-colors hover:bg-ninetone-ink hover:text-ninetone-paper">
+              Book talent <span aria-hidden>→</span>
+            </a>
+          </div>
+        </div>
       </div>
-    </a>
-    <a
-      href="/management"
-      class="group relative flex h-[60vh] items-center justify-center overflow-hidden bg-ninetone-navy text-white"
-      style="background-image: url(/images/managementBanner.png); background-size: cover; background-position: center;"
-    >
-      <div class="absolute inset-0 bg-ninetone-navy/60 transition-opacity group-hover:opacity-50"></div>
-      <div class="relative flex flex-col items-center gap-4">
-        <img src="/images/managementLogo.png" alt="Ninetone Management" class="h-32 w-auto" />
-        <span class="mt-4 text-4xl" aria-hidden>→</span>
-      </div>
-    </a>
-    <a
-      href="/ninetone-nation"
-      class="group relative flex h-[60vh] items-center justify-center overflow-hidden bg-ninetone-green text-white"
-      style="background-image: url(/images/nationBanner.png); background-size: cover; background-position: center;"
-    >
-      <div class="absolute inset-0 bg-ninetone-green/60 transition-opacity group-hover:opacity-50"></div>
-      <div class="relative flex flex-col items-center gap-4">
-        <img src="/images/nationLogo.png" alt="Ninetone Nation" class="h-32 w-auto" />
-        <span class="mt-4 text-4xl" aria-hidden>→</span>
-      </div>
-    </a>
-  </section>
-
-  <WebPostsSection data={webPosts} />
-
-  <section class="mx-auto max-w-7xl px-6 py-16">
-    <h2 class="font-display text-2xl uppercase tracking-wider">Shop Ninetone Merchandise</h2>
-    {merchError && (
-      <p class="mt-4 rounded bg-yellow-100 p-4 text-sm text-yellow-800">
-        Couldn't load Shopify products — set SHOPIFY_ADMIN_TOKEN in .env.
-      </p>
-    )}
-    {!merchError && products.length === 0 && (
-      <p class="mt-4 text-sm text-neutral-500">No products found in collection.</p>
-    )}
-    <div class="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
-      {products.map((p) => <MerchCard product={p} />)}
     </div>
   </section>
+
+  <!-- Three division portals — typographic with image reveal -->
+  <section class="border-y border-ninetone-rule bg-ninetone-paper">
+    <ul class="grid grid-cols-1 md:grid-cols-3">
+      {portals.map((p, idx) => {
+        const accent = sectionAccent[p.theme];
+        return (
+          <li class={`group relative isolate flex min-h-[320px] flex-col justify-end overflow-hidden md:min-h-[420px] ${idx > 0 ? "md:border-l border-ninetone-rule" : ""}`}>
+            {/* Color overlay snaps in INSTANTLY (no transition) so text never
+                sits on paper bg mid-fade. Image fades over 700ms above it. */}
+            <div class={`absolute inset-0 ${accent.bg} opacity-0 group-hover:opacity-100`} aria-hidden></div>
+            <div
+              class="absolute inset-0 bg-cover bg-center opacity-0 mix-blend-multiply transition-opacity duration-700 ease-out group-hover:opacity-50"
+              style={`background-image: url(${p.banner});`}
+              aria-hidden
+            ></div>
+
+            <div class="relative z-10 flex h-full flex-col justify-between gap-10 p-8 md:p-10">
+              <span class={`kicker transition-colors duration-150 ease-out ${accent.text} group-hover:text-ninetone-paper/80`}>Ninetone</span>
+              <div>
+                <h2 class="font-display text-5xl font-medium leading-[0.95] tracking-[-0.04em] text-ninetone-ink transition-colors duration-150 ease-out group-hover:text-ninetone-paper md:text-7xl">
+                  {p.title}
+                </h2>
+                <p class="mt-4 max-w-md text-sm leading-relaxed text-ninetone-ink/70 transition-colors duration-150 ease-out group-hover:text-ninetone-paper/85">
+                  {p.blurb}
+                </p>
+                <span class="mt-6 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink transition-colors duration-150 ease-out group-hover:text-ninetone-paper">
+                  Enter <span aria-hidden>→</span>
+                </span>
+              </div>
+            </div>
+
+            <a href={p.href} class="absolute inset-0 z-20" aria-label={`Ninetone ${p.title}`}></a>
+          </li>
+        );
+      })}
+    </ul>
+  </section>
+
+  <!-- Bento "What's on" -->
+  <section class="bg-ninetone-paper py-20">
+    <div class="mx-auto max-w-7xl px-6">
+      <div class="mb-10 grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+        <div>
+          <span class="kicker text-ninetone-ink/55">What's on</span>
+          <h2 class="mt-3 font-display text-4xl leading-[1.05] tracking-tight md:text-5xl">This week at Ninetone.</h2>
+        </div>
+        <span class="self-start text-xs uppercase tracking-[0.16em] text-ninetone-ink/55">Updated weekly</span>
+      </div>
+
+      <BentoGrid>
+        {heroArtist && (
+          <BentoTile
+            size="feature"
+            variant="image"
+            theme="records"
+            href={`/records/artists/${String(heroArtist.SLUG ?? "")}`}
+            image={heroArtistImage ? String(heroArtistImage) : undefined}
+            kicker="Artist of the week"
+            heading={heroArtistName}
+            blurb={String(heroArtist.artistPresentationShort ?? "")}
+            cta="View profile"
+          />
+        )}
+
+        {featuredNewsItem && (
+          <BentoTile
+            size="wide"
+            variant="image"
+            theme="records"
+            href={`/news/${String(featuredNewsItem.slug ?? "")}`}
+            image={featuredNewsItem.image_webp ? String(featuredNewsItem.image_webp) : undefined}
+            kicker="Latest story"
+            heading={String(featuredNewsItem.Title ?? "")}
+            cta="Read"
+          />
+        )}
+
+        <BentoTile
+          variant="ink"
+          href="/ninetone-nation/booking"
+          theme="nation"
+          kicker="Booking"
+          heading="Book talent"
+          blurb="Top Swedish artists and entertainers, ready for your event."
+          cta="Open booking"
+        />
+
+        <BentoTile
+          variant="warm"
+          href="/records/contact-records"
+          theme="records"
+          kicker="Demos open"
+          heading="We listen to everything."
+          blurb="Send your music. We reply to every demo with merit."
+          cta="Submit"
+        />
+
+        <BentoTile
+          variant="accent"
+          theme="management"
+          href="/management"
+          kicker="Management"
+          heading="A roster that moves the country."
+          cta="See clients"
+        />
+      </BentoGrid>
+    </div>
+  </section>
+
+  <!-- Marquee artist band -->
+  {marqueeNames.length > 0 && (
+    <MarqueeBand items={marqueeNames} variant="ink" speed={70} />
+  )}
+
+  <!-- Roster strip -->
+  {featuredArtists.length > 0 && (
+    <RosterStrip
+      artists={featuredArtists}
+      theme="records"
+      kicker="The roster"
+      heading="Records — artists in residence."
+      cta={{ label: "All artists", href: "/records/artists" }}
+    />
+  )}
+
+  <!-- By the numbers -->
+  <MetricsPanel
+    variant="ink"
+    kicker="By the numbers"
+    heading="Quietly moving Sweden — and beyond."
+    metrics={[
+      { value: "342+", label: "Artist alumni", note: "Records + Management combined" },
+      { value: "16", label: "Years in the room", note: "Sundsvall, since 2008" },
+      { value: "120+", label: "Active campaigns", note: "Music, social, brand" },
+      { value: "1", label: "Address", note: "Three studios under one roof" },
+    ]}
+  />
+
+  <!-- Editorial news -->
+  <EditorialNewsBlock
+    limit={5}
+    heading="Latest stories."
+    kicker="From the studios"
+    href="/news"
+  />
+
+  <!-- About / web posts -->
+  <WebPostsSection data={webPosts} />
+
+  <!-- Merch -->
+  <MerchSection
+    collectionId={collectionId}
+    heading="Shop the house."
+    kicker="Merch"
+    blurb="Limited drops, tour merch, and the wardrobe staples that keep showing up backstage."
+    limit={10}
+  />
 </Base>

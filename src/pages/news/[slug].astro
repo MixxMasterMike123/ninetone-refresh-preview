@@ -18,6 +18,8 @@ const { post } = Astro.props as { post: Record<string, unknown> };
 const title = String(post.Title ?? "");
 const author = String(post["Created By"] ?? "");
 const date = String(post.Date ?? "");
+const category = String(post.category ?? "");
+const lede = String(post.shortMessage ?? "");
 const image = post.image_webp ? String(post.image_webp) : undefined;
 const messageHtml = renderBio(String(post.MessageString ?? post.Message ?? ""));
 
@@ -26,45 +28,64 @@ const ytLinks = [post.ytLinkA, post.ytLinkB, post.ytLinkC, post.ytLinkD]
   .filter(Boolean);
 ---
 
-<Base title={title} description={String(post.shortMessage ?? "")}>
-  <article class="mx-auto max-w-3xl px-6 py-12">
-    <p class="mb-2 text-xs uppercase tracking-wider text-neutral-500">
-      <a href="/news" class="hover:underline">← News</a>
-    </p>
+<Base title={title} description={lede}>
+  <article class="bg-ninetone-paper">
+    <header class="mx-auto max-w-4xl px-6 pt-16 md:pt-24">
+      <p class="mb-6">
+        <a href="/news" class="kicker text-ninetone-ink/60 hover:text-ninetone-ink">← News</a>
+      </p>
 
-    {image && <img src={image} alt={title} class="mb-8 aspect-video w-full rounded-sm object-cover" />}
+      {(category || date) && (
+        <div class="mb-6 flex items-center gap-3 text-[0.6875rem] uppercase tracking-[0.16em] text-ninetone-ink/55">
+          {category && <span>{category}</span>}
+          {category && date && <span class="opacity-40">·</span>}
+          {date && <time>{date}</time>}
+        </div>
+      )}
 
-    <h1 class="font-display text-4xl">{title}</h1>
+      <h1 class="font-display text-[clamp(2.25rem,5.5vw,4.5rem)] leading-[1] tracking-[-0.03em]">{title}</h1>
 
-    {(author || date) && (
-      <div class="mt-4 flex items-center gap-4 text-sm text-neutral-600">
-        {author && <span>By <span class="underline">{author}</span></span>}
-        {date && <span>{date}</span>}
+      {lede && (
+        <p class="mt-6 max-w-2xl font-display text-xl italic leading-snug tracking-tight text-ninetone-ink/75 md:text-2xl">
+          {lede}
+        </p>
+      )}
+
+      {author && (
+        <p class="mt-6 text-xs uppercase tracking-[0.16em] text-ninetone-ink/60">By {author}</p>
+      )}
+    </header>
+
+    {image && (
+      <div class="mx-auto mt-12 max-w-5xl px-6">
+        <img src={image} alt={title} class="aspect-[16/10] w-full object-cover" />
       </div>
     )}
 
-    <div class="prose mt-8 max-w-none text-neutral-800" set:html={messageHtml}></div>
+    <div class="mx-auto max-w-2xl px-6 pb-16 pt-12">
+      <div class="prose lede max-w-none" set:html={messageHtml}></div>
 
-    {ytLinks.length > 0 && (
-      <div class="mt-12 grid gap-4 sm:grid-cols-2">
-        {ytLinks.map((url) => {
-          const idMatch = url.match(/(?:v=|youtu\.be\/|embed\/)([\w-]{11})/);
-          const id = idMatch ? idMatch[1] : null;
-          return id ? (
-            <iframe
-              src={`https://www.youtube.com/embed/${id}`}
-              class="aspect-video w-full rounded"
-              title={title}
-              loading="lazy"
-              allowfullscreen
-            ></iframe>
-          ) : null;
-        })}
+      {ytLinks.length > 0 && (
+        <div class="mt-12 grid gap-4 sm:grid-cols-2">
+          {ytLinks.map((url) => {
+            const idMatch = url.match(/(?:v=|youtu\.be\/|embed\/)([\w-]{11})/);
+            const id = idMatch ? idMatch[1] : null;
+            return id ? (
+              <iframe
+                src={`https://www.youtube.com/embed/${id}`}
+                class="aspect-video w-full"
+                title={title}
+                loading="lazy"
+                allowfullscreen
+              ></iframe>
+            ) : null;
+          })}
+        </div>
+      )}
+
+      <div class="mt-16 border-t border-ninetone-rule pt-8">
+        <a href="/news" class="kicker text-ninetone-ink/60 hover:text-ninetone-ink">← Back to all stories</a>
       </div>
-    )}
-
-    <div class="mt-12 border-t border-neutral-200 pt-8">
-      <a href="/news" class="text-sm text-ninetone-red hover:underline">← Back to News</a>
     </div>
   </article>
 </Base>

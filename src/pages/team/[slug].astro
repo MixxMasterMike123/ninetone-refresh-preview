@@ -21,44 +21,109 @@ const titleDescription = String(member.titleDescription ?? "");
 const rawDescription = String(member.DescriptionString ?? member.Description ?? "");
 const aiBio = isAiSpeculative(rawDescription);
 const descriptionHtml = aiBio ? "" : renderBio(rawDescription);
-const photo = member.userPhoto ? String(member.userPhoto) : member.userPhotoSmall ? String(member.userPhotoSmall) : undefined;
+const photo = member.userPhoto
+  ? String(member.userPhoto)
+  : member.userPhotoSmall
+  ? String(member.userPhotoSmall)
+  : undefined;
 const email = String(member.userEmail ?? "");
 const phone = String(member.Phone ?? "");
 ---
 
 <Base title={name}>
-  <article class="mx-auto max-w-4xl px-6 py-12">
-    <p class="mb-6 text-xs uppercase tracking-wider text-neutral-500">
-      <a href="/team" class="hover:underline">← Team</a>
-    </p>
+  <section class="bg-ninetone-paper">
+    <div class="mx-auto max-w-7xl px-6 pb-12 pt-12 md:pt-16">
+      <p class="mb-8">
+        <a href="/team" class="kicker text-ninetone-ink/55 hover:text-ninetone-ink">← Team</a>
+      </p>
 
-    <div class="flex flex-col gap-8 sm:flex-row sm:items-start">
-      <div class="aspect-square w-48 shrink-0 overflow-hidden bg-neutral-200">
-        {photo && <img src={photo} alt={name} class="h-full w-full object-cover grayscale" />}
-      </div>
-      <div>
-        <h1 class="font-display text-4xl">{name}</h1>
-        {title && <p class="mt-2 text-lg text-neutral-600">{title}</p>}
-        {titleDescription && titleDescription !== title && (
-          <p class="mt-1 text-sm text-neutral-500">{titleDescription}</p>
-        )}
-        <div class="mt-6 flex flex-wrap gap-4 text-sm">
-          {email && <a href={`mailto:${email}`} class="text-ninetone-red hover:underline">{email}</a>}
-          {phone && <a href={`tel:${phone.replace(/\s/g, "")}`} class="text-neutral-700">{phone}</a>}
+      <div class="grid gap-10 md:grid-cols-12 md:gap-16">
+        <aside class="md:col-span-4 lg:col-span-4">
+          <div class="md:sticky md:top-24">
+            {/* FM team photos are 200×200 — cap container so we never upscale.
+                Width 240px ≈ 1.2× source, beyond which pixelation becomes visible. */}
+            <div class="relative aspect-square w-60 max-w-full overflow-hidden bg-ninetone-paper-warm">
+              {photo && (
+                <img
+                  src={photo}
+                  alt={name}
+                  width="240"
+                  height="240"
+                  class="h-full w-full object-cover grayscale transition-all duration-700 ease-out hover:grayscale-0"
+                />
+              )}
+              <span class="absolute left-0 top-0 h-1 w-12 bg-ninetone-ink" aria-hidden></span>
+            </div>
+            <div class="mt-6 hidden w-60 max-w-full flex-col gap-3 md:flex">
+              {email && (
+                <a
+                  href={`mailto:${email}`}
+                  class="inline-flex items-center justify-center gap-2 bg-ninetone-ink px-4 py-3 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-ink-soft"
+                >
+                  Email <span aria-hidden>→</span>
+                </a>
+              )}
+              {phone && (
+                <a
+                  href={`tel:${phone.replace(/\s/g, "")}`}
+                  class="inline-flex items-center justify-center gap-2 border border-ninetone-ink/20 px-4 py-3 text-sm font-semibold text-ninetone-ink transition-colors hover:border-ninetone-ink"
+                >
+                  {phone}
+                </a>
+              )}
+            </div>
+          </div>
+        </aside>
+
+        <div class="md:col-span-8 lg:col-span-8">
+          <span class="kicker text-ninetone-ink/55">Ninetone — Team</span>
+          <h1 class="mt-4 font-display text-[clamp(3rem,8vw,7rem)] leading-[0.9] tracking-[-0.045em]">{name}</h1>
+
+          {title && (
+            <p class="mt-6 max-w-xl font-display text-2xl italic leading-snug tracking-tight text-ninetone-ink/75 md:text-3xl">
+              {title}
+            </p>
+          )}
+
+          {titleDescription && titleDescription !== title && (
+            <p class="mt-4 font-mono text-[0.75rem] uppercase tracking-[0.12em] text-ninetone-ink/55">{titleDescription}</p>
+          )}
+
+          <!-- Mobile contact buttons -->
+          {(email || phone) && (
+            <div class="mt-8 flex flex-col gap-3 md:hidden">
+              {email && (
+                <a
+                  href={`mailto:${email}`}
+                  class="inline-flex items-center justify-center gap-2 bg-ninetone-ink px-4 py-3 text-sm font-semibold text-ninetone-paper"
+                >
+                  Email <span aria-hidden>→</span>
+                </a>
+              )}
+              {phone && (
+                <a
+                  href={`tel:${phone.replace(/\s/g, "")}`}
+                  class="inline-flex items-center justify-center gap-2 border border-ninetone-ink/20 px-4 py-3 text-sm font-semibold text-ninetone-ink"
+                >
+                  {phone}
+                </a>
+              )}
+            </div>
+          )}
+
+          {descriptionHtml ? (
+            <div class="mt-12 prose lede max-w-none" set:html={descriptionHtml}></div>
+          ) : (
+            <div class="mt-12 border-t border-ninetone-rule pt-8 text-base text-ninetone-ink/65">
+              {email ? (
+                <>For more about {name}, get in touch at <a href={`mailto:${email}`} class="text-ninetone-ink underline-offset-4 hover:underline">{email}</a>.</>
+              ) : (
+                <>More about {name} coming soon.</>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
-
-    {descriptionHtml ? (
-      <div class="prose mt-12 max-w-none text-neutral-800" set:html={descriptionHtml}></div>
-    ) : (
-      <p class="mt-12 text-sm text-neutral-500">
-        {email ? (
-          <>For more about {name}, get in touch at <a href={`mailto:${email}`} class="text-ninetone-red hover:underline">{email}</a>.</>
-        ) : (
-          <>More about {name} coming soon.</>
-        )}
-      </p>
-    )}
-  </article>
+  </section>
 </Base>

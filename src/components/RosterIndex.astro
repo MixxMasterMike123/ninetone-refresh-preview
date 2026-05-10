@@ -1,0 +1,58 @@
+---
+import type { Artist } from "../lib/ninetone";
+
+interface Props {
+  artists: Artist[];
+  hrefBase: string;
+}
+
+const { artists, hrefBase } = Astro.props as Props;
+
+// Group by first letter
+const byLetter = new Map<string, Artist[]>();
+for (const a of artists) {
+  const name = String(a["Head Artist"] ?? "").trim();
+  if (!name) continue;
+  const first = name[0].toUpperCase();
+  const key = /[A-Z]/.test(first) ? first : "#";
+  const arr = byLetter.get(key) ?? [];
+  arr.push(a);
+  byLetter.set(key, arr);
+}
+const sortedLetters = Array.from(byLetter.keys()).sort();
+---
+
+<div data-roster-index style="display: none;" class="space-y-12">
+  {sortedLetters.map((letter) => (
+    <div class="grid gap-6 md:grid-cols-[80px_1fr] md:gap-12">
+      <div class="md:sticky md:top-24 md:self-start">
+        <h3 class="font-display text-5xl font-medium leading-none tracking-tight text-ninetone-ink/40 md:text-7xl">{letter}</h3>
+      </div>
+      <ul class="divide-y divide-ninetone-rule">
+        {byLetter.get(letter)!.map((a) => {
+          const name = String(a["Head Artist"] ?? "");
+          const slug = String(a.SLUG ?? "");
+          const blurb = String(a.artistPresentationShort ?? "");
+          const tags = a.genre ? String(a.genre).split(/\r|\n/).filter(Boolean).slice(0, 3) : [];
+          return (
+            <li class="group">
+              <a
+                href={`${hrefBase}/${slug}`}
+                class="grid grid-cols-[1fr_auto] items-center gap-6 py-4 transition-colors hover:bg-ninetone-paper-warm md:grid-cols-[1fr_2fr_auto] md:gap-8 md:py-5"
+              >
+                <span class="font-display text-xl font-medium leading-tight tracking-tight md:text-2xl">{name}</span>
+                <span class="hidden text-sm text-ninetone-ink/55 md:block md:line-clamp-1">{blurb}</span>
+                <span class="hidden gap-3 text-[0.6875rem] uppercase tracking-[0.16em] text-ninetone-ink/55 md:flex">
+                  {tags.map((t, i) => (
+                    <>{i > 0 && <span class="opacity-40">·</span>}<span>{t}</span></>
+                  ))}
+                  <span class="opacity-50 transition-opacity group-hover:opacity-100">→</span>
+                </span>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  ))}
+</div>

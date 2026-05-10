@@ -3,7 +3,8 @@ import Base from "../../../../layouts/Base.astro";
 import ArtistCard from "../../../../components/ArtistCard.astro";
 import ArtistsTabs from "../../../../components/ArtistsTabs.astro";
 import Pagination from "../../../../components/Pagination.astro";
-import { getPreviousArtists } from "../../../../lib/ninetone";
+import SectionIntro from "../../../../components/SectionIntro.astro";
+import { getArtists, getPreviousArtists, getWebPostSection } from "../../../../lib/ninetone";
 
 export async function getStaticPaths({ paginate }: { paginate: any }) {
   const artists = await getPreviousArtists();
@@ -19,23 +20,35 @@ const { page } = Astro.props as {
     url: { current: string; prev?: string; next?: string };
   };
 };
+
+// Reuse Records section intro. Both fetches cached, so effectively free.
+const active = await getArtists().catch(() => []);
+const introBody = String((active[0] as Record<string, unknown> | undefined)?.readMore ?? "");
+const webPosts = await getWebPostSection("Ninetone Records").catch(() => null);
 ---
 
 <Base title="Previous Artists" theme="records">
-  <section class="bg-ninetone-ink py-12 text-white">
+  <SectionIntro
+    title="Previous Artists"
+    tagline={webPosts?.title}
+    readMore={introBody}
+    theme="records"
+    logo="/images/recordsLogo.png"
+    logoAlt="Ninetone Records"
+  />
+  <section class="bg-ninetone-paper pt-2">
     <div class="mx-auto max-w-7xl px-6">
-      <h1 class="font-display text-5xl">Previous Artists</h1>
-      <p class="mt-2 text-sm text-neutral-400">
+      <p class="text-xs uppercase tracking-[0.16em] text-ninetone-ink/55">
         Showing {(page.currentPage - 1) * 30 + 1}–{Math.min(page.currentPage * 30, page.total)} of {page.total}
       </p>
     </div>
   </section>
 
-  <section class="bg-ninetone-ink pb-20">
+  <section class="bg-ninetone-paper pb-20">
     <div class="mx-auto max-w-7xl px-6">
       <ArtistsTabs active="previous" />
 
-      <div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+      <div class="grid grid-cols-2 gap-x-6 gap-y-12 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {page.data.map((a) => (
           <ArtistCard
             theme="records"
@@ -45,6 +58,11 @@ const { page } = Astro.props as {
             blurb={String(a.artistPresentationShort ?? "")}
             image={a.artistPicture_small ? String(a.artistPicture_small) : undefined}
             tags={a.genre ? String(a.genre).split(/\r|\n/).filter(Boolean) : []}
+            socials={{
+              spotify: a.url_spotify ? String(a.url_spotify) : undefined,
+              apple: a.url_applemusic ? String(a.url_applemusic) : undefined,
+              instagram: a.url_instagram ? String(a.url_instagram) : undefined,
+            }}
           />
         ))}
       </div>

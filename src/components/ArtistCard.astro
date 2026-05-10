@@ -1,5 +1,19 @@
 ---
 import type { SectionTheme } from "../lib/sections";
+import { sectionAccent } from "../lib/sections";
+
+export interface ArtistSocials {
+  spotify?: string;
+  apple?: string;
+  amazon?: string;
+  youtubeMusic?: string;
+  youtube?: string;
+  instagram?: string;
+  tiktok?: string;
+  twitter?: string;
+  facebook?: string;
+  soundcloud?: string;
+}
 
 interface Props {
   name: string;
@@ -10,6 +24,9 @@ interface Props {
   theme?: SectionTheme;
   ctaLabel?: string;
   href?: string;
+  socials?: ArtistSocials;
+  /** Optional small kicker label rendered above the name (e.g. "Available", "Featured"). */
+  kicker?: string;
 }
 
 const {
@@ -19,35 +36,88 @@ const {
   blurb,
   tags = [],
   theme = "records",
-  ctaLabel = "Read more",
+  ctaLabel = "View",
   href: hrefOverride,
+  socials,
+  kicker,
 } = Astro.props;
 
-// Card backgrounds match section: navy on records/management, sage on nation
-const cardBg = theme === "nation" ? "bg-ninetone-card-sage text-ninetone-ink" : "bg-ninetone-card text-white";
-const ctaBg = theme === "nation" ? "bg-white text-ninetone-ink" : "bg-white/10 text-white hover:bg-white/20";
+const accent = sectionAccent[theme];
 
 const href = hrefOverride ?? (
   theme === "management" ? `/management/clients/${slug}` :
   theme === "nation" ? `/ninetone-nation/${slug}` :
   `/records/artists/${slug}`
 );
+
+const socialEntries: Array<{ label: string; href: string; glyph: string }> = [];
+if (socials?.spotify) socialEntries.push({ label: "Spotify", href: socials.spotify, glyph: "S" });
+if (socials?.apple) socialEntries.push({ label: "Apple Music", href: socials.apple, glyph: "" });
+if (socials?.youtubeMusic || socials?.youtube) socialEntries.push({ label: "YouTube", href: socials.youtubeMusic || socials.youtube!, glyph: "▶" });
+if (socials?.soundcloud) socialEntries.push({ label: "SoundCloud", href: socials.soundcloud, glyph: "☁" });
+if (socials?.instagram) socialEntries.push({ label: "Instagram", href: socials.instagram, glyph: "ig" });
+if (socials?.tiktok) socialEntries.push({ label: "TikTok", href: socials.tiktok, glyph: "tk" });
 ---
 
-<article class={`flex flex-col overflow-hidden rounded-sm ${cardBg}`}>
-  <div class="aspect-[3/4] w-full overflow-hidden bg-neutral-800">
-    {image && <img src={image} alt={name} class="h-full w-full object-cover" loading="lazy" />}
-  </div>
-  <div class="flex flex-1 flex-col gap-3 p-4">
-    <h3 class="font-sans text-sm font-bold uppercase tracking-wider">{name}</h3>
+<article class="group relative flex flex-col bg-ninetone-paper-warm text-ninetone-ink">
+  <a href={href} class="relative block aspect-[3/4] w-full overflow-hidden bg-ninetone-ink/5">
+    {image && (
+      <img
+        src={image}
+        alt={name}
+        class="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
+        loading="lazy"
+      />
+    )}
+    <span class={`absolute left-0 top-0 h-1 w-12 ${accent.bg} transition-[width] duration-300 ease-out group-hover:w-full`} aria-hidden></span>
+    {kicker && (
+      <span class={`absolute left-3 top-3 inline-flex items-center bg-ninetone-paper px-2 py-1 text-[0.625rem] font-semibold uppercase tracking-[0.16em] ${accent.text}`}>{kicker}</span>
+    )}
+  </a>
+
+  <div class="flex flex-1 flex-col gap-2.5 px-1 pt-3 pb-4">
+    <div class="flex items-baseline justify-between gap-3">
+      <h3 class="font-display text-lg font-medium leading-tight tracking-tight">
+        <a href={href} class="transition-colors hover:opacity-70">{name}</a>
+      </h3>
+      <a
+        href={href}
+        class={`shrink-0 text-xs font-semibold ${accent.text} opacity-0 transition-opacity group-hover:opacity-100`}
+        aria-label={`${ctaLabel} ${name}`}
+      >
+        {ctaLabel} →
+      </a>
+    </div>
+
     {tags.length > 0 && (
-      <div class="flex flex-wrap gap-1 text-[10px] opacity-70">
-        {tags.map((t) => <span class="rounded bg-white/10 px-2 py-0.5">{t}</span>)}
+      <div class="flex flex-wrap gap-x-2 gap-y-1 text-[0.6875rem] uppercase tracking-[0.12em] text-ninetone-ink/55">
+        {tags.slice(0, 3).map((t, i) => (
+          <span>{i > 0 ? <span aria-hidden class="mr-2 opacity-40">·</span> : null}{t}</span>
+        ))}
       </div>
     )}
-    {blurb && <p class="text-xs leading-relaxed opacity-80 line-clamp-4">{blurb}</p>}
-    <a href={href} class={`mt-auto inline-flex items-center gap-2 self-start rounded-sm px-3 py-1.5 text-xs font-semibold ${ctaBg}`}>
-      {ctaLabel} <span aria-hidden>→</span>
-    </a>
+
+    {blurb && (
+      <p class="text-[0.8125rem] leading-snug text-ninetone-ink/70 line-clamp-2">{blurb}</p>
+    )}
+
+    {socialEntries.length > 0 && (
+      <ul class="mt-1 flex flex-wrap gap-1.5">
+        {socialEntries.map((s) => (
+          <li>
+            <a
+              href={s.href}
+              target="_blank"
+              rel="noopener"
+              class="inline-flex h-6 min-w-6 items-center justify-center border border-ninetone-ink/15 px-1.5 text-[0.625rem] font-semibold text-ninetone-ink/70 transition-colors hover:border-ninetone-ink hover:text-ninetone-ink"
+              aria-label={s.label}
+              title={s.label}
+            >
+              {s.glyph || s.label.slice(0, 2)}
+            </a>
+          </li>
+        ))}
+      </ul>
+    )}
   </div>
 </article>

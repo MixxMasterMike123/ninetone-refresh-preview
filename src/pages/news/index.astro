@@ -10,27 +10,90 @@ try {
 } catch (e) {
   fetchError = (e as Error).message;
 }
+
+const [lead, ...rest] = posts;
+const featured = rest.slice(0, 2);
+const grid = rest.slice(2);
 ---
 
 <Base title="News">
-  <section class="mx-auto max-w-7xl px-6 py-12">
-    <h1 class="font-display text-5xl">Ninetone news</h1>
-    {fetchError && (
-      <p class="mt-6 rounded bg-yellow-100 p-4 text-sm text-yellow-800">
-        Couldn't load news yet — set FM_USER / FM_PASS in .env to enable.
-      </p>
-    )}
-    <div class="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-      {posts.map((p) => (
-        <NewsCard
-          title={String(p.Title ?? "")}
-          slug={String(p.slug ?? "")}
-          image={p.image_webp ? String(p.image_webp) : undefined}
-          excerpt={String(p.shortMessage ?? p.Message ?? "")}
-          date={String(p.Date ?? "")}
-          author={String(p["Created By"] ?? "")}
-        />
-      ))}
+  <section class="bg-ninetone-paper">
+    <div class="mx-auto max-w-7xl px-6 pb-12 pt-16 md:pb-16 md:pt-24">
+      <div class="grid gap-10 md:grid-cols-12 md:gap-16">
+        <div class="md:col-span-8">
+          <span class="kicker text-ninetone-red">Ninetone — News</span>
+          <h1 class="mt-6 font-display text-[clamp(2.75rem,7vw,6rem)] leading-[0.95] tracking-[-0.035em]">
+            Notes from the floor.
+          </h1>
+        </div>
+        <p class="md:col-span-4 md:pt-4 text-base leading-relaxed text-ninetone-ink/70 md:text-lg">
+          Releases, signings, tours, and the occasional unguarded thought. Straight from the studios in Sundsvall.
+        </p>
+      </div>
+      <div class="mt-12 h-px w-full bg-ninetone-red opacity-80" aria-hidden></div>
     </div>
+
+    {fetchError && (
+      <div class="mx-auto max-w-7xl px-6">
+        <p class="border-l-2 border-ninetone-red bg-ninetone-paper-warm p-4 text-sm text-ninetone-ink/80">
+          Couldn't load news yet — set FM_USER / FM_PASS in .env to enable.
+        </p>
+      </div>
+    )}
+
+    {lead && (
+      <div class="mx-auto max-w-7xl px-6 pb-16">
+        <NewsCard
+          title={String(lead.Title ?? "")}
+          slug={String(lead.slug ?? "")}
+          image={lead.image_webp ? String(lead.image_webp) : undefined}
+          excerpt={String(lead.shortMessage ?? lead.Message ?? "")}
+          date={String(lead.Date ?? "")}
+          author={String(lead["Created By"] ?? "")}
+          category={String(lead.category ?? "")}
+          size="lg"
+        />
+      </div>
+    )}
+
+    {featured.length > 0 && (
+      <div class="mx-auto max-w-7xl px-6 pb-16">
+        <div class="grid gap-x-10 gap-y-12 md:grid-cols-2">
+          {featured.map((p) => (
+            <NewsCard
+              title={String(p.Title ?? "")}
+              slug={String(p.slug ?? "")}
+              image={p.image_webp ? String(p.image_webp) : undefined}
+              excerpt={String(p.shortMessage ?? p.Message ?? "")}
+              date={String(p.Date ?? "")}
+              author={String(p["Created By"] ?? "")}
+              category={String(p.category ?? "")}
+              size="md"
+            />
+          ))}
+        </div>
+      </div>
+    )}
+
+    {grid.length > 0 && (
+      <div class="mx-auto max-w-7xl px-6 pb-24">
+        <div class="mb-8 border-t border-ninetone-rule pt-6">
+          <span class="kicker text-ninetone-ink/55">Archive</span>
+        </div>
+        <div class="grid gap-x-8 gap-y-12 md:grid-cols-3 lg:grid-cols-4">
+          {grid.map((p) => (
+            <NewsCard
+              title={String(p.Title ?? "")}
+              slug={String(p.slug ?? "")}
+              image={p.image_webp ? String(p.image_webp) : undefined}
+              excerpt={String(p.shortMessage ?? p.Message ?? "")}
+              date={String(p.Date ?? "")}
+              category={String(p.category ?? "")}
+              size="sm"
+            />
+          ))}
+        </div>
+      </div>
+    )}
   </section>
 </Base>

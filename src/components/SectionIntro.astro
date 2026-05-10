@@ -1,0 +1,113 @@
+---
+import { renderBio } from "../lib/markdown";
+import type { SectionTheme } from "../lib/sections";
+import { sectionAccent } from "../lib/sections";
+
+interface Props {
+  /** Page heading (e.g. "Artists", "Clients", "Entertainers"). */
+  title: string;
+  /** Small kicker label above the heading (e.g. "Records — Roster"). Optional. */
+  kicker?: string;
+  /** One-line section tagline rendered between title and body. */
+  tagline?: string;
+  /** Long-form body — markdown, multi-paragraph. Rendered behind a Read More toggle. */
+  readMore?: string;
+  /** Visual theme — drives accent rule + button color. */
+  theme?: SectionTheme;
+  /** Optional small mark / logo to show beside the kicker. */
+  logo?: string;
+  /** Alt text for the logo. */
+  logoAlt?: string;
+}
+
+const {
+  title,
+  kicker,
+  tagline = "",
+  readMore = "",
+  theme = "group",
+  logo,
+  logoAlt = "",
+} = Astro.props as Props;
+
+const bodyHtml = readMore ? renderBio(readMore) : "";
+const accent = sectionAccent[theme];
+const kickerLabel = kicker ?? accent.label;
+---
+
+<section class="bg-ninetone-paper text-ninetone-ink">
+  <div class="mx-auto max-w-7xl px-6 pb-10 pt-16 md:pb-16 md:pt-24">
+    <div class="grid gap-10 md:grid-cols-12 md:gap-16">
+      <div class="md:col-span-7 lg:col-span-8">
+        <div class="flex items-center gap-3">
+          {logo && (
+            <img src={logo} alt={logoAlt} class="h-7 w-auto" />
+          )}
+          <span class={`kicker ${accent.text}`}>{kickerLabel}</span>
+        </div>
+
+        <h1 class="mt-6 max-w-4xl font-display text-[clamp(2.75rem,7vw,6rem)] leading-[0.95] tracking-[-0.035em]">
+          {title}
+        </h1>
+
+        {tagline && (
+          <p class="mt-6 max-w-2xl font-display text-2xl italic leading-snug tracking-tight text-ninetone-ink/75 md:text-3xl">
+            {tagline}
+          </p>
+        )}
+      </div>
+
+      {bodyHtml && (
+        <div class="md:col-span-5 md:pt-10 lg:col-span-4" data-section-intro>
+          <div
+            class="prose max-w-none text-[0.9375rem] leading-relaxed text-ninetone-ink/85 line-clamp-6 overflow-hidden"
+            data-intro-collapsed
+            style="mask-image: linear-gradient(to bottom, black 65%, transparent); -webkit-mask-image: linear-gradient(to bottom, black 65%, transparent);"
+            set:html={bodyHtml}
+          />
+          <div
+            class="prose mt-0 hidden max-w-none text-[0.9375rem] leading-relaxed text-ninetone-ink/85"
+            data-intro-expanded
+            set:html={bodyHtml}
+          />
+          <button
+            type="button"
+            class={`mt-4 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] ${accent.text}`}
+            data-intro-toggle
+            aria-expanded="false"
+          >
+            <span data-intro-toggle-label>Read more</span>
+            <span aria-hidden>↓</span>
+          </button>
+        </div>
+      )}
+    </div>
+
+    <div class={`mt-12 h-px w-full ${accent.bg} opacity-80`} aria-hidden></div>
+  </div>
+</section>
+
+<script>
+  document.querySelectorAll<HTMLElement>("[data-section-intro]").forEach((root) => {
+    const collapsed = root.querySelector<HTMLElement>("[data-intro-collapsed]");
+    const expanded = root.querySelector<HTMLElement>("[data-intro-expanded]");
+    const btn = root.querySelector<HTMLButtonElement>("[data-intro-toggle]");
+    const label = root.querySelector<HTMLElement>("[data-intro-toggle-label]");
+    if (!collapsed || !expanded || !btn || !label) return;
+
+    btn.addEventListener("click", () => {
+      const open = btn.getAttribute("aria-expanded") === "true";
+      if (open) {
+        expanded.classList.add("hidden");
+        collapsed.classList.remove("hidden");
+        label.textContent = "Read more";
+        btn.setAttribute("aria-expanded", "false");
+      } else {
+        expanded.classList.remove("hidden");
+        collapsed.classList.add("hidden");
+        label.textContent = "Read less";
+        btn.setAttribute("aria-expanded", "true");
+      }
+    });
+  });
+</script>

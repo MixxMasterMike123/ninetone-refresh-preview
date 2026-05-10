@@ -28,3 +28,7 @@ pnpm-debug.log*
 
 # gstack design audits (user-scoped, not project)
 .gstack/
+
+# Local working artifacts — do not ship
+Screenshots/
+_old/

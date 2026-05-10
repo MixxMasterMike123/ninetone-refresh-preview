@@ -1,0 +1,57 @@
+---
+import type { SectionTheme } from "../lib/sections";
+import { sectionAccent } from "../lib/sections";
+
+interface Props {
+  items: string[];
+  /** Visual treatment. */
+  variant?: "ink" | "paper" | "accent";
+  /** Section accent. Used when variant === "accent". */
+  theme?: SectionTheme;
+  /** Animation duration in seconds — lower = faster. */
+  speed?: number;
+}
+
+const {
+  items,
+  variant = "ink",
+  theme = "group",
+  speed = 60,
+} = Astro.props as Props;
+
+const accent = sectionAccent[theme];
+
+// Triple the list so the loop never reveals a seam at any viewport width.
+const looped = [...items, ...items, ...items];
+
+const wrapClass =
+  variant === "accent" ? `${accent.bg} text-ninetone-paper` :
+  variant === "paper" ? "bg-ninetone-paper text-ninetone-ink" :
+  "bg-ninetone-ink text-ninetone-paper";
+---
+
+<section class={`overflow-hidden border-y border-ninetone-rule ${wrapClass}`} aria-hidden>
+  <ul
+    class="flex items-center gap-12 whitespace-nowrap py-6 will-change-transform [animation:marquee_var(--marquee-speed,60s)_linear_infinite]"
+    style={`--marquee-speed:${speed}s`}
+  >
+    {looped.map((item) => (
+      <li class="flex shrink-0 items-center gap-12">
+        <span class="font-display text-3xl font-medium tracking-tight md:text-5xl">{item}</span>
+        <span class="text-2xl opacity-40 md:text-3xl" aria-hidden>✦</span>
+      </li>
+    ))}
+  </ul>
+</section>
+
+<style>
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-33.3333%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    [class*="[animation:marquee"] {
+      animation: none !important;
+    }
+  }
+</style>

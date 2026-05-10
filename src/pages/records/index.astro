@@ -2,6 +2,8 @@
 import Base from "../../layouts/Base.astro";
 import SplitPortalHero from "../../components/SplitPortalHero.astro";
 import WebPostsSection from "../../components/WebPostsSection.astro";
+import MerchSection from "../../components/MerchSection.astro";
+import LatestNewsSection from "../../components/LatestNewsSection.astro";
 import { getWebPostSection } from "../../lib/ninetone";
 
 let webPosts = await getWebPostSection("Ninetone Records").catch(() => null);
@@ -10,8 +12,27 @@ let webPosts = await getWebPostSection("Ninetone Records").catch(() => null);
 <Base title="Ninetone Records" theme="records">
   <SplitPortalHero
     theme="records"
-    left={{ href: "/records/artists", label: "MEET THE ARTISTS", arrowDirection: "left", bgImage: "/images/artistSectionBanner.png" }}
-    right={{ href: "/team", label: "MEET THE TEAM", arrowDirection: "right", bgImage: "/images/meetTheTeamBanner.png" }}
+    kicker="Ninetone Records"
+    left={{
+      href: "/records/artists",
+      label: "Artists",
+      blurb: "The roster — active and shaping the sound of Sweden right now.",
+      bgImage: "/images/artistSectionBanner.png",
+    }}
+    right={{
+      href: "/team",
+      label: "The team",
+      blurb: "A&R, production, marketing — the people you'll actually work with.",
+      bgImage: "/images/meetTheTeamBanner.png",
+    }}
   />
   <WebPostsSection data={webPosts} />
+  <MerchSection
+    collectionId="515486843145"
+    kicker="Records — Shop"
+    heading="CDs and music."
+    blurb="Catalogue and recent releases — direct from our shop."
+    limit={10}
+  />
+  <LatestNewsSection />
 </Base>

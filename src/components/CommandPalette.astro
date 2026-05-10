@@ -1,0 +1,259 @@
+---
+interface Props {
+  lang?: "en" | "sv";
+}
+const { lang = "en" } = Astro.props as Props;
+---
+
+<div
+  id="cmdk"
+  class="pointer-events-none fixed inset-0 z-50 flex items-start justify-center pt-[18vh] opacity-0 transition-opacity duration-150"
+  aria-hidden="true"
+>
+  <div id="cmdk-backdrop" class="absolute inset-0 bg-ninetone-ink/60 backdrop-blur-sm"></div>
+
+  <div
+    id="cmdk-panel"
+    class="relative z-10 mx-4 w-full max-w-2xl translate-y-2 border border-ninetone-rule bg-ninetone-paper shadow-2xl transition-transform duration-150"
+    role="dialog"
+    aria-modal="true"
+    aria-label={lang === "sv" ? "Sök" : "Search"}
+  >
+    <div class="flex items-center gap-3 border-b border-ninetone-rule px-5 py-4">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-ninetone-ink/55">
+        <circle cx="11" cy="11" r="7"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+      </svg>
+      <input
+        id="cmdk-input"
+        type="search"
+        placeholder={lang === "sv" ? "Sök artister, klienter, nyheter, team…" : "Search artists, clients, news, team…"}
+        class="w-full border-0 bg-transparent font-display text-2xl text-ninetone-ink placeholder-ninetone-ink/35 focus:outline-none"
+        autocomplete="off"
+      />
+      <kbd class="hidden rounded border border-ninetone-ink/15 px-1.5 py-0.5 font-sans text-[0.625rem] font-medium text-ninetone-ink/50 sm:inline">ESC</kbd>
+    </div>
+
+    <div id="cmdk-body" class="max-h-[60vh] overflow-y-auto px-2 py-3">
+      <div id="cmdk-empty" class="px-4 py-10 text-center text-sm text-ninetone-ink/55">
+        {lang === "sv" ? "Börja skriva för att söka." : "Start typing to search."}
+      </div>
+      <div id="cmdk-results"></div>
+    </div>
+
+    <div class="flex items-center justify-between gap-3 border-t border-ninetone-rule px-5 py-3 text-[0.6875rem] uppercase tracking-[0.16em] text-ninetone-ink/55">
+      <div class="flex items-center gap-3">
+        <span><kbd class="rounded border border-ninetone-ink/15 px-1.5 py-0.5 font-sans">↑↓</kbd> Navigate</span>
+        <span><kbd class="rounded border border-ninetone-ink/15 px-1.5 py-0.5 font-sans">↵</kbd> Open</span>
+      </div>
+      <span>Powered by Fuse.js</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  import Fuse from "fuse.js";
+
+  type SearchSection = "records" | "previous" | "management" | "nation" | "team" | "news";
+  type SearchEntry = {
+    section: SearchSection;
+    name: string;
+    blurb: string;
+    tags: string[];
+    href: string;
+    image?: string;
+  };
+
+  const SECTION_LABELS: Record<SearchSection, string> = {
+    records: "Records",
+    previous: "Previous",
+    management: "Management",
+    nation: "Nation",
+    team: "Team",
+    news: "News",
+  };
+
+  const SECTION_ORDER: SearchSection[] = ["records", "management", "nation", "previous", "team", "news"];
+
+  const root = document.getElementById("cmdk")!;
+  const backdrop = document.getElementById("cmdk-backdrop")!;
+  const panel = document.getElementById("cmdk-panel")!;
+  const input = document.getElementById("cmdk-input") as HTMLInputElement;
+  const body = document.getElementById("cmdk-body")!;
+  const emptyState = document.getElementById("cmdk-empty")!;
+  const resultsEl = document.getElementById("cmdk-results")!;
+
+  let isOpen = false;
+  let activeIndex = 0;
+  let currentResults: SearchEntry[] = [];
+  let indexPromise: Promise<SearchEntry[]> | null = null;
+  let fuse: Fuse<SearchEntry> | null = null;
+
+  function ensureIndex(): Promise<SearchEntry[]> {
+    if (!indexPromise) {
+      indexPromise = fetch("/search-index.json")
+        .then((r) => r.json())
+        .then((data: SearchEntry[]) => {
+          fuse = new Fuse(data, {
+            keys: [
+              { name: "name", weight: 0.6 },
+              { name: "blurb", weight: 0.25 },
+              { name: "tags", weight: 0.15 },
+            ],
+            threshold: 0.35,
+            ignoreLocation: true,
+            minMatchCharLength: 2,
+          });
+          return data;
+        });
+    }
+    return indexPromise;
+  }
+
+  function escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function open() {
+    if (isOpen) return;
+    isOpen = true;
+    root.removeAttribute("aria-hidden");
+    root.classList.replace("pointer-events-none", "pointer-events-auto");
+    root.classList.replace("opacity-0", "opacity-100");
+    panel.classList.replace("translate-y-2", "translate-y-0");
+    document.body.style.overflow = "hidden";
+    setTimeout(() => input.focus(), 50);
+    ensureIndex();
+  }
+
+  function close() {
+    if (!isOpen) return;
+    isOpen = false;
+    root.setAttribute("aria-hidden", "true");
+    root.classList.replace("pointer-events-auto", "pointer-events-none");
+    root.classList.replace("opacity-100", "opacity-0");
+    panel.classList.replace("translate-y-0", "translate-y-2");
+    document.body.style.overflow = "";
+  }
+
+  function render() {
+    if (currentResults.length === 0) {
+      resultsEl.innerHTML = "";
+      emptyState.classList.remove("hidden");
+      emptyState.textContent = input.value
+        ? `No results for "${input.value}"`
+        : (input.placeholder || "Start typing to search.");
+      return;
+    }
+    emptyState.classList.add("hidden");
+
+    // Group + render
+    const grouped = new Map<SearchSection, SearchEntry[]>();
+    for (const r of currentResults) {
+      const arr = grouped.get(r.section) ?? [];
+      arr.push(r);
+      grouped.set(r.section, arr);
+    }
+
+    let flatIndex = 0;
+    const html = SECTION_ORDER.filter((s) => grouped.has(s))
+      .map((s) => {
+        const items = grouped.get(s)!;
+        const rows = items
+          .map((e) => {
+            const i = flatIndex++;
+            return `
+              <li>
+                <a
+                  href="${escapeHtml(e.href)}"
+                  data-cmdk-index="${i}"
+                  class="flex items-center gap-3 px-3 py-2.5 transition-colors ${i === activeIndex ? "bg-ninetone-ink text-ninetone-paper" : "hover:bg-ninetone-paper-warm"}"
+                >
+                  ${e.image ? `<img src="${escapeHtml(e.image)}" alt="" loading="lazy" class="h-9 w-9 shrink-0 object-cover" />` : `<span class="h-9 w-9 shrink-0 bg-current opacity-10"></span>`}
+                  <span class="flex min-w-0 flex-1 items-baseline justify-between gap-3">
+                    <span class="truncate font-display text-base font-medium leading-tight tracking-tight">${escapeHtml(e.name)}</span>
+                    <span class="shrink-0 text-[0.625rem] uppercase tracking-[0.16em] opacity-60">${SECTION_LABELS[e.section]}</span>
+                  </span>
+                </a>
+              </li>`;
+          })
+          .join("");
+        return `
+          <div class="mb-2">
+            <div class="px-3 pb-1 pt-3 text-[0.625rem] uppercase tracking-[0.16em] text-ninetone-ink/45">${SECTION_LABELS[s]}</div>
+            <ul>${rows}</ul>
+          </div>`;
+      })
+      .join("");
+
+    resultsEl.innerHTML = html;
+  }
+
+  async function runSearch() {
+    const q = input.value.trim();
+    if (!q) {
+      currentResults = [];
+      activeIndex = 0;
+      render();
+      return;
+    }
+    await ensureIndex();
+    if (!fuse) return;
+    currentResults = fuse.search(q, { limit: 25 }).map((r) => r.item);
+    activeIndex = 0;
+    render();
+  }
+
+  function move(delta: number) {
+    if (currentResults.length === 0) return;
+    activeIndex = (activeIndex + delta + currentResults.length) % currentResults.length;
+    render();
+    const el = resultsEl.querySelector<HTMLElement>(`[data-cmdk-index="${activeIndex}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }
+
+  function activate() {
+    if (currentResults.length === 0) return;
+    const r = currentResults[activeIndex];
+    if (r) window.location.href = r.href;
+  }
+
+  // Open via ⌘K / Ctrl-K
+  document.addEventListener("keydown", (e) => {
+    const meta = e.metaKey || e.ctrlKey;
+    if (meta && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      isOpen ? close() : open();
+      return;
+    }
+    if (!isOpen) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      close();
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      move(1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      move(-1);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      activate();
+    }
+  });
+
+  backdrop.addEventListener("click", close);
+
+  let debounce: number | null = null;
+  input.addEventListener("input", () => {
+    if (debounce !== null) window.clearTimeout(debounce);
+    debounce = window.setTimeout(runSearch, 120);
+  });
+
+  // Bridge: expose an open trigger so Header search button can use it
+  (window as unknown as { ninetoneCmdK?: () => void }).ninetoneCmdK = open;
+</script>

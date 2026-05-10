@@ -1,6 +1,6 @@
 ---
 import type { SectionTheme } from "../lib/sections";
-import { sectionColors, sectionCta } from "../lib/sections";
+import { sectionAccent, sectionCta } from "../lib/sections";
 
 interface Props {
   theme?: SectionTheme;
@@ -8,61 +8,91 @@ interface Props {
 }
 
 const { theme = "group", lang = "en" } = Astro.props;
-const colors = sectionColors[theme];
+const accent = sectionAccent[theme];
 const cta = sectionCta[theme];
 const ctaLabel = lang === "sv" ? cta.sv : cta.en;
 
 const navItems = [
-  { href: "/", labelEn: "HOME", labelSv: "HEM" },
-  { href: "/records", labelEn: "NINETONE RECORDS", labelSv: "NINETONE RECORDS" },
-  { href: "/management", labelEn: "NINETONE MANAGEMENT", labelSv: "NINETONE MANAGEMENT" },
-  { href: "/ninetone-nation", labelEn: "NINETONE NATION", labelSv: "NINETONE NATION" },
-  { href: "/news", labelEn: "NEWS", labelSv: "NYHETER" },
+  { href: "/", labelEn: "Home", labelSv: "Hem", match: ["/"] },
+  { href: "/records", labelEn: "Records", labelSv: "Records", match: ["/records"] },
+  { href: "/management", labelEn: "Management", labelSv: "Management", match: ["/management"] },
+  { href: "/ninetone-nation", labelEn: "Nation", labelSv: "Nation", match: ["/ninetone-nation"] },
+  { href: "/news", labelEn: "News", labelSv: "Nyheter", match: ["/news"] },
+  { href: "/team", labelEn: "Team", labelSv: "Team", match: ["/team"] },
 ];
+
+const pathname = Astro.url.pathname;
+const isActive = (matches: string[]) =>
+  matches.some((m) => (m === "/" ? pathname === "/" : pathname === m || pathname.startsWith(`${m}/`)));
 ---
 
-<header class={`${colors.bg} ${colors.text}`}>
-  <div class="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-4">
-    <a href="/" class="flex shrink-0 items-center" aria-label="Ninetone Group">
-      <img src="/images/ninetoneSQlogo.png" alt="Ninetone Group" class="h-12 w-auto" />
+<header
+  id="site-header"
+  data-accent-hex={accent.hex}
+  class="sticky top-0 z-40 border-b border-ninetone-rule bg-ninetone-paper/85 text-ninetone-ink backdrop-blur-md transition-[padding,background-color] duration-200"
+>
+  <div class="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-4 transition-[padding] duration-200" id="site-header-inner">
+    <a href="/" class="flex shrink-0 items-center gap-3" aria-label="Ninetone Group">
+      <img
+        src="/images/LogoDark.svg"
+        alt="Ninetone Group"
+        class="h-10 w-auto transition-[height] duration-200"
+        id="site-header-logo"
+      />
+      <span class="hidden font-display text-lg font-medium tracking-tight md:inline">Ninetone</span>
     </a>
 
-    <nav class="hidden flex-1 lg:block">
-      <ul class="flex items-center justify-center gap-2 text-xs font-semibold tracking-wider">
-        {navItems.map((item) => (
-          <li>
-            <a href={item.href} class="inline-flex min-h-11 items-center px-3 hover:underline">
-              {lang === "sv" ? item.labelSv : item.labelEn}
-            </a>
-          </li>
-        ))}
+    <nav class="hidden flex-1 lg:block" aria-label="Primary">
+      <ul class="flex items-center justify-center gap-1 text-[0.9375rem]">
+        {navItems.map((item) => {
+          const active = isActive(item.match);
+          return (
+            <li>
+              <a
+                href={item.href}
+                class={`relative inline-flex min-h-11 items-center px-3 py-2 font-medium transition-colors hover:text-ninetone-ink ${active ? accent.text : "text-ninetone-ink/65"}`}
+                aria-current={active ? "page" : undefined}
+              >
+                {lang === "sv" ? item.labelSv : item.labelEn}
+                {active && (
+                  <span
+                    class={`absolute inset-x-3 -bottom-0.5 h-px ${accent.bg}`}
+                    aria-hidden
+                  ></span>
+                )}
+              </a>
+            </li>
+          );
+        })}
       </ul>
     </nav>
 
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-2">
       <button
         type="button"
         id="search-toggle"
-        class="inline-flex h-11 w-11 items-center justify-center rounded-md hover:bg-white/10"
+        class="inline-flex h-11 items-center gap-2 rounded-none border border-ninetone-ink/15 px-3 text-sm text-ninetone-ink/70 transition-colors hover:border-ninetone-ink hover:text-ninetone-ink"
         aria-label={lang === "sv" ? "Sök" : "Search"}
-        aria-expanded="false"
-        aria-controls="search-panel"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
           <circle cx="11" cy="11" r="7"></circle>
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
         </svg>
+        <span class="hidden text-xs font-medium tracking-wide md:inline">{lang === "sv" ? "Sök" : "Search"}</span>
+        <kbd class="hidden rounded border border-ninetone-ink/15 px-1 py-px font-sans text-[0.625rem] font-medium text-ninetone-ink/50 md:inline">⌘K</kbd>
       </button>
+
       <a
         href={cta.href}
-        class={`inline-flex min-h-11 items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold ${colors.cta}`}
+        class={`inline-flex min-h-11 items-center gap-2 px-4 py-2 text-sm font-semibold ${accent.cta} transition-colors`}
       >
         {ctaLabel}
         <span aria-hidden>→</span>
       </a>
+
       <a
         href={lang === "en" ? Astro.url.pathname.replace(/^\/en/, "/sv") : Astro.url.pathname.replace(/^\/sv/, "/en")}
-        class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md px-2 text-xs font-semibold hover:bg-white/10"
+        class="inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-xs font-semibold text-ninetone-ink/65 hover:text-ninetone-ink"
         aria-label={lang === "en" ? "Switch to Swedish" : "Switch to English"}
       >
         {lang === "en" ? "SV" : "EN"}
@@ -70,38 +100,36 @@ const navItems = [
     </div>
   </div>
 
-  <div id="search-panel" class="hidden border-t border-white/10">
-    <form method="get" action="/search-result" class="mx-auto flex max-w-7xl items-center gap-2 px-6 py-3">
-      <input
-        type="search"
-        name="q"
-        id="search-panel-input"
-        placeholder={lang === "sv" ? "Sök artister, nyheter, team…" : "Search artists, news, team…"}
-        class="w-full rounded-sm border border-white/30 bg-white/10 px-3 py-2 text-sm text-white placeholder-white/60 focus:border-white focus:outline-none"
-        autocomplete="off"
-      />
-      <button type="submit" class={`rounded-md px-4 py-2 text-sm font-semibold ${colors.cta}`}>
-        {lang === "sv" ? "Sök" : "Go"}
-      </button>
-    </form>
-  </div>
 </header>
 
 <script>
+  // Search button → open command palette (managed by CommandPalette.astro,
+  // which exposes window.ninetoneCmdK as a bridge).
   const toggle = document.getElementById("search-toggle");
-  const panel = document.getElementById("search-panel");
-  const input = document.getElementById("search-panel-input") as HTMLInputElement | null;
-  if (toggle && panel) {
-    toggle.addEventListener("click", () => {
-      const open = !panel.classList.contains("hidden");
-      if (open) {
-        panel.classList.add("hidden");
-        toggle.setAttribute("aria-expanded", "false");
+  toggle?.addEventListener("click", () => {
+    const open = (window as unknown as { ninetoneCmdK?: () => void }).ninetoneCmdK;
+    open?.();
+  });
+
+  // Sticky scroll-shrink — logo and padding compress past 24px
+  const header = document.getElementById("site-header");
+  const inner = document.getElementById("site-header-inner");
+  const logo = document.getElementById("site-header-logo");
+  if (header && inner && logo) {
+    let shrunk = false;
+    const update = () => {
+      const next = window.scrollY > 24;
+      if (next === shrunk) return;
+      shrunk = next;
+      if (shrunk) {
+        inner.classList.replace("py-4", "py-2");
+        logo.classList.replace("h-10", "h-8");
       } else {
-        panel.classList.remove("hidden");
-        toggle.setAttribute("aria-expanded", "true");
-        input?.focus();
+        inner.classList.replace("py-2", "py-4");
+        logo.classList.replace("h-8", "h-10");
       }
-    });
+    };
+    update();
+    window.addEventListener("scroll", update, { passive: true });
   }
 </script>

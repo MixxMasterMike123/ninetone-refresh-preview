@@ -11,6 +11,10 @@
 #
 # Order matters — first matching rule wins per header name.
 
+# Sitewide noindex while the preview is gated. Remove this block on public launch.
+/*
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
+
 # Astro content-hashed bundles — safe to cache forever.
 /_astro/*
   Cache-Control: public, max-age=31536000, immutable

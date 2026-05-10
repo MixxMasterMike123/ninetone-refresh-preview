@@ -1,0 +1,82 @@
+---
+import type { ArtistSocials } from "./ArtistCard.astro";
+
+interface Props {
+  socials: ArtistSocials;
+  /** Visual variant. "ink" inverts colors for dark sections. */
+  variant?: "ink" | "paper";
+  /** Optional kicker label rendered above the row. */
+  kicker?: string;
+}
+
+const { socials, variant = "paper", kicker } = Astro.props as Props;
+
+type Entry = { label: string; href: string; group: "stream" | "social" };
+
+const entries: Entry[] = [];
+if (socials.spotify) entries.push({ label: "Spotify", href: socials.spotify, group: "stream" });
+if (socials.apple) entries.push({ label: "Apple Music", href: socials.apple, group: "stream" });
+if (socials.amazon) entries.push({ label: "Amazon Music", href: socials.amazon, group: "stream" });
+if (socials.youtubeMusic) entries.push({ label: "YouTube Music", href: socials.youtubeMusic, group: "stream" });
+if (socials.soundcloud) entries.push({ label: "SoundCloud", href: socials.soundcloud, group: "stream" });
+if (socials.youtube) entries.push({ label: "YouTube", href: socials.youtube, group: "social" });
+if (socials.instagram) entries.push({ label: "Instagram", href: socials.instagram, group: "social" });
+if (socials.tiktok) entries.push({ label: "TikTok", href: socials.tiktok, group: "social" });
+if (socials.twitter) entries.push({ label: "X / Twitter", href: socials.twitter, group: "social" });
+if (socials.facebook) entries.push({ label: "Facebook", href: socials.facebook, group: "social" });
+
+if (entries.length === 0) return Astro.redirect("");
+
+const stream = entries.filter((e) => e.group === "stream");
+const social = entries.filter((e) => e.group === "social");
+
+const subTextClass = variant === "ink" ? "text-ninetone-paper/55" : "text-ninetone-ink/55";
+const ruleClass = variant === "ink" ? "border-ninetone-paper/15" : "border-ninetone-ink/15";
+const linkClass = variant === "ink"
+  ? "border-ninetone-paper/20 text-ninetone-paper/85 hover:border-ninetone-paper hover:text-ninetone-paper"
+  : "border-ninetone-ink/15 text-ninetone-ink/75 hover:border-ninetone-ink hover:text-ninetone-ink";
+---
+
+<div class="flex flex-col gap-5">
+  {kicker && <span class={`kicker ${subTextClass}`}>{kicker}</span>}
+
+  {stream.length > 0 && (
+    <div class={`flex flex-col gap-2 border-t pt-4 ${ruleClass}`}>
+      <span class={`text-[0.6875rem] uppercase tracking-[0.16em] ${subTextClass}`}>Listen</span>
+      <ul class="flex flex-wrap gap-2">
+        {stream.map((e) => (
+          <li>
+            <a
+              href={e.href}
+              target="_blank"
+              rel="noopener"
+              class={`inline-flex items-center gap-2 border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${linkClass}`}
+            >
+              {e.label} <span aria-hidden class="text-[0.625rem] opacity-60">↗</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )}
+
+  {social.length > 0 && (
+    <div class={`flex flex-col gap-2 border-t pt-4 ${ruleClass}`}>
+      <span class={`text-[0.6875rem] uppercase tracking-[0.16em] ${subTextClass}`}>Follow</span>
+      <ul class="flex flex-wrap gap-2">
+        {social.map((e) => (
+          <li>
+            <a
+              href={e.href}
+              target="_blank"
+              rel="noopener"
+              class={`inline-flex items-center gap-2 border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${linkClass}`}
+            >
+              {e.label} <span aria-hidden class="text-[0.625rem] opacity-60">↗</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )}
+</div>

@@ -1,46 +1,62 @@
 ---
 import type { SectionTheme } from "../lib/sections";
+import { sectionAccent } from "../lib/sections";
 
 interface Side {
   href: string;
   label: string;
+  blurb?: string;
   bgImage?: string;
-  arrowDirection: "left" | "right";
+  arrowDirection?: "left" | "right";
 }
 
 interface Props {
   left: Side;
   right: Side;
   theme?: SectionTheme;
+  kicker?: string;
 }
 
-const { left, right, theme = "records" } = Astro.props;
-
-const tints: Record<SectionTheme, string> = {
-  group: "bg-ninetone-red/70",
-  records: "bg-ninetone-red/70",
-  management: "bg-ninetone-navy/70",
-  nation: "bg-ninetone-green/70",
-};
-const tint = tints[theme];
+const { left, right, theme = "records", kicker } = Astro.props;
+const accent = sectionAccent[theme];
 ---
 
-<section class="grid grid-cols-1 md:grid-cols-2">
-  {[left, right].map((side) => (
-    <a
-      href={side.href}
-      class="group relative flex h-[60vh] items-center justify-center overflow-hidden text-white"
-      style={side.bgImage ? `background-image: url(${side.bgImage}); background-size: cover; background-position: center;` : undefined}
-    >
-      <div class={`absolute inset-0 ${tint} transition-opacity group-hover:opacity-90`}></div>
-      <div class="relative flex flex-col items-center gap-6">
-        <span class={`text-6xl ${side.arrowDirection === "left" ? "order-2" : "order-1"}`} aria-hidden>
-          {side.arrowDirection === "left" ? "←" : "→"}
-        </span>
-        <span class={`font-display text-2xl tracking-[0.3em] ${side.arrowDirection === "left" ? "order-1" : "order-2"}`}>
-          {side.label}
-        </span>
+<section class="border-y border-ninetone-rule bg-ninetone-paper">
+  <div class="grid grid-cols-1 md:grid-cols-2">
+    {[left, right].map((side, idx) => (
+      <div class={`group relative isolate flex min-h-[320px] flex-col justify-end overflow-hidden md:min-h-[420px] ${idx === 1 ? "md:border-l border-ninetone-rule" : ""}`}>
+        {/* Color overlay snaps in INSTANTLY (no transition) so text is never on
+            paper bg mid-fade. Image fades over 700ms above the color. */}
+        <div class={`absolute inset-0 ${accent.bg} opacity-0 group-hover:opacity-100`} aria-hidden></div>
+        {side.bgImage && (
+          <div
+            class="absolute inset-0 bg-cover bg-center opacity-0 mix-blend-multiply transition-opacity duration-700 ease-out group-hover:opacity-50"
+            style={`background-image: url(${side.bgImage});`}
+            aria-hidden
+          ></div>
+        )}
+
+        <div class="relative z-10 flex h-full flex-col justify-between gap-10 p-8 md:p-10">
+          <span class={`kicker transition-colors duration-150 ease-out ${accent.text} group-hover:text-ninetone-paper/80`}>
+            {kicker || "Ninetone"}
+          </span>
+          <div>
+            <h2 class="font-display text-4xl font-medium leading-[0.95] tracking-[-0.04em] text-ninetone-ink transition-colors duration-150 ease-out group-hover:text-ninetone-paper md:text-6xl">
+              {side.label}
+            </h2>
+            {side.blurb && (
+              <p class="mt-4 max-w-md text-sm leading-relaxed text-ninetone-ink/70 transition-colors duration-150 ease-out group-hover:text-ninetone-paper/85">
+                {side.blurb}
+              </p>
+            )}
+            <span class="mt-6 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink transition-colors duration-150 ease-out group-hover:text-ninetone-paper">
+              Enter <span aria-hidden>→</span>
+            </span>
+          </div>
+        </div>
+
+        <a href={side.href} class="absolute inset-0 z-20" aria-label={side.label}></a>
       </div>
-    </a>
-  ))}
+    ))}
+  </div>
 </section>

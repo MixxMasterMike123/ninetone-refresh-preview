@@ -1,0 +1,4 @@
+# Preview deployment — disallow all crawlers.
+# Flip this file (or remove it) when the site goes public on its real domain.
+User-agent: *
+Disallow: /

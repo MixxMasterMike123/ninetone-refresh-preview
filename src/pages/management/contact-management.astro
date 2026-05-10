@@ -1,27 +1,29 @@
 ---
 import Base from "../../layouts/Base.astro";
+import ContactForm from "../../components/ContactForm.astro";
 ---
 
-<Base title="Contact Ninetone Management" theme="management">
-  <section class="bg-ninetone-navy py-20 text-white">
-    <div class="mx-auto grid max-w-6xl gap-12 px-6 md:grid-cols-2">
-      <div>
-        <p class="text-sm uppercase tracking-wider opacity-80">Ninetone Group</p>
-        <h1 class="mt-2 font-display text-4xl">Pioneering The Creative Digital Age!</h1>
-      </div>
-      <div class="rounded bg-ninetone-navy-dark p-6">
-        <h2 class="font-display text-2xl">We Foster Talent To Succeed</h2>
-        <p class="mt-2 text-sm opacity-90">Fill out this form and paste links to your social media channels.</p>
-        <form class="mt-6 grid gap-3" method="post">
-          <div class="grid gap-3 sm:grid-cols-2">
-            <input class="rounded bg-white/10 px-3 py-2 text-sm placeholder:text-white/60" placeholder="Name *" required />
-            <input class="rounded bg-white/10 px-3 py-2 text-sm placeholder:text-white/60" placeholder="E-Mail *" type="email" required />
-          </div>
-          <textarea class="rounded bg-white/10 px-3 py-2 text-sm placeholder:text-white/60" rows="3" placeholder="Paste links to your social media channels here: TikTok, Instagram, etc. NO FILE UPLOAD *" required></textarea>
-          <textarea class="rounded bg-white/10 px-3 py-2 text-sm placeholder:text-white/60" rows="3" placeholder="Write something about yourself"></textarea>
-          <button type="submit" class="rounded bg-ninetone-green px-4 py-2 text-sm font-semibold uppercase tracking-wider text-white hover:bg-ninetone-green-dark">Submit</button>
-        </form>
-      </div>
-    </div>
-  </section>
+<Base title="Get in touch" theme="management">
+  <ContactForm
+    theme="management"
+    kicker="Management — Enquiry"
+    heading="We succeed together."
+    tagline="Building a serious career? Let's talk."
+    blurb="Tell us what you're working on. Send the channels you're proud of and where you'd like to be in eighteen months."
+    metrics={[
+      { value: "38", label: "Active clients" },
+      { value: "12+", label: "Brand partners / mo" },
+      { value: "4M", label: "Combined reach" },
+      { value: "1", label: "Address — Sundsvall" },
+    ]}
+    formTitle="Tell us about you."
+    formBlurb="Drop links to the social channels and projects you want us to see."
+    submitLabel="Send enquiry"
+    fields={[
+      { type: "text", name: "name", label: "Name", placeholder: "Your name", required: true },
+      { type: "email", name: "email", label: "Email", placeholder: "you@email.com", required: true },
+      { type: "textarea", name: "links", label: "Channels / links", placeholder: "TikTok, Instagram, YouTube, portfolio… one per line", rows: 4, required: true },
+      { type: "textarea", name: "about", label: "About you", placeholder: "A few lines on what you're building and where you want it to go", rows: 4 },
+    ]}
+  />
 </Base>

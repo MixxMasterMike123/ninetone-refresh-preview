@@ -1,0 +1,137 @@
+---
+import type { SectionTheme } from "../lib/sections";
+import { sectionAccent } from "../lib/sections";
+
+interface Props {
+  /** Optional href — turns the whole tile into an anchor. */
+  href?: string;
+  /** Tile span on desktop. Mobile always stacks single-column. */
+  size?: "feature" | "wide" | "tall" | "default";
+  /** Optional background image — covers the whole tile. */
+  image?: string;
+  /** Visual treatment. "ink" = dark, "paper" = warm off-white, "image" = full-bleed image with optional overlay. */
+  variant?: "ink" | "paper" | "warm" | "image" | "accent";
+  /** Section accent (drives the underline mark + accent color). Default: group. */
+  theme?: SectionTheme;
+  /** Small kicker label rendered above the heading (e.g. "Featured", "New release"). */
+  kicker?: string;
+  /** Heading text. */
+  heading?: string;
+  /** One-line description rendered under the heading. */
+  blurb?: string;
+  /** CTA label rendered bottom-left as a chip. */
+  cta?: string;
+  /** Open in new tab. */
+  external?: boolean;
+}
+
+const {
+  href,
+  size = "default",
+  image,
+  variant = "paper",
+  theme = "group",
+  kicker,
+  heading,
+  blurb,
+  cta,
+  external = false,
+} = Astro.props as Props;
+
+const accent = sectionAccent[theme];
+
+// Defensive: any tile with an image needs the dark gradient overlay + inverted
+// text to stay readable. Paper / warm variants over a photo produce black text
+// on the image — promote to "image" variant automatically.
+const effectiveVariant = image && (variant === "paper" || variant === "warm") ? "image" : variant;
+
+const sizeClass =
+  size === "feature" ? "min-h-[420px] lg:min-h-[260px] lg:col-span-2 lg:row-span-2" :
+  size === "wide" ? "min-h-[320px] lg:min-h-[260px] lg:col-span-2" :
+  size === "tall" ? "lg:row-span-2" :
+  "";
+
+const bgClass =
+  effectiveVariant === "ink" ? "bg-ninetone-ink text-ninetone-paper" :
+  effectiveVariant === "warm" ? "bg-ninetone-paper-warm text-ninetone-ink" :
+  effectiveVariant === "accent" ? `${accent.bg} text-ninetone-paper` :
+  effectiveVariant === "image" ? "bg-ninetone-ink text-ninetone-paper" :
+  "bg-ninetone-paper text-ninetone-ink border border-ninetone-rule";
+
+const hoverClass = href ? "transition-colors hover:bg-opacity-95" : "";
+
+const Tag = href ? "a" : "div";
+const linkProps = href
+  ? { href, ...(external ? { target: "_blank", rel: "noopener" } : {}) }
+  : {};
+---
+
+<Tag
+  class:list={[
+    "group relative isolate flex min-h-[260px] flex-col justify-end overflow-hidden",
+    sizeClass,
+    bgClass,
+    hoverClass,
+  ]}
+  {...linkProps}
+>
+  {image && (
+    <img
+      src={image}
+      alt=""
+      class="absolute inset-0 -z-10 h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
+      loading="lazy"
+    />
+  )}
+  {/* Always overlay images with a dark gradient so text in the corner stays
+      readable, regardless of which variant the caller asked for. */}
+  {image && (
+    <div class="absolute inset-0 -z-10 bg-gradient-to-t from-ninetone-ink/85 via-ninetone-ink/40 to-ninetone-ink/10" aria-hidden></div>
+  )}
+
+  <span
+    class:list={[
+      "absolute left-0 top-0 h-1 w-12 transition-[width] duration-500 ease-out group-hover:w-1/2",
+      effectiveVariant === "ink" || effectiveVariant === "image" || effectiveVariant === "accent" ? "bg-ninetone-paper" : accent.bg,
+    ]}
+    aria-hidden
+  ></span>
+
+  <div class="flex flex-col gap-2 p-5 md:p-6">
+    {kicker && (
+      <span
+        class:list={[
+          "kicker",
+          effectiveVariant === "ink" || effectiveVariant === "image" || effectiveVariant === "accent" ? "text-ninetone-paper/70" : "text-ninetone-ink/55",
+        ]}
+      >{kicker}</span>
+    )}
+    {heading && (
+      <h3
+        class:list={[
+          "font-display tracking-tight",
+          size === "feature" ? "text-3xl leading-[1.05] md:text-5xl" :
+          size === "wide" ? "text-2xl leading-tight md:text-4xl" :
+          "text-xl leading-tight md:text-2xl",
+        ]}
+      >{heading}</h3>
+    )}
+    {blurb && (
+      <p
+        class:list={[
+          "max-w-md text-sm leading-relaxed",
+          effectiveVariant === "ink" || effectiveVariant === "image" || effectiveVariant === "accent" ? "text-ninetone-paper/80" : "text-ninetone-ink/70",
+        ]}
+      >{blurb}</p>
+    )}
+    {cta && (
+      <span
+        class:list={[
+          "mt-3 inline-flex items-center gap-2 self-start text-xs font-semibold uppercase tracking-[0.16em]",
+          effectiveVariant === "ink" || effectiveVariant === "image" || effectiveVariant === "accent" ? "text-ninetone-paper" : "text-ninetone-ink",
+        ]}
+      >{cta} <span aria-hidden>→</span></span>
+    )}
+    <slot />
+  </div>
+</Tag>

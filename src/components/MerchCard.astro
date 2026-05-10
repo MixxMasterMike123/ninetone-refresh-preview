@@ -8,18 +8,40 @@ interface Props {
 }
 
 const { product, lang = "en" } = Astro.props as Props;
-const cta = lang === "sv" ? "Till butiken" : "To the Shop";
+const cta = lang === "sv" ? "Köp" : "Buy";
 const img = product.image ?? product.images[0] ?? null;
 ---
 
-<article class="flex flex-col overflow-hidden rounded-sm bg-ninetone-card text-white">
-  <a href={productUrl(product)} target="_blank" rel="noopener" class="block aspect-square overflow-hidden bg-neutral-200">
-    {img && <img src={img.src} alt={img.alt ?? product.title} class="h-full w-full object-cover" loading="lazy" />}
+<article class="group flex flex-col">
+  <a
+    href={productUrl(product)}
+    target="_blank"
+    rel="noopener"
+    class="relative block aspect-square overflow-hidden bg-ninetone-paper-warm"
+  >
+    {img && (
+      <img
+        src={img.src}
+        alt={img.alt ?? product.title}
+        class="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
+        loading="lazy"
+      />
+    )}
+    <span class="absolute left-0 top-0 h-1 w-10 bg-ninetone-ink transition-[width] duration-300 ease-out group-hover:w-full" aria-hidden></span>
   </a>
-  <div class="flex flex-1 flex-col gap-2 p-4">
-    <h3 class="text-base font-semibold leading-tight">{product.title}</h3>
-    <p class="text-sm opacity-80">{productPrice(product)}</p>
-    <a href={productUrl(product)} target="_blank" rel="noopener" class="mt-auto inline-flex min-h-11 items-center gap-2 self-start rounded-sm bg-ninetone-green px-4 py-2.5 text-sm font-semibold hover:bg-ninetone-green-dark">
+  <div class="flex flex-1 flex-col gap-1.5 px-1 pt-3 pb-2">
+    <div class="flex items-baseline justify-between gap-3">
+      <h3 class="font-display text-base font-medium leading-tight tracking-tight">
+        <a href={productUrl(product)} target="_blank" rel="noopener" class="transition-colors hover:opacity-70">{product.title}</a>
+      </h3>
+      <span class="shrink-0 text-sm font-medium text-ninetone-ink/70">{productPrice(product)}</span>
+    </div>
+    <a
+      href={productUrl(product)}
+      target="_blank"
+      rel="noopener"
+      class="mt-1 inline-flex items-center gap-2 text-[0.6875rem] font-semibold uppercase tracking-[0.16em] text-ninetone-ink opacity-60 transition-opacity hover:opacity-100"
+    >
       {cta} <span aria-hidden>→</span>
     </a>
   </div>

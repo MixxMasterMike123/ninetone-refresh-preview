@@ -33,24 +33,24 @@ const prevUrl = currentPage > 1 ? urlFor(currentPage - 1) : null;
 const nextUrl = currentPage < lastPage ? urlFor(currentPage + 1) : null;
 ---
 
-<nav class="mt-12 flex items-center justify-center gap-2 text-sm" aria-label="Pagination">
+<nav class="mt-16 flex items-center justify-center gap-2 text-sm" aria-label="Pagination">
   {prevUrl ? (
-    <a href={prevUrl} class="rounded-sm border border-white/20 px-3 py-1.5 text-white hover:bg-white/10" rel="prev">
+    <a href={prevUrl} class="border border-ninetone-ink/20 px-3 py-1.5 text-ninetone-ink hover:border-ninetone-ink hover:bg-ninetone-ink hover:text-ninetone-paper" rel="prev">
       ← Prev
     </a>
   ) : (
-    <span class="rounded-sm border border-white/10 px-3 py-1.5 text-white/30">← Prev</span>
+    <span class="border border-ninetone-ink/10 px-3 py-1.5 text-ninetone-ink/30">← Prev</span>
   )}
 
   <ul class="flex items-center gap-1">
     {pages.map((p) =>
       p === "…" ? (
-        <li class="px-2 text-white/50">…</li>
+        <li class="px-2 text-ninetone-ink/40">…</li>
       ) : p === currentPage ? (
-        <li class="rounded-sm bg-white px-3 py-1.5 font-semibold text-ninetone-ink">{p}</li>
+        <li class="bg-ninetone-ink px-3 py-1.5 font-semibold text-ninetone-paper">{p}</li>
       ) : (
         <li>
-          <a href={urlFor(p)} class="block rounded-sm border border-white/20 px-3 py-1.5 text-white hover:bg-white/10">
+          <a href={urlFor(p)} class="block border border-ninetone-ink/15 px-3 py-1.5 text-ninetone-ink hover:border-ninetone-ink">
             {p}
           </a>
         </li>
@@ -59,10 +59,10 @@ const nextUrl = currentPage < lastPage ? urlFor(currentPage + 1) : null;
   </ul>
 
   {nextUrl ? (
-    <a href={nextUrl} class="rounded-sm border border-white/20 px-3 py-1.5 text-white hover:bg-white/10" rel="next">
+    <a href={nextUrl} class="border border-ninetone-ink/20 px-3 py-1.5 text-ninetone-ink hover:border-ninetone-ink hover:bg-ninetone-ink hover:text-ninetone-paper" rel="next">
       Next →
     </a>
   ) : (
-    <span class="rounded-sm border border-white/10 px-3 py-1.5 text-white/30">Next →</span>
+    <span class="border border-ninetone-ink/10 px-3 py-1.5 text-ninetone-ink/30">Next →</span>
   )}
 </nav>

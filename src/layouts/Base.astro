@@ -2,7 +2,10 @@
 import "../styles/global.css";
 import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
+import PromoBar from "../components/PromoBar.astro";
+import CommandPalette from "../components/CommandPalette.astro";
 import type { SectionTheme } from "../lib/sections";
+import { getPromo } from "../lib/ninetone";
 
 interface Props {
   title: string;
@@ -19,6 +22,14 @@ const {
 } = Astro.props;
 
 const fullTitle = title === "Ninetone Group" ? title : `${title} | Ninetone Group`;
+
+// Promo bar is opt-in: nothing shows unless a "Promo" WebPosts category exists.
+const promo = await getPromo().catch(() => null);
+
+// Site-wide noindex while the preview is gated. Flip PUBLIC_NOINDEX=false (or
+// unset) at launch. Belt-and-braces with public/robots.txt and the X-Robots-Tag
+// header in public/_headers — any one of them is enough to stop indexing.
+const noindex = String(import.meta.env.PUBLIC_NOINDEX ?? "true") !== "false";
 ---
 
 <!doctype html>
@@ -27,21 +38,24 @@ const fullTitle = title === "Ninetone Group" ? title : `${title} | Ninetone Grou
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
+    {noindex && <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex" />}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;500;700&family=Rubik:wght@300;400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..800;1,6..72,300..800&family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap"
     />
     <meta name="generator" content={Astro.generator} />
     <title>{fullTitle}</title>
   </head>
-  <body class="min-h-screen bg-white text-neutral-900 antialiased">
+  <body class="min-h-screen bg-ninetone-paper text-ninetone-ink antialiased">
+    <PromoBar promo={promo} />
     <Header theme={theme} lang={lang} />
     <main>
       <slot />
     </main>
     <Footer theme={theme} lang={lang} />
+    <CommandPalette lang={lang} />
   </body>
 </html>
