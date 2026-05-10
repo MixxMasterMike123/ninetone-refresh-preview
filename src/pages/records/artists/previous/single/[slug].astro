@@ -3,7 +3,8 @@ import Base from "../../../../../layouts/Base.astro";
 import StreamingRow from "../../../../../components/StreamingRow.astro";
 import MerchCard from "../../../../../components/MerchCard.astro";
 import NewsCard from "../../../../../components/NewsCard.astro";
-import { getPreviousArtists, getNewsForArtist } from "../../../../../lib/ninetone";
+import Discography from "../../../../../components/Discography.astro";
+import { getPreviousArtists, getArtistDetailWithReleases, getNewsForArtist } from "../../../../../lib/ninetone";
 import { getProducts } from "../../../../../lib/shopify";
 import { renderBio } from "../../../../../lib/markdown";
 import { url } from "../../../../../lib/url";
@@ -19,6 +20,10 @@ export async function getStaticPaths() {
 }
 
 const { artist } = Astro.props as { artist: Record<string, unknown> };
+const slug = String(artist.SLUG ?? "");
+
+const detail = await getArtistDetailWithReleases(slug).catch(() => null);
+const releases = detail?.releases ?? [];
 
 const name = String(artist["Head Artist"] ?? "");
 const tagline = String(artist["Artist Presentation Title"] ?? "");
@@ -144,6 +149,9 @@ const ytLinks = [String(artist.yotubeHighlight_one ?? ""), String(artist.yotubeH
       </div>
     </div>
   </section>
+
+  <!-- Discography -->
+  <Discography releases={releases} artistName={name} theme="records" />
 
   {merch.length > 0 && (
     <section class="bg-ninetone-paper-warm py-20">

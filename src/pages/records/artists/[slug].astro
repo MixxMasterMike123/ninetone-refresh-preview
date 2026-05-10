@@ -4,7 +4,8 @@ import StreamingRow from "../../../components/StreamingRow.astro";
 import MerchCard from "../../../components/MerchCard.astro";
 import NewsCard from "../../../components/NewsCard.astro";
 import RosterStrip from "../../../components/RosterStrip.astro";
-import { getArtists, getNewsForArtist, pickRelatedArtists } from "../../../lib/ninetone";
+import Discography from "../../../components/Discography.astro";
+import { getArtists, getArtistDetailWithReleases, getNewsForArtist, pickRelatedArtists } from "../../../lib/ninetone";
 import { getProducts } from "../../../lib/shopify";
 import { renderBio } from "../../../lib/markdown";
 import { url } from "../../../lib/url";
@@ -18,6 +19,12 @@ export async function getStaticPaths() {
 }
 
 const { artist, allArtists } = Astro.props as { artist: Record<string, unknown>; allArtists: Record<string, unknown>[] };
+const slug = String(artist.SLUG ?? "");
+
+// Pull releases portal for the discography section. Errors out silently —
+// detail page still renders without releases if FM hiccups.
+const detail = await getArtistDetailWithReleases(slug).catch(() => null);
+const releases = detail?.releases ?? [];
 
 const name = String(artist["Head Artist"] ?? "");
 const tagline = String(artist["Artist Presentation Title"] ?? "");
@@ -215,6 +222,9 @@ const ytLinks = [ytOne, ytTwo].filter(Boolean);
       </div>
     </div>
   </section>
+
+  <!-- Discography -->
+  <Discography releases={releases} artistName={name} theme="records" />
 
   <!-- Merch -->
   {merch.length > 0 && (

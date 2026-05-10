@@ -68,6 +68,98 @@ export function getArtistBySlug(slug: string) {
   }).then((rows) => rows[0]);
 }
 
+// ---------------------------------------------------------------------------
+// Releases (discography)
+// ---------------------------------------------------------------------------
+// Each artist record has a `Green Web Category` portal listing every release
+// (Single / EP / Album) with cover art, release date, smart link, and
+// per-platform streaming URLs. Plus `Green Web Album::spotifyPitch` and
+// `socialMedia` carry the editorial copy the label wrote at release time.
+
+export type ArtistRelease = {
+  album: string;
+  type: string; // "Single" | "Ep" | "Album"
+  releaseDate: string; // FM format MM/DD/YYYY
+  cover: string; // streaming URL — gets rewritten to proxy at build time
+  pitch: string; // promotional copy from Green Web Album::spotifyPitch
+  social: string; // social-media voice copy
+  urlRelease: string; // Linkfire-style smart link (preferred CTA)
+  streaming: {
+    spotify?: string;
+    apple?: string;
+    amazon?: string;
+    youtubeMusic?: string;
+    tidal?: string;
+  };
+};
+
+export type ArtistDetailWithReleases = {
+  fieldData: ArtistDetail;
+  releases: ArtistRelease[];
+};
+
+function pickReleasePortal(row: Record<string, unknown>, key: string): string {
+  const v = row[key];
+  return v ? String(v) : "";
+}
+
+// Parse FM date "MM/DD/YYYY" into a Date for sorting. Returns epoch 0 on
+// failure so missing dates sort last (after a descending sort = first).
+function parseFmDate(s: string): number {
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return 0;
+  const [, mm, dd, yyyy] = m;
+  return new Date(Number(yyyy), Number(mm) - 1, Number(dd)).getTime();
+}
+
+// Build-time URL for a release cover. Worker resolves to fresh FM bytes per
+// request — see worker-fm-proxy/src/index.ts (release route). Index here MUST
+// match the order rendered in the discography (newest-first), so the Worker
+// can resolve to the same row by sorting the same way.
+function releaseCoverUrl(slug: string, index: number): string {
+  const PROXY_BASE = (
+    import.meta.env.FM_IMAGE_PROXY_BASE ??
+    "https://ninetone-fm-image-proxy.micke-ohlen.workers.dev"
+  ).replace(/\/$/, "");
+  return `${PROXY_BASE}/release/${encodeURIComponent(slug)}/${index}`;
+}
+
+// Pull artist + releases (portalData) by slug. Used by detail pages that
+// render a discography. Active or previous, single round-trip.
+export async function getArtistDetailWithReleases(slug: string): Promise<ArtistDetailWithReleases | null> {
+  const rows = await fmFindWithPortals<ArtistDetail>("API_ARTIST_DETAIL", {
+    query: [{ filterActive: "==*", SLUG: slug }],
+    limit: 1,
+  });
+  const row = rows[0];
+  if (!row) return null;
+
+  const portal = (row.portalData?.["Green Web Category"] ?? []) as Record<string, unknown>[];
+  const releases: ArtistRelease[] = portal
+    .map((r) => ({
+      album: pickReleasePortal(r, "Green Web Category::Album"),
+      type: pickReleasePortal(r, "Green Web Category::Type"),
+      releaseDate: pickReleasePortal(r, "Green Web Category::Releasedate First"),
+      // Cover URL replaced after sort, so the index lines up with newest-first.
+      cover: "",
+      pitch: pickReleasePortal(r, "Green Web Album::spotifyPitch"),
+      social: pickReleasePortal(r, "Green Web Album::socialMedia"),
+      urlRelease: pickReleasePortal(r, "Green Web Category::urlRelease"),
+      streaming: {
+        spotify: pickReleasePortal(r, "Green Web Category::urlSpotify") || undefined,
+        apple: pickReleasePortal(r, "Green Web Category::urlAppleMusic") || undefined,
+        amazon: pickReleasePortal(r, "Green Web Category::urlAmazonMusic") || undefined,
+        youtubeMusic: pickReleasePortal(r, "Green Web Category::urlYoutubeMusic") || undefined,
+        tidal: pickReleasePortal(r, "Green Web Category::urlTidal") || undefined,
+      },
+    }))
+    .filter((r) => r.album)
+    .sort((a, b) => parseFmDate(b.releaseDate) - parseFmDate(a.releaseDate))
+    .map((r, i) => ({ ...r, cover: releaseCoverUrl(slug, i) }));
+
+  return { fieldData: row.fieldData, releases };
+}
+
 // Previous artists — same layout, "Not Active". 342 records as of writing,
 // so we set a generous ceiling for build-time fetch.
 export function getPreviousArtists() {
