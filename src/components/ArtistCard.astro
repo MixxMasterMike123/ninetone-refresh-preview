@@ -90,35 +90,35 @@ if (socials?.tiktok) socialEntries.push({ label: "TikTok", href: socials.tiktok,
       </a>
     </div>
 
-    {tags.length > 0 && (
-      <div class="flex flex-wrap gap-x-2 gap-y-1 text-[0.6875rem] uppercase tracking-[0.12em] text-ninetone-ink/55">
-        {tags.slice(0, 3).map((t, i) => (
-          <span>{i > 0 ? <span aria-hidden class="mr-2 opacity-40">·</span> : null}{t}</span>
-        ))}
-      </div>
-    )}
+    {/* Tags clamped to one line: max 2 chips, no wrap. Keeps card metadata
+        height predictable across cards in the same row. */}
+    <div class="flex h-[1.1rem] items-center gap-x-2 overflow-hidden text-[0.6875rem] uppercase tracking-[0.12em] text-ninetone-ink/55">
+      {tags.slice(0, 2).map((t, i) => (
+        <span class="truncate">{i > 0 ? <span aria-hidden class="mr-2 opacity-40">·</span> : null}{t}</span>
+      ))}
+    </div>
 
-    {blurb && (
-      <p class="text-[0.8125rem] leading-snug text-ninetone-ink/70 line-clamp-2">{blurb}</p>
-    )}
+    {/* Always render the blurb container so cards without a blurb still align
+        with their row neighbours. line-clamp-2 caps long bios. */}
+    <p class="min-h-[2.4rem] text-[0.8125rem] leading-snug text-ninetone-ink/70 line-clamp-2">{blurb ?? ""}</p>
 
-    {socialEntries.length > 0 && (
-      <ul class="mt-1 flex flex-wrap gap-1.5">
-        {socialEntries.map((s) => (
-          <li>
-            <a
-              href={s.href}
-              target="_blank"
-              rel="noopener"
-              class="inline-flex h-6 min-w-6 items-center justify-center border border-ninetone-ink/15 px-1.5 text-[0.625rem] font-semibold text-ninetone-ink/70 transition-colors hover:border-ninetone-ink hover:text-ninetone-ink"
-              aria-label={s.label}
-              title={s.label}
-            >
-              {s.glyph || s.label.slice(0, 2)}
-            </a>
-          </li>
-        ))}
-      </ul>
-    )}
+    {/* Socials row — reserves height even when absent. mt-auto pins it to the
+        card bottom so different content lengths above don't shift the baseline. */}
+    <ul class="mt-auto flex min-h-[1.5rem] flex-wrap gap-1.5 pt-1">
+      {socialEntries.map((s) => (
+        <li>
+          <a
+            href={s.href}
+            target="_blank"
+            rel="noopener"
+            class="inline-flex h-6 min-w-6 items-center justify-center border border-ninetone-ink/15 px-1.5 text-[0.625rem] font-semibold text-ninetone-ink/70 transition-colors hover:border-ninetone-ink hover:text-ninetone-ink"
+            aria-label={s.label}
+            title={s.label}
+          >
+            {s.glyph || s.label.slice(0, 2)}
+          </a>
+        </li>
+      ))}
+    </ul>
   </div>
 </article>
