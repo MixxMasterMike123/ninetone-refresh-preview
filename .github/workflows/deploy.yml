@@ -36,6 +36,18 @@ jobs:
 
       - run: npm ci
 
+      - name: Cache mirrored FM images
+        # FM Streaming URLs rotate every API call AND expire with the session
+        # token, so we download every image at build time and pin to a content
+        # hash. Cache the result so we only re-download images whose bytes
+        # actually changed. Cache key changes whenever the mirror logic does.
+        uses: actions/cache@v4
+        with:
+          path: public/images/fm
+          key: fm-images-v1-${{ hashFiles('src/lib/fm-image-mirror.ts') }}
+          restore-keys: |
+            fm-images-v1-
+
       - name: Build
         env:
           FM_HOST: ${{ secrets.FM_HOST }}

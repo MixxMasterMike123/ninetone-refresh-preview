@@ -7,6 +7,7 @@
  */
 
 import { cached } from "./cache";
+import { mirrorRecordImages } from "./fm-image-mirror";
 
 const FM_HOST = import.meta.env.FM_HOST ?? "files.ninetone.com";
 const FM_DB = import.meta.env.FM_DB ?? "Ninetone Group AB";
@@ -122,7 +123,12 @@ async function fmFindUncached<T = Record<string, unknown>>(
 ): Promise<T[]> {
   const json = await fmRequest<T>(layout, body);
   if (!json) return [];
-  return json.response.data.map((r) => r.fieldData);
+  const rows = json.response.data.map((r) => r.fieldData);
+  // FM Streaming URLs rotate per-call and expire with the session token, so
+  // we must mirror to local paths immediately while the URL is still fresh.
+  // No-op when bytes can't be downloaded — page still renders, image just 401s.
+  await mirrorRecordImages(rows);
+  return rows;
 }
 
 async function fmFindUncachedWithPortals<T = Record<string, unknown>>(
@@ -131,5 +137,7 @@ async function fmFindUncachedWithPortals<T = Record<string, unknown>>(
 ): Promise<FmRecord<T>[]> {
   const json = await fmRequest<T>(layout, body);
   if (!json) return [];
-  return json.response.data.map((r) => ({ fieldData: r.fieldData, portalData: r.portalData }));
+  const rows = json.response.data.map((r) => ({ fieldData: r.fieldData, portalData: r.portalData }));
+  await mirrorRecordImages(rows);
+  return rows;
 }
