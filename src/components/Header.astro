@@ -85,7 +85,7 @@ const isActive = (matches: string[]) =>
 
       <a
         href={url(cta.href)}
-        class={`inline-flex min-h-11 items-center gap-2 px-4 py-2 text-sm font-semibold ${accent.cta} transition-colors`}
+        class={`hidden md:inline-flex min-h-11 items-center gap-2 px-4 py-2 text-sm font-semibold ${accent.cta} transition-colors`}
       >
         {ctaLabel}
         <span aria-hidden>→</span>
@@ -93,12 +93,89 @@ const isActive = (matches: string[]) =>
 
       <a
         href={lang === "en" ? Astro.url.pathname.replace(/^\/en/, "/sv") : Astro.url.pathname.replace(/^\/sv/, "/en")}
-        class="inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-xs font-semibold text-ninetone-ink/65 hover:text-ninetone-ink"
+        class="hidden md:inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-xs font-semibold text-ninetone-ink/65 hover:text-ninetone-ink"
         aria-label={lang === "en" ? "Switch to Swedish" : "Switch to English"}
       >
         {lang === "en" ? "SV" : "EN"}
       </a>
+
+      <button
+        type="button"
+        id="mobile-nav-toggle"
+        class="inline-flex h-11 w-11 items-center justify-center border border-ninetone-ink/15 text-ninetone-ink transition-colors hover:border-ninetone-ink lg:hidden"
+        aria-label={lang === "sv" ? "Öppna meny" : "Open menu"}
+        aria-controls="mobile-nav-panel"
+        aria-expanded="false"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" class="h-5 w-5" aria-hidden="true">
+          <line x1="4" y1="7" x2="20" y2="7"></line>
+          <line x1="4" y1="12" x2="20" y2="12"></line>
+          <line x1="4" y1="17" x2="20" y2="17"></line>
+        </svg>
+      </button>
     </div>
+  </div>
+
+  {/* Mobile nav panel — full-screen overlay. Hidden by default; toggled via
+      the hamburger button. Lives inside <header> so it inherits the lang +
+      theme context naturally. */}
+  <div
+    id="mobile-nav-panel"
+    class="fixed inset-0 z-50 hidden flex-col bg-ninetone-paper text-ninetone-ink lg:hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-label={lang === "sv" ? "Meny" : "Menu"}
+  >
+    <div class="flex items-center justify-between border-b border-ninetone-rule px-6 py-4">
+      <span class="kicker text-ninetone-ink/55">{lang === "sv" ? "Meny" : "Menu"}</span>
+      <button
+        type="button"
+        id="mobile-nav-close"
+        class="inline-flex h-11 w-11 items-center justify-center border border-ninetone-ink/15 text-ninetone-ink transition-colors hover:border-ninetone-ink"
+        aria-label={lang === "sv" ? "Stäng meny" : "Close menu"}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" class="h-5 w-5" aria-hidden="true">
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <nav class="flex-1 overflow-y-auto px-6 py-10" aria-label={lang === "sv" ? "Mobilnavigering" : "Mobile navigation"}>
+      <ul class="flex flex-col gap-1">
+        {navItems.map((item) => {
+          const active = isActive(item.match);
+          return (
+            <li>
+              <a
+                href={url(item.href)}
+                class={`group flex items-baseline justify-between gap-4 border-b border-ninetone-rule py-5 font-display text-3xl font-medium leading-tight tracking-tight transition-colors hover:text-ninetone-ink ${active ? accent.text : "text-ninetone-ink"}`}
+                aria-current={active ? "page" : undefined}
+              >
+                <span>{lang === "sv" ? item.labelSv : item.labelEn}</span>
+                <span class="text-base text-ninetone-ink/40 transition-transform duration-200 group-hover:translate-x-1" aria-hidden>→</span>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+
+      <div class="mt-10 flex flex-col gap-4">
+        <a
+          href={url(cta.href)}
+          class={`inline-flex min-h-12 items-center justify-between gap-2 px-5 py-3 text-sm font-semibold ${accent.cta} transition-colors`}
+        >
+          {ctaLabel}
+          <span aria-hidden>→</span>
+        </a>
+        <a
+          href={lang === "en" ? Astro.url.pathname.replace(/^\/en/, "/sv") : Astro.url.pathname.replace(/^\/sv/, "/en")}
+          class="kicker self-start text-ninetone-ink/55 hover:text-ninetone-ink"
+        >
+          {lang === "en" ? "Svenska →" : "English →"}
+        </a>
+      </div>
+    </nav>
   </div>
 
 </header>
@@ -111,6 +188,32 @@ const isActive = (matches: string[]) =>
     const open = (window as unknown as { ninetoneCmdK?: () => void }).ninetoneCmdK;
     open?.();
   });
+
+  // Mobile nav: hamburger opens, X closes, ESC closes, click on any nav link
+  // closes (so navigating to the same page doesn't leave the panel open).
+  const navToggle = document.getElementById("mobile-nav-toggle");
+  const navClose = document.getElementById("mobile-nav-close");
+  const navPanel = document.getElementById("mobile-nav-panel");
+  if (navToggle && navClose && navPanel) {
+    const open = () => {
+      navPanel.classList.remove("hidden");
+      navPanel.classList.add("flex");
+      navToggle.setAttribute("aria-expanded", "true");
+      document.body.style.overflow = "hidden";
+    };
+    const close = () => {
+      navPanel.classList.add("hidden");
+      navPanel.classList.remove("flex");
+      navToggle.setAttribute("aria-expanded", "false");
+      document.body.style.overflow = "";
+    };
+    navToggle.addEventListener("click", open);
+    navClose.addEventListener("click", close);
+    navPanel.querySelectorAll("a").forEach((a) => a.addEventListener("click", close));
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !navPanel.classList.contains("hidden")) close();
+    });
+  }
 
   // Sticky scroll-shrink — logo and padding compress past 24px
   const header = document.getElementById("site-header");
