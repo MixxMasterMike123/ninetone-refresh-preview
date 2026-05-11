@@ -359,7 +359,14 @@ export async function getBookingCategories(): Promise<BookingCategory[]> {
 
   return records.map((r) => {
     const portalRows = (r.portalData?.["Green HeadArtist"] ?? []) as Record<string, unknown>[];
-    const artists: BookingCategoryArtist[] = portalRows
+    // Only show currently-active talents. Not Active = booked through us in
+    // the past but not pitchable today. Hides them from the list page AND
+    // from getAllActiveBookingSlugs below (single-page generator), so the
+    // two stay in lockstep.
+    const activeRows = portalRows.filter(
+      (row) => row["Green HeadArtist::filterActive"] === "Active",
+    );
+    const artists: BookingCategoryArtist[] = activeRows
       .map((row) => ({
         slug: pickPortal(row, "SLUG"),
         name: pickPortal(row, "Head Artist"),
@@ -393,6 +400,26 @@ export async function getBookingCategories(): Promise<BookingCategory[]> {
       artists,
     };
   });
+}
+
+/**
+ * The set of talents the Nation /booking list shows. Drives getStaticPaths on
+ * /ninetone-nation/[slug].astro so the single-page set EXACTLY matches the
+ * list — no orphan links, no 404s for booking-only talents (e.g. Quireboys,
+ * Asta Kask) who pass the filter but have no Records or Management page.
+ *
+ * Uses getBookingCategories under the hood, so the Active filter applied
+ * there also applies here.
+ */
+export async function getAllActiveBookingSlugs(): Promise<string[]> {
+  const cats = await getBookingCategories().catch(() => []);
+  const seen = new Set<string>();
+  for (const c of cats) {
+    for (const a of c.artists) {
+      if (a.slug) seen.add(a.slug);
+    }
+  }
+  return [...seen];
 }
 
 // ---------------------------------------------------------------------------
