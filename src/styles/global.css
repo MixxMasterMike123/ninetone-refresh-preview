@@ -188,7 +188,7 @@ nav, header nav a, footer nav a {
    a base color. The img itself starts opacity-0 and is faded in via onload. */
 .fm-img {
   opacity: 0;
-  transition: opacity 400ms ease-out;
+  transition: opacity 400ms ease-out, transform 700ms ease-out;
 }
 .fm-img.is-loaded {
   opacity: 1;
