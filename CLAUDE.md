@@ -40,6 +40,8 @@ npm run preview  # serve built output
 - **Every FM image URL gets rewritten** to a Worker proxy URL during the build by [src/lib/fm-image-mirror.ts](src/lib/fm-image-mirror.ts). The Worker holds a live session token and resolves fresh streaming URLs per request.
 - **To add a new image-bearing layout**: add it to `LAYOUT_CONFIG` in [src/lib/fm-image-mirror.ts](src/lib/fm-image-mirror.ts) AND add a matching route in [worker-fm-proxy/src/index.ts](worker-fm-proxy/src/index.ts), then redeploy both.
 - **Image components use `.fm-img-frame` + `.fm-img`** for the shimmer skeleton + fade-in pattern. Defined in [src/styles/global.css](src/styles/global.css). Wire `onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"` on the `<img>`.
+- **Production CMS architecture is documented in [docs/cms-architecture.md](docs/cms-architecture.md).** Read it before proposing cutover work or runtime FM patterns. The target state is FM as live headless CMS via Cloudflare Workers + tiered edge caching, decided — don't re-litigate the architecture.
+- **Don't propose changes on the FM side.** Ninetone's FM is a sophisticated production platform doing heavy real-time aggregation. The Data API is our integration surface. No new endpoints, no schema changes, no extended session timeouts, no "could FM expose X" asks. Work with the system, not against it.
 
 ## Path-aware URLs
 
