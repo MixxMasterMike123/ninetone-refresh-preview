@@ -10,6 +10,8 @@ interface Props {
   heading?: string;
   /** Kicker label rendered above the heading. */
   kicker?: string;
+  /** Optional subtitle paragraph rendered under the heading. */
+  blurb?: string;
   /** "All news" CTA destination. */
   href?: string;
   /** Visual canvas. "paper" matches the page; "warm" is the off-cream variant. */
@@ -20,6 +22,7 @@ const {
   limit = 5,
   heading = "Latest stories.",
   kicker = "From the studios",
+  blurb,
   href = "/news",
   variant = "warm",
 } = Astro.props as Props;
@@ -43,6 +46,9 @@ const bg = variant === "warm" ? "bg-ninetone-paper-warm" : "bg-ninetone-paper";
       <div>
         <span class="kicker text-ninetone-ink/55">{kicker}</span>
         <h2 class="mt-3 font-display text-4xl leading-[1.05] tracking-tight md:text-5xl">{heading}</h2>
+        {blurb && (
+          <p class="mt-4 max-w-2xl text-[0.9375rem] leading-relaxed text-ninetone-ink/70">{blurb}</p>
+        )}
       </div>
       <a href={url(href)} class="inline-flex items-center gap-2 self-start text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink">
         All news <span aria-hidden>→</span>

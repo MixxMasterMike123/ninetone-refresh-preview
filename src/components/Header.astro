@@ -115,70 +115,68 @@ const isActive = (matches: string[]) =>
       </button>
     </div>
   </div>
+</header>
 
-  {/* Mobile nav panel — full-screen overlay. Hidden by default; toggled via
-      the hamburger button. Lives inside <header> so it inherits the lang +
-      theme context naturally. */}
-  <div
-    id="mobile-nav-panel"
-    class="fixed inset-0 z-50 hidden flex-col bg-ninetone-paper text-ninetone-ink lg:hidden"
-    role="dialog"
-    aria-modal="true"
-    aria-label={lang === "sv" ? "Meny" : "Menu"}
-  >
-    <div class="flex items-center justify-between border-b border-ninetone-rule px-6 py-4">
-      <span class="kicker text-ninetone-ink/55">{lang === "sv" ? "Meny" : "Menu"}</span>
-      <button
-        type="button"
-        id="mobile-nav-close"
-        class="inline-flex h-11 w-11 items-center justify-center border border-ninetone-ink/15 text-ninetone-ink transition-colors hover:border-ninetone-ink"
-        aria-label={lang === "sv" ? "Stäng meny" : "Close menu"}
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" class="h-5 w-5" aria-hidden="true">
-          <line x1="6" y1="6" x2="18" y2="18"></line>
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-        </svg>
-      </button>
-    </div>
-
-    <nav class="flex-1 overflow-y-auto px-6 py-10" aria-label={lang === "sv" ? "Mobilnavigering" : "Mobile navigation"}>
-      <ul class="flex flex-col gap-1">
-        {navItems.map((item) => {
-          const active = isActive(item.match);
-          return (
-            <li>
-              <a
-                href={url(item.href)}
-                class={`group flex items-baseline justify-between gap-4 border-b border-ninetone-rule py-5 font-display text-3xl font-medium leading-tight tracking-tight transition-colors hover:text-ninetone-ink ${active ? accent.text : "text-ninetone-ink"}`}
-                aria-current={active ? "page" : undefined}
-              >
-                <span>{lang === "sv" ? item.labelSv : item.labelEn}</span>
-                <span class="text-base text-ninetone-ink/40 transition-transform duration-200 group-hover:translate-x-1" aria-hidden>→</span>
-              </a>
-            </li>
-          );
-        })}
-      </ul>
-
-      <div class="mt-10 flex flex-col gap-4">
-        <a
-          href={url(cta.href)}
-          class={`inline-flex min-h-12 items-center justify-between gap-2 px-5 py-3 text-sm font-semibold ${accent.cta} transition-colors`}
-        >
-          {ctaLabel}
-          <span aria-hidden>→</span>
-        </a>
-        <a
-          href={lang === "en" ? Astro.url.pathname.replace(/^\/en/, "/sv") : Astro.url.pathname.replace(/^\/sv/, "/en")}
-          class="kicker self-start text-ninetone-ink/55 hover:text-ninetone-ink"
-        >
-          {lang === "en" ? "Svenska →" : "English →"}
-        </a>
-      </div>
-    </nav>
+{/* Mobile nav panel — full-screen overlay, mounted as a header sibling so its
+    z-index escapes the sticky <header>'s stacking context (z-40). */}
+<div
+  id="mobile-nav-panel"
+  class="fixed inset-0 z-[60] hidden flex-col bg-ninetone-paper text-ninetone-ink lg:hidden"
+  role="dialog"
+  aria-modal="true"
+  aria-label={lang === "sv" ? "Meny" : "Menu"}
+>
+  <div class="flex items-center justify-between border-b border-ninetone-rule px-6 py-4">
+    <span class="kicker text-ninetone-ink/55">{lang === "sv" ? "Meny" : "Menu"}</span>
+    <button
+      type="button"
+      id="mobile-nav-close"
+      class="inline-flex h-11 w-11 items-center justify-center border border-ninetone-ink/15 text-ninetone-ink transition-colors hover:border-ninetone-ink"
+      aria-label={lang === "sv" ? "Stäng meny" : "Close menu"}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" class="h-5 w-5" aria-hidden="true">
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+      </svg>
+    </button>
   </div>
 
-</header>
+  <nav class="flex-1 overflow-y-auto px-6 py-10" aria-label={lang === "sv" ? "Mobilnavigering" : "Mobile navigation"}>
+    <ul class="flex flex-col gap-1">
+      {navItems.map((item) => {
+        const active = isActive(item.match);
+        return (
+          <li>
+            <a
+              href={url(item.href)}
+              class={`group flex items-baseline justify-between gap-4 border-b border-ninetone-rule py-5 font-display text-3xl font-medium leading-tight tracking-tight transition-colors hover:text-ninetone-ink ${active ? accent.text : "text-ninetone-ink"}`}
+              aria-current={active ? "page" : undefined}
+            >
+              <span>{lang === "sv" ? item.labelSv : item.labelEn}</span>
+              <span class="text-base text-ninetone-ink/40 transition-transform duration-200 group-hover:translate-x-1" aria-hidden>→</span>
+            </a>
+          </li>
+        );
+      })}
+    </ul>
+
+    <div class="mt-10 flex flex-col gap-4">
+      <a
+        href={url(cta.href)}
+        class={`inline-flex min-h-12 items-center justify-between gap-2 px-5 py-3 text-sm font-semibold ${accent.cta} transition-colors`}
+      >
+        {ctaLabel}
+        <span aria-hidden>→</span>
+      </a>
+      <a
+        href={lang === "en" ? Astro.url.pathname.replace(/^\/en/, "/sv") : Astro.url.pathname.replace(/^\/sv/, "/en")}
+        class="kicker self-start text-ninetone-ink/55 hover:text-ninetone-ink"
+      >
+        {lang === "en" ? "Svenska →" : "English →"}
+      </a>
+    </div>
+  </nav>
+</div>
 
 <script>
   // Search button → open command palette (managed by CommandPalette.astro,

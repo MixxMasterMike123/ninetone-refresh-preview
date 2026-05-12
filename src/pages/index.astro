@@ -7,21 +7,18 @@ import MetricsPanel from "../components/MetricsPanel.astro";
 import EditorialNewsBlock from "../components/EditorialNewsBlock.astro";
 import MarqueeBand from "../components/MarqueeBand.astro";
 import MerchSection from "../components/MerchSection.astro";
-import WebPostsSection from "../components/WebPostsSection.astro";
 import { sectionAccent } from "../lib/sections";
 import { url } from "../lib/url";
 import {
   getFeaturedArtists,
   getNews,
-  getWebPostSection,
 } from "../lib/ninetone";
 
 const collectionId = import.meta.env.SHOPIFY_HOMEPAGE_COLLECTION_ID;
 
-const [featuredArtists, latestNews, webPosts] = await Promise.all([
+const [featuredArtists, latestNews] = await Promise.all([
   getFeaturedArtists(20).catch(() => []),
   getNews().then((p) => p.slice(0, 4)).catch(() => []),
-  getWebPostSection("Ninetone Group").catch(() => null),
 ]);
 
 const heroArtist = featuredArtists[0];
@@ -37,9 +34,9 @@ const marqueeNames = featuredArtists
   .filter(Boolean);
 
 const portals = [
-  { theme: "records" as const, title: "Records", href: "/records", banner: "/images/recordsBanner.png", blurb: "A&R, production, and global distribution. Home of the artists shaping Sweden's sound." },
-  { theme: "management" as const, title: "Management", href: "/management", banner: "/images/managementBanner.png", blurb: "Day-to-day partners for some of the country's most extraordinary creators and influencers." },
-  { theme: "nation" as const, title: "Nation", href: "/ninetone-nation", banner: "/images/nationBanner.png", blurb: "Booking the artists, speakers, and entertainers that make events unforgettable." },
+  { theme: "records" as const, title: "Records", href: "/records", banner: "/images/recordsBanner.png", tagline: "From song to universe.", blurb: "Vi hjälper artister att förvandla musik till något större än en release — från A&R och produktion till berättelse, visuell identitet och långsiktig artistutveckling." },
+  { theme: "management" as const, title: "Management", href: "/management", banner: "/images/managementBanner.png", tagline: "Backoffice for public people.", blurb: "Struktur, strategi och riktning för kreatörer, influencers, sportprofiler och TV-personligheter som redan har publikens uppmärksamhet." },
+  { theme: "nation" as const, title: "Nation", href: "/ninetone-nation", banner: "/images/nationBanner.png", tagline: "Talent, attention and live moments.", blurb: "Vi kopplar artister, profiler, speakers och underhållare till scener, varumärken och events där deras närvaro skapar faktisk effekt." },
 ];
 ---
 
@@ -49,23 +46,48 @@ const portals = [
     <div class="mx-auto max-w-7xl px-6 pb-16 pt-20 md:pb-24 md:pt-28">
       <div class="grid gap-10 md:grid-cols-12 md:gap-16">
         <div class="md:col-span-8">
-          <span class="kicker text-ninetone-ink/55">Sundsvall — since 2008</span>
+          <span class="kicker text-ninetone-ink/55">Sundsvall / Stockholm — since 2006</span>
           <h1 class="mt-6 font-display text-[clamp(3rem,9vw,8rem)] leading-[0.9] tracking-[-0.04em]">
-            A house for music, talent, and the people who move them.
+            We connect what people need with what people care about.
           </h1>
         </div>
         <div class="flex flex-col justify-end gap-4 md:col-span-4">
           <p class="text-lg leading-relaxed text-ninetone-ink/75">
-            We make records. We manage influence. We book the room. Three studios, one address — built for artists who play the long game.
+            Ninetone är länken mellan behov, erbjudanden och publik. Vi hjälper artister, kreatörer, organisationer, företag, idrottslag och offentliga personer att förstå vad de egentligen erbjuder — och hur det ska formuleras, paketeras och nå fram.
+          </p>
+          <p class="font-display text-lg italic leading-snug tracking-tight text-ninetone-ink/70 md:text-xl">
+            Vi arbetar där kultur, kommunikation, algoritmer, underhållning, sociala medier och mänskligt beteende möts.
           </p>
           <div class="flex flex-wrap gap-3 pt-2">
-            <a href={url("/records/contact-records")} class="inline-flex items-center gap-2 bg-ninetone-ink px-4 py-3 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-ink-soft">
-              Submit a demo <span aria-hidden>→</span>
+            <a href={url("/management/contact-management")} class="inline-flex items-center gap-2 bg-ninetone-ink px-4 py-3 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-ink-soft">
+              Talk to us <span aria-hidden>→</span>
             </a>
-            <a href={url("/ninetone-nation/booking")} class="inline-flex items-center gap-2 border border-ninetone-ink px-4 py-3 text-sm font-semibold text-ninetone-ink transition-colors hover:bg-ninetone-ink hover:text-ninetone-paper">
-              Book talent <span aria-hidden>→</span>
+            <a href="#what-we-do" class="inline-flex items-center gap-2 border border-ninetone-ink px-4 py-3 text-sm font-semibold text-ninetone-ink transition-colors hover:bg-ninetone-ink hover:text-ninetone-paper">
+              See what we do <span aria-hidden>→</span>
             </a>
           </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Positioning band -->
+  <section class="border-t border-ninetone-rule bg-ninetone-paper">
+    <div class="mx-auto max-w-7xl px-6 py-20 md:py-24">
+      <div class="grid gap-10 md:grid-cols-12 md:gap-16">
+        <div class="md:col-span-7">
+          <span class="kicker text-ninetone-ink/55">Positioning</span>
+          <h2 class="mt-3 font-display text-4xl leading-[1.05] tracking-tight md:text-5xl">
+            Not a label. Not an agency. Not traditional management.
+          </h2>
+          <p class="mt-6 max-w-2xl font-display text-2xl italic leading-snug tracking-tight text-ninetone-ink/75 md:text-3xl">
+            Ninetone är ett kommunikations- och utvecklingshus för den moderna uppmärksamhetsekonomin.
+          </p>
+        </div>
+        <div class="md:col-span-5 md:pt-10">
+          <p class="max-w-xl text-[0.9375rem] leading-relaxed text-ninetone-ink/85">
+            Ibland arbetar vi med musik. Ibland med influencers. Ibland med företag, organisationer, idrottslag, TV-profiler eller kreatörer. Men uppgiften är nästan alltid densamma: att förstå ett behov. Förädla ett erbjudande. Och bygga bron till de människor som behöver känna, förstå, köpa, följa, lyssna, komma, rösta, dela eller bry sig.
+          </p>
         </div>
       </div>
     </div>
@@ -93,7 +115,10 @@ const portals = [
                 <h2 class="font-display text-5xl font-medium leading-[0.95] tracking-[-0.04em] text-ninetone-ink transition-colors duration-150 ease-out group-hover:text-ninetone-paper md:text-7xl">
                   {p.title}
                 </h2>
-                <p class="mt-4 max-w-md text-sm leading-relaxed text-ninetone-ink/70 transition-colors duration-150 ease-out group-hover:text-ninetone-paper/85">
+                <p class="mt-3 max-w-md font-display text-lg italic leading-snug tracking-tight text-ninetone-ink/75 transition-colors duration-150 ease-out group-hover:text-ninetone-paper/90 md:text-xl">
+                  {p.tagline}
+                </p>
+                <p class="mt-3 max-w-md text-sm leading-relaxed text-ninetone-ink/70 transition-colors duration-150 ease-out group-hover:text-ninetone-paper/85">
                   {p.blurb}
                 </p>
                 <span class="mt-6 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink transition-colors duration-150 ease-out group-hover:text-ninetone-paper">
@@ -109,13 +134,75 @@ const portals = [
     </ul>
   </section>
 
+  <!-- What we actually do — four-vignette editorial band -->
+  <section id="what-we-do" class="bg-ninetone-paper-warm py-24">
+    <div class="mx-auto max-w-7xl px-6">
+      <div class="grid gap-10 md:grid-cols-12 md:gap-16">
+        <div class="md:col-span-7">
+          <span class="kicker text-ninetone-ink/55">How we work</span>
+          <h2 class="mt-3 font-display text-4xl leading-[1.05] tracking-tight md:text-5xl">
+            We build the bridge.
+          </h2>
+        </div>
+        <div class="md:col-span-5 md:pt-2">
+          <p class="font-display text-2xl italic leading-snug tracking-tight text-ninetone-ink/75 md:text-3xl">
+            Varje uppdrag börjar med samma fråga: vad behöver kopplas ihop?
+          </p>
+        </div>
+      </div>
+
+      <div class="mt-16 grid gap-10 md:grid-cols-2 md:gap-x-16 md:gap-y-14">
+        <div>
+          <span class="kicker text-ninetone-ink/55">Sport · Idrottsklubb</span>
+          <h3 class="mt-3 font-display text-2xl leading-tight tracking-tight md:text-3xl">GIF Sundsvall</h3>
+          <p class="mt-4 max-w-xl text-[0.9375rem] leading-relaxed text-ninetone-ink/85">
+            Att förstå klubbens behov av publik, energi, biljettförsäljning och starkare relation till fansen. Ninetone arbetar med budskap, kanalval, rådgivning till ledningen och kommunikation som kan fylla läktarna och stärka klubbens närvaro i människors vardag.
+          </p>
+        </div>
+
+        <div>
+          <span class="kicker text-ninetone-ink/55">Organisation</span>
+          <h3 class="mt-3 font-display text-2xl leading-tight tracking-tight md:text-3xl">Företagarna</h3>
+          <p class="mt-4 max-w-xl text-[0.9375rem] leading-relaxed text-ninetone-ink/85">
+            Att tydliggöra värdet i deras tjänster, formulera erbjudandet tillsammans med ledningen och nå Sveriges företagare på ett sätt som känns relevant, konkret och användbart.
+          </p>
+        </div>
+
+        <div>
+          <span class="kicker text-ninetone-ink/55">Music · Artist</span>
+          <h3 class="mt-3 font-display text-2xl leading-tight tracking-tight md:text-3xl">En artist</h3>
+          <p class="mt-4 max-w-xl text-[0.9375rem] leading-relaxed text-ninetone-ink/85">
+            Att ta en konstnärlig produkt och bygga ett universum runt den — ljud, berättelse, känsla, kanal, publik och långsiktig riktning.
+          </p>
+        </div>
+
+        <div>
+          <span class="kicker text-ninetone-ink/55">Public person · Creator</span>
+          <h3 class="mt-3 font-display text-2xl leading-tight tracking-tight md:text-3xl">En influencer</h3>
+          <p class="mt-4 max-w-xl text-[0.9375rem] leading-relaxed text-ninetone-ink/85">
+            Att omvandla uppmärksamhet till struktur, affär, kreativ utveckling och hållbar karriär.
+          </p>
+        </div>
+      </div>
+
+      <p class="mt-20 max-w-3xl font-display text-2xl italic leading-snug tracking-tight text-ninetone-ink/75 md:text-3xl">
+        Olika världar. Samma kärna. <span class="not-italic font-medium text-ninetone-red">Behov. Erbjudande. Människa.</span>
+      </p>
+
+      <div class="mt-12 h-px w-full bg-ninetone-ink/80" aria-hidden></div>
+    </div>
+  </section>
+
   <!-- Bento "What's on" -->
   <section class="bg-ninetone-paper py-20">
     <div class="mx-auto max-w-7xl px-6">
       <div class="mb-10 grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
         <div>
           <span class="kicker text-ninetone-ink/55">What's on</span>
-          <h2 class="mt-3 font-display text-4xl leading-[1.05] tracking-tight md:text-5xl">This week at Ninetone.</h2>
+          <h2 class="mt-3 font-display text-4xl leading-[1.05] tracking-tight md:text-5xl">What's moving.</h2>
+          <p class="mt-4 max-w-2xl text-[0.9375rem] leading-relaxed text-ninetone-ink/70">
+            Projekt, releaser, berättelser och människor vi arbetar med just nu.
+          </p>
         </div>
         <span class="self-start text-xs uppercase tracking-[0.16em] text-ninetone-ink/55">Updated weekly</span>
       </div>
@@ -154,7 +241,7 @@ const portals = [
           theme="nation"
           kicker="Booking"
           heading="Book talent"
-          blurb="Top Swedish artists and entertainers, ready for your event."
+          blurb="Artister, profiler, speakers och entertainers för sammanhang där rätt person kan förändra hela rummet."
           cta="Open booking"
         />
 
@@ -164,7 +251,7 @@ const portals = [
           theme="records"
           kicker="Demos open"
           heading="We listen to everything."
-          blurb="Send your music. We reply to every demo with merit."
+          blurb="Skicka musiken. Inte för att vi letar efter perfektion, utan för att vi letar efter något som går att bygga vidare på."
           cta="Submit"
         />
 
@@ -173,7 +260,8 @@ const portals = [
           theme="management"
           href="/management"
           kicker="Management"
-          heading="A roster that moves the country."
+          heading="Public people need private structure."
+          blurb="Vi bygger systemet bakom människor som syns."
           cta="See clients"
         />
       </BentoGrid>
@@ -191,7 +279,8 @@ const portals = [
       artists={featuredArtists}
       theme="records"
       kicker="The roster"
-      heading="Records — artists in residence."
+      heading="People, projects and public attention."
+      blurb="Här finns artister, kreatörer och profiler vi arbetar med, har byggt med eller hjälper att föra vidare till nästa nivå."
       cta={{ label: "All artists", href: "/records/artists" }}
     />
   )}
@@ -200,32 +289,85 @@ const portals = [
   <MetricsPanel
     variant="ink"
     kicker="By the numbers"
-    heading="Quietly moving Sweden — and beyond."
+    heading="Quietly moving attention — and behaviour."
     metrics={[
-      { value: "342+", label: "Artist alumni", note: "Records + Management combined" },
-      { value: "16", label: "Years in the room", note: "Sundsvall, since 2008" },
-      { value: "120+", label: "Active campaigns", note: "Music, social, brand" },
-      { value: "1", label: "Address", note: "Three studios under one roof" },
+      { value: "342+", label: "Artists, creators and public profiles", note: "Through the years" },
+      { value: "18+", label: "Years inside music, media and digital culture", note: "Since 2006" },
+      { value: "120+", label: "Active campaigns, releases and collaborations", note: "Across music, social, brand and sport" },
+      { value: "1", label: "House built around studios, people and ideas", note: "Sundsvall / Stockholm" },
     ]}
   />
 
   <!-- Editorial news -->
   <EditorialNewsBlock
-    limit={5}
-    heading="Latest stories."
-    kicker="From the studios"
+    limit={3}
+    heading="Stories from the intersection."
+    kicker="From the intersection"
+    blurb="Nyheter från musik, management, varumärken, kreatörer, organisationer och publika projekt."
     href="/news"
   />
 
-  <!-- About / web posts -->
-  <WebPostsSection data={webPosts} />
+  <!-- About -->
+  <section class="bg-ninetone-paper py-20">
+    <div class="mx-auto grid max-w-7xl gap-10 px-6 md:grid-cols-12 md:gap-16">
+      <div class="md:col-span-4 md:sticky md:top-28 md:self-start">
+        <span class="kicker text-ninetone-ink/55">About</span>
+        <h2 class="mt-3 font-display text-4xl leading-[1.05] tracking-tight md:text-5xl">Ninetone Group</h2>
+      </div>
+      <div class="md:col-span-8 space-y-6 max-w-2xl text-[0.9375rem] leading-relaxed text-ninetone-ink/85">
+        <p>
+          Ninetone Group är ett svenskt utvecklings-, management- och kommunikationshus byggt för den moderna uppmärksamhetsekonomin.
+        </p>
+        <p>
+          Vi arbetar med människor och organisationer som behöver nå fram: artister, kreatörer, influencers, sportprofiler, företag, idrottslag, organisationer och offentliga personer.
+        </p>
+        <p>
+          Vår styrka ligger i att förstå både avsändaren och mottagaren. Vad behöver sägas? Vem behöver känna det? Vilken kanal bär budskapet bäst? Hur blir ett erbjudande inte bara synligt, utan relevant?
+        </p>
+        <p>
+          Därför arbetar vi tvärs över musik, sociala medier, PR, management, affärsutveckling, produktion, storytelling, distribution och publikförståelse.
+        </p>
+        <p>
+          Vi är inte bara ett musikbolag. Inte bara ett managementbolag. Inte bara en byrå.
+        </p>
+        <p class="font-display text-xl italic leading-snug tracking-tight text-ninetone-ink/85 md:text-2xl">
+          Vi är länken mellan behovet, erbjudandet och människorna på andra sidan.
+        </p>
+      </div>
+    </div>
+  </section>
 
   <!-- Merch -->
   <MerchSection
     collectionId={collectionId}
-    heading="Shop the house."
+    heading="The house, wearable."
     kicker="Merch"
-    blurb="Limited drops, tour merch, and the wardrobe staples that keep showing up backstage."
+    blurb="Kläder och objekt från Ninetone-världen. Enkla saker för människor som rör sig nära musiken, projekten och kulturen runt huset."
     limit={10}
   />
+
+  <!-- Talk to us — closing CTA band -->
+  <section id="contact" class="bg-ninetone-ink py-24 text-ninetone-paper">
+    <div class="mx-auto max-w-7xl px-6">
+      <div class="grid gap-10 md:grid-cols-12 md:gap-16">
+        <div class="md:col-span-7">
+          <span class="kicker text-ninetone-paper/55">Talk to us</span>
+          <h2 class="mt-3 font-display text-4xl leading-[1.05] tracking-tight md:text-5xl">
+            Tell us what needs to move.
+          </h2>
+        </div>
+        <div class="md:col-span-5 md:pt-2">
+          <p class="max-w-xl text-[0.9375rem] leading-relaxed text-ninetone-paper/80">
+            Har du musik som behöver hitta rätt publik, en profil som behöver struktur, ett företag som behöver formulera sitt erbjudande eller en organisation som behöver nå fram? Börja där. Vi hjälper dig att bygga bron.
+          </p>
+          <a
+            href={url("/management/contact-management")}
+            class="mt-8 inline-flex items-center gap-2 bg-ninetone-paper px-5 py-3 text-sm font-semibold text-ninetone-ink transition-colors hover:bg-ninetone-paper-warm"
+          >
+            Talk to us <span aria-hidden>→</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
 </Base>
