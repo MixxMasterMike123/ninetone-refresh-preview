@@ -67,7 +67,11 @@ team = [...team].sort((a, b) => {
         {team.map((m) => {
           const name = String(m.userNameCalc ?? "");
           const slug = String(m.SLUG ?? "");
-          const photo = m.userPhotoSmall ? String(m.userPhotoSmall) : undefined;
+          const photo = m.userPhoto
+            ? String(m.userPhoto)
+            : m.userPhotoSmall
+            ? String(m.userPhotoSmall)
+            : undefined;
           const title = String(m.title ?? "");
           return (
             <a href={url(`/team/${slug}`)} class="group flex flex-col">
