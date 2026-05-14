@@ -261,8 +261,19 @@ const portals = [
           cta="Submit"
         />
 
+        <BentoTile
+          variant="accent"
+          theme="management"
+          href="/management"
+          kicker="Management"
+          heading="Public people need private structure."
+          blurb="Vi bygger systemet bakom människor som syns."
+          cta="See clients"
+        />
+
         {heroClient && (
           <BentoTile
+            size="wide"
             variant="image"
             theme="management"
             href={`/management/clients/${String(heroClient.SLUG ?? "")}`}
@@ -273,16 +284,6 @@ const portals = [
             cta="View profile"
           />
         )}
-
-        <BentoTile
-          variant="accent"
-          theme="management"
-          href="/management"
-          kicker="Management"
-          heading="Public people need private structure."
-          blurb="Vi bygger systemet bakom människor som syns."
-          cta="See clients"
-        />
       </BentoGrid>
     </div>
   </section>
