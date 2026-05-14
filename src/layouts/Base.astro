@@ -4,6 +4,7 @@ import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
 import PromoBar from "../components/PromoBar.astro";
 import CommandPalette from "../components/CommandPalette.astro";
+import CookieConsent from "../components/CookieConsent.astro";
 import type { SectionTheme } from "../lib/sections";
 import { getPromo } from "../lib/ninetone";
 import { url } from "../lib/url";
@@ -31,11 +32,126 @@ const promo = await getPromo().catch(() => null);
 // unset) at launch. Belt-and-braces with public/robots.txt and the X-Robots-Tag
 // header in public/_headers — any one of them is enough to stop indexing.
 const noindex = String(import.meta.env.PUBLIC_NOINDEX ?? "true") !== "false";
+
+// Trackers only fire when the site is actually live (noindex off). Keeps the
+// preview environment from polluting analytics. Tracker IDs are placeholders
+// where the marketing team hasn't provisioned containers for the new site yet;
+// GA4 + Meta reuse the IDs from the current ninetone.com.
+const tracking = !noindex;
+const GTM_ID = "GTM-PLACEHOLDER";        // TODO: replace with real container before launch
+const GA4_ID = "G-X26Z7RRXTY";            // reused from current ninetone.com
+const META_PIXEL_ID = "199979048106038";  // reused from current ninetone.com
+const CLARITY_ID = "CLARITY-PLACEHOLDER"; // TODO: replace with real project ID before launch
+const TIKTOK_PIXEL_ID = "TIKTOK-PLACEHOLDER"; // TODO: replace with real pixel ID before launch
 ---
 
 <!doctype html>
 <html lang={lang}>
   <head>
+    {tracking && (
+      <>
+        {/* Google Consent Mode v2 — MUST run before any other tracking script.
+            Defaults everything to denied; CookieConsent.astro updates at runtime. */}
+        <script is:inline>
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('consent', 'default', {
+            ad_storage: 'denied',
+            ad_user_data: 'denied',
+            ad_personalization: 'denied',
+            analytics_storage: 'denied',
+            wait_for_update: 500
+          });
+        </script>
+
+        {/* Google Tag Manager — loads GA4 + other Google tags. Consent Mode v2
+            above ensures nothing fires until user grants consent. */}
+        <script is:inline define:vars={{ GTM_ID }}>
+          (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+          new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+          j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+          'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+          })(window,document,'script','dataLayer',GTM_ID);
+        </script>
+
+        {/* GA4 direct — fallback in case GTM container isn't yet configured. Safe
+            to leave alongside GTM (Consent Mode v2 prevents double-firing of
+            actual analytics_storage events). Remove once GTM has a GA4 tag. */}
+        <script async src={`https://www.googletagmanager.com/gtag/js?id=${GA4_ID}`}></script>
+        <script is:inline define:vars={{ GA4_ID }}>
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', GA4_ID);
+        </script>
+
+        {/* Meta (Facebook) Pixel — initialized with consent revoked. CookieConsent
+            grants/revokes at runtime. PageView fires once per load with current
+            consent state. */}
+        <script is:inline define:vars={{ META_PIXEL_ID }}>
+          !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+          n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+          n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+          t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
+          document,'script','https://connect.facebook.net/en_US/fbevents.js');
+          fbq('init', META_PIXEL_ID);
+          (function () {
+            var hasMarketingConsent = false;
+            try {
+              var raw = localStorage.getItem('ninetone_consent_v1');
+              if (raw) { hasMarketingConsent = !!JSON.parse(raw).marketing; }
+            } catch (e) {}
+            fbq('consent', hasMarketingConsent ? 'grant' : 'revoke');
+            fbq('track', 'PageView');
+          })();
+        </script>
+
+        {/* Microsoft Clarity — loaded only after analytics consent is granted.
+            Listens for ninetone:consent-analytics-granted event from CookieConsent. */}
+        <script is:inline define:vars={{ CLARITY_ID }}>
+          (function () {
+            var loaded = false;
+            function loadClarity() {
+              if (loaded) return;
+              loaded = true;
+              (function(c,l,a,r,i,t,y){
+                c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+                t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+                y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+              })(window, document, "clarity", "script", CLARITY_ID);
+            }
+            try {
+              var raw = localStorage.getItem('ninetone_consent_v1');
+              if (raw && JSON.parse(raw).analytics) loadClarity();
+            } catch (e) {}
+            window.addEventListener('ninetone:consent-analytics-granted', loadClarity);
+          })();
+        </script>
+
+        {/* TikTok Pixel — same pattern as Clarity. Only loads after marketing
+            consent (TikTok is a marketing pixel, not analytics). */}
+        <script is:inline define:vars={{ TIKTOK_PIXEL_ID }}>
+          (function () {
+            var loaded = false;
+            function loadTikTok() {
+              if (loaded) return;
+              loaded = true;
+              !function (w, d, t) {
+                w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie","holdConsent","revokeConsent","grantConsent"];ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e};ttq.load=function(e,n){var r="https://analytics.tiktok.com/i18n/pixel/events.js";ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=r,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n||{};var i=document.createElement("script");i.type="text/javascript",i.async=!0,i.src=r+"?sdkid="+e+"&lib="+t;var o=document.getElementsByTagName("script")[0];o.parentNode.insertBefore(i,o)};
+                ttq.load(TIKTOK_PIXEL_ID);
+                ttq.page();
+              }(window, document, 'ttq');
+            }
+            try {
+              var raw = localStorage.getItem('ninetone_consent_v1');
+              if (raw && JSON.parse(raw).marketing) loadTikTok();
+            } catch (e) {}
+            window.addEventListener('ninetone:consent-marketing-granted', loadTikTok);
+          })();
+        </script>
+      </>
+    )}
+
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
@@ -51,6 +167,12 @@ const noindex = String(import.meta.env.PUBLIC_NOINDEX ?? "true") !== "false";
     <title>{fullTitle}</title>
   </head>
   <body class="min-h-screen bg-ninetone-paper text-ninetone-ink antialiased">
+    {tracking && (
+      <noscript>
+        <iframe src={`https://www.googletagmanager.com/ns.html?id=${GTM_ID}`} title="Google Tag Manager" height="0" width="0" style="display:none;visibility:hidden"></iframe>
+        <img height="1" width="1" style="display:none" src={`https://www.facebook.com/tr?id=${META_PIXEL_ID}&ev=PageView&noscript=1`} />
+      </noscript>
+    )}
     <PromoBar promo={promo} />
     <Header theme={theme} lang={lang} />
     <main>
@@ -58,5 +180,6 @@ const noindex = String(import.meta.env.PUBLIC_NOINDEX ?? "true") !== "false";
     </main>
     <Footer theme={theme} lang={lang} />
     <CommandPalette lang={lang} />
+    {tracking && <CookieConsent />}
   </body>
 </html>
