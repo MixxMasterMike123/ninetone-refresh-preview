@@ -11,19 +11,25 @@ import { sectionAccent } from "../lib/sections";
 import { url } from "../lib/url";
 import {
   getFeaturedArtists,
+  getFeaturedClients,
   getNews,
 } from "../lib/ninetone";
 
 const collectionId = import.meta.env.SHOPIFY_HOMEPAGE_COLLECTION_ID;
 
-const [featuredArtists, latestNews] = await Promise.all([
+const [featuredArtists, featuredClients, latestNews] = await Promise.all([
   getFeaturedArtists(20).catch(() => []),
+  getFeaturedClients(6).catch(() => []),
   getNews().then((p) => p.slice(0, 4)).catch(() => []),
 ]);
 
 const heroArtist = featuredArtists[0];
 const heroArtistImage = heroArtist?.artistPicture_big ?? heroArtist?.artistPicture_small;
 const heroArtistName = String(heroArtist?.["Head Artist"] ?? "");
+
+const heroClient = featuredClients[0];
+const heroClientImage = heroClient?.artistPicture_big ?? heroClient?.artistPicture_small;
+const heroClientName = String(heroClient?.["Head Artist"] ?? "");
 
 const featuredNewsItem = latestNews[0];
 
@@ -255,15 +261,28 @@ const portals = [
           cta="Submit"
         />
 
-        <BentoTile
-          variant="accent"
-          theme="management"
-          href="/management"
-          kicker="Management"
-          heading="Public people need private structure."
-          blurb="Vi bygger systemet bakom människor som syns."
-          cta="See clients"
-        />
+        {heroClient ? (
+          <BentoTile
+            variant="image"
+            theme="management"
+            href={`/management/clients/${String(heroClient.SLUG ?? "")}`}
+            image={heroClientImage ? String(heroClientImage) : undefined}
+            kicker="Client in focus"
+            heading={heroClientName}
+            blurb={String(heroClient.artistPresentationShort ?? "")}
+            cta="View profile"
+          />
+        ) : (
+          <BentoTile
+            variant="accent"
+            theme="management"
+            href="/management"
+            kicker="Management"
+            heading="Public people need private structure."
+            blurb="Vi bygger systemet bakom människor som syns."
+            cta="See clients"
+          />
+        )}
       </BentoGrid>
     </div>
   </section>
