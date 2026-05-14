@@ -7,7 +7,7 @@ interface Props {
   /** Optional href — turns the whole tile into an anchor. */
   href?: string;
   /** Tile span on desktop. Mobile always stacks single-column. */
-  size?: "feature" | "wide" | "tall" | "default";
+  size?: "feature" | "xwide" | "wide" | "tall" | "default";
   /** Optional background image — covers the whole tile. */
   image?: string;
   /** Visual treatment. "ink" = dark, "paper" = warm off-white, "image" = full-bleed image with optional overlay. */
@@ -48,6 +48,7 @@ const effectiveVariant = image && (variant === "paper" || variant === "warm") ? 
 
 const sizeClass =
   size === "feature" ? "min-h-[420px] lg:min-h-[260px] lg:col-span-2 lg:row-span-2" :
+  size === "xwide" ? "min-h-[320px] lg:min-h-[260px] lg:col-span-3" :
   size === "wide" ? "min-h-[320px] lg:min-h-[260px] lg:col-span-2" :
   size === "tall" ? "lg:row-span-2" :
   "";
@@ -113,7 +114,7 @@ const linkProps = href
         class:list={[
           "font-display tracking-tight",
           size === "feature" ? "text-3xl leading-[1.05] md:text-5xl" :
-          size === "wide" ? "text-2xl leading-tight md:text-4xl" :
+          size === "xwide" || size === "wide" ? "text-2xl leading-tight md:text-4xl" :
           "text-xl leading-tight md:text-2xl",
         ]}
       >{heading}</h3>
