@@ -1,9 +1,11 @@
 ---
 /**
- * Discography — vertical stack of releases on an artist detail page.
+ * Discography — hero release + filterable cover grid.
  *
- * Each release is one editorial row: square cover left, copy + streaming
- * right. Mobile collapses to a single column. Newest first.
+ * Renders the newest release as a full editorial row (matching the prior
+ * single-release treatment) and everything else as a tight grid of square
+ * covers with title + date underneath. Filter chips at the top let users
+ * narrow by release type (All / Albums / EPs / Singles).
  *
  * Source: ArtistRelease[] from getArtistDetailWithReleases() in
  * src/lib/ninetone.ts. Cover URLs already point at the FM image proxy.
@@ -22,7 +24,7 @@ const { releases, artistName, theme = "records" } = Astro.props;
 const accent = sectionAccent[theme];
 
 function formatDate(fm: string): string {
-  // FM stores MM/DD/YYYY. Render as "27 Jun 2025" — typographically calmer.
+  // FM stores MM/DD/YYYY. Render as "27 Jun 2025".
   const m = fm.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (!m) return fm;
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -37,6 +39,36 @@ const PLATFORMS: Array<{ key: keyof ArtistRelease["streaming"]; label: string; g
   { key: "amazon", label: "Amazon Music", glyph: "Az" },
   { key: "tidal", label: "Tidal", glyph: "Td" },
 ];
+
+// Normalize the FM `type` value to a filter slug.
+function typeSlug(raw: string): string {
+  const t = (raw || "").toLowerCase().trim();
+  if (t.startsWith("alb")) return "album";
+  if (t.startsWith("ep")) return "ep";
+  if (t.startsWith("sing")) return "single";
+  return "other";
+}
+
+// Split releases: first (newest) is the hero; the rest go in the grid.
+const [hero, ...rest] = releases;
+
+// Pre-compute which filter chips to show — only the ones that actually
+// have at least one matching release in `rest`. Avoids dead chips.
+const restWithSlugs = rest.map((r) => ({ release: r, slug: typeSlug(r.type) }));
+const counts = restWithSlugs.reduce(
+  (acc, { slug }) => {
+    acc[slug] = (acc[slug] || 0) + 1;
+    return acc;
+  },
+  {} as Record<string, number>,
+);
+const FILTER_CHIPS: Array<{ slug: string; label: string }> = [
+  { slug: "all", label: "All" },
+  { slug: "album", label: "Albums" },
+  { slug: "ep", label: "EPs" },
+  { slug: "single", label: "Singles" },
+];
+const visibleChips = FILTER_CHIPS.filter((c) => c.slug === "all" || counts[c.slug] > 0);
 ---
 
 {releases.length > 0 && (
@@ -54,83 +86,236 @@ const PLATFORMS: Array<{ key: keyof ArtistRelease["streaming"]; label: string; g
         </p>
       </header>
 
-      <ol class="flex flex-col gap-y-20 md:gap-y-28">
-        {releases.map((r) => {
-          const primaryHref = r.urlRelease || r.streaming.spotify || "#";
-          const platforms = PLATFORMS.filter((p) => r.streaming[p.key]);
-          return (
-            <li class="group grid gap-8 md:grid-cols-12 md:gap-12">
-              {/* Cover */}
-              <a
-                href={primaryHref}
-                target="_blank"
-                rel="noopener"
-                aria-label={`Listen to ${r.album} by ${artistName}`}
-                class="fm-img-frame relative block aspect-square overflow-hidden bg-ninetone-paper-warm md:col-span-5"
-              >
-                <img
-                  src={r.cover}
-                  alt={`${r.album} cover art`}
-                  class="fm-img h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]"
-                  loading="lazy"
-                  onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"
-                />
-                <span class={`absolute left-0 top-0 h-1 w-12 ${accent.bg} transition-[width] duration-500 ease-out group-hover:w-1/2`} aria-hidden></span>
-              </a>
+      {/* Hero release — full editorial treatment */}
+      {hero && (() => {
+        const r = hero;
+        const primaryHref = r.urlRelease || r.streaming.spotify || "#";
+        const platforms = PLATFORMS.filter((p) => r.streaming[p.key]);
+        return (
+          <article class="group grid gap-8 md:grid-cols-12 md:gap-12">
+            <a
+              href={primaryHref}
+              target="_blank"
+              rel="noopener"
+              aria-label={`Listen to ${r.album} by ${artistName}`}
+              class="fm-img-frame relative block aspect-square overflow-hidden bg-ninetone-paper-warm md:col-span-5"
+            >
+              <img
+                src={r.cover}
+                alt={`${r.album} cover art`}
+                class="fm-img h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]"
+                loading="lazy"
+                onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"
+              />
+              <span class={`absolute left-0 top-0 h-1 w-12 ${accent.bg} transition-[width] duration-500 ease-out group-hover:w-1/2`} aria-hidden></span>
+            </a>
 
-              {/* Copy + streaming */}
-              <div class="flex flex-col gap-5 md:col-span-7 md:pt-2">
-                <span class={`kicker ${accent.text}`}>
-                  {r.type || "Release"}
-                  <span class="mx-2 opacity-40" aria-hidden>·</span>
-                  <time>{formatDate(r.releaseDate)}</time>
-                </span>
+            <div class="flex flex-col gap-5 md:col-span-7 md:pt-2">
+              <span class={`kicker ${accent.text}`}>
+                Latest release
+                <span class="mx-2 opacity-40" aria-hidden>·</span>
+                {r.type || "Release"}
+                <span class="mx-2 opacity-40" aria-hidden>·</span>
+                <time>{formatDate(r.releaseDate)}</time>
+              </span>
 
-                <h3 class="font-display text-3xl font-medium leading-[1.05] tracking-tight md:text-5xl">
-                  {r.album}
-                </h3>
+              <h3 class="font-display text-3xl font-medium leading-[1.05] tracking-tight md:text-5xl">
+                {r.album}
+              </h3>
 
-                {r.pitch && (
-                  <p class="max-w-2xl font-display text-xl italic leading-snug tracking-tight text-ninetone-ink/75 md:text-2xl">
-                    {r.pitch}
-                  </p>
-                )}
+              {r.pitch && (
+                <p class="max-w-2xl font-display text-xl italic leading-snug tracking-tight text-ninetone-ink/75 md:text-2xl">
+                  {r.pitch}
+                </p>
+              )}
 
-                {r.urlRelease && (
-                  <a
-                    href={r.urlRelease}
-                    target="_blank"
-                    rel="noopener"
-                    class={`mt-2 inline-flex items-center gap-2 self-start ${accent.cta} px-5 py-3 text-sm font-semibold transition-colors`}
-                  >
-                    Listen on your platform
-                    <span aria-hidden>→</span>
-                  </a>
-                )}
+              {r.urlRelease && (
+                <a
+                  href={r.urlRelease}
+                  target="_blank"
+                  rel="noopener"
+                  class={`mt-2 inline-flex items-center gap-2 self-start ${accent.cta} px-5 py-3 text-sm font-semibold transition-colors`}
+                >
+                  Listen on your platform
+                  <span aria-hidden>→</span>
+                </a>
+              )}
 
-                {platforms.length > 0 && (
-                  <ul class="mt-1 flex flex-wrap gap-2">
-                    {platforms.map((p) => (
-                      <li>
-                        <a
-                          href={r.streaming[p.key]!}
-                          target="_blank"
-                          rel="noopener"
-                          aria-label={`${r.album} on ${p.label}`}
-                          title={p.label}
-                          class="inline-flex h-9 min-w-9 items-center justify-center border border-ninetone-ink/15 px-2.5 text-[0.6875rem] font-semibold text-ninetone-ink/65 transition-colors hover:border-ninetone-ink hover:text-ninetone-ink"
-                        >
-                          {p.glyph || p.label.slice(0, 2)}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
+              {platforms.length > 0 && (
+                <ul class="mt-1 flex flex-wrap gap-2">
+                  {platforms.map((p) => (
+                    <li>
+                      <a
+                        href={r.streaming[p.key]!}
+                        target="_blank"
+                        rel="noopener"
+                        aria-label={`${r.album} on ${p.label}`}
+                        title={p.label}
+                        class="inline-flex h-9 min-w-9 items-center justify-center border border-ninetone-ink/15 px-2.5 text-[0.6875rem] font-semibold text-ninetone-ink/65 transition-colors hover:border-ninetone-ink hover:text-ninetone-ink"
+                      >
+                        {p.glyph || p.label.slice(0, 2)}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </article>
+        );
+      })()}
+
+      {/* Grid of remaining releases */}
+      {rest.length > 0 && (
+        <>
+          <div class="mt-20 md:mt-28">
+            <div class="mb-8 flex flex-wrap items-end justify-between gap-4 border-t border-ninetone-rule pt-8">
+              <span class={`kicker ${accent.text}`}>More releases</span>
+              {visibleChips.length > 1 && (
+                <div class="flex flex-wrap gap-2" role="tablist" aria-label="Filter releases by type" data-discog-filters>
+                  {visibleChips.map((c, i) => (
+                    <button
+                      type="button"
+                      role="tab"
+                      data-discog-filter={c.slug}
+                      aria-selected={i === 0 ? "true" : "false"}
+                      class="discog-chip"
+                    >
+                      {c.label}
+                      {c.slug !== "all" && (
+                        <span class="discog-chip__count">{counts[c.slug]}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <ul class="grid grid-cols-2 gap-x-5 gap-y-10 md:grid-cols-3 lg:grid-cols-4" data-discog-grid>
+              {restWithSlugs.map(({ release: r, slug }) => {
+                const primaryHref = r.urlRelease || r.streaming.spotify || "#";
+                return (
+                  <li data-discog-item data-discog-type={slug}>
+                    <a
+                      href={primaryHref}
+                      target="_blank"
+                      rel="noopener"
+                      aria-label={`Listen to ${r.album} by ${artistName}`}
+                      class="group flex flex-col gap-3"
+                    >
+                      <div class="fm-img-frame relative aspect-square overflow-hidden bg-ninetone-paper-warm">
+                        <img
+                          src={r.cover}
+                          alt={`${r.album} cover art`}
+                          class="fm-img h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
+                          loading="lazy"
+                          onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"
+                        />
+                        <span class={`absolute left-0 top-0 h-1 w-10 ${accent.bg} transition-[width] duration-300 ease-out group-hover:w-full`} aria-hidden></span>
+                      </div>
+                      <div class="flex flex-col gap-1">
+                        <span class={`kicker ${accent.text}`}>
+                          {r.type || "Release"}
+                          <span class="mx-1.5 opacity-40" aria-hidden>·</span>
+                          <time>{formatDate(r.releaseDate)}</time>
+                        </span>
+                        <h4 class="font-display text-lg font-medium leading-tight tracking-tight transition-colors group-hover:opacity-70 md:text-xl">
+                          {r.album}
+                        </h4>
+                      </div>
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <p class="discog-empty mt-16 hidden text-center text-sm italic text-ninetone-ink/55" data-discog-empty>
+              No releases of this type.
+            </p>
+          </div>
+        </>
+      )}
     </div>
+
+    {visibleChips.length > 1 && (
+      <script is:inline>
+        (function () {
+          document.querySelectorAll('[data-discog-filters]').forEach(function (group) {
+            // Each discography section has its own scope (a single artist page
+            // only renders one anyway, but the markup is reusable).
+            var container = group.closest('section');
+            if (!container) return;
+            var grid = container.querySelector('[data-discog-grid]');
+            var emptyMsg = container.querySelector('[data-discog-empty]');
+            var chips = group.querySelectorAll('[data-discog-filter]');
+
+            function applyFilter(slug) {
+              var anyVisible = false;
+              container.querySelectorAll('[data-discog-item]').forEach(function (item) {
+                var t = item.getAttribute('data-discog-type');
+                var show = slug === 'all' || t === slug;
+                item.hidden = !show;
+                if (show) anyVisible = true;
+              });
+              if (emptyMsg) emptyMsg.hidden = anyVisible;
+              chips.forEach(function (c) {
+                c.setAttribute('aria-selected', c.getAttribute('data-discog-filter') === slug ? 'true' : 'false');
+              });
+            }
+
+            chips.forEach(function (chip) {
+              chip.addEventListener('click', function () {
+                applyFilter(chip.getAttribute('data-discog-filter'));
+              });
+            });
+          });
+        })();
+      </script>
+    )}
   </section>
 )}
+
+<style>
+  .discog-chip {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 0.5rem 0.875rem;
+    border: 1px solid rgba(10, 20, 32, 0.18);
+    background: transparent;
+    color: rgba(10, 20, 32, 0.6);
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .discog-chip:hover {
+    border-color: var(--color-ninetone-ink);
+    color: var(--color-ninetone-ink);
+  }
+
+  .discog-chip[aria-selected="true"] {
+    background: var(--color-ninetone-ink);
+    border-color: var(--color-ninetone-ink);
+    color: var(--color-ninetone-paper);
+  }
+
+  .discog-chip__count {
+    font-size: 0.625rem;
+    opacity: 0.55;
+    letter-spacing: 0;
+  }
+
+  .discog-chip[aria-selected="true"] .discog-chip__count {
+    opacity: 0.7;
+  }
+
+  /* Hidden state on filter items — Astro hides via `hidden` attr; this just
+     prevents layout shift if Tailwind's `hidden` utility ever gets in the way. */
+  [data-discog-item][hidden] { display: none; }
+  [data-discog-empty][hidden] { display: none; }
+</style>
