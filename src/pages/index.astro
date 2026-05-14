@@ -261,7 +261,7 @@ const portals = [
           cta="Submit"
         />
 
-        {heroClient ? (
+        {heroClient && (
           <BentoTile
             variant="image"
             theme="management"
@@ -272,17 +272,17 @@ const portals = [
             blurb={String(heroClient.artistPresentationShort ?? "")}
             cta="View profile"
           />
-        ) : (
-          <BentoTile
-            variant="accent"
-            theme="management"
-            href="/management"
-            kicker="Management"
-            heading="Public people need private structure."
-            blurb="Vi bygger systemet bakom människor som syns."
-            cta="See clients"
-          />
         )}
+
+        <BentoTile
+          variant="accent"
+          theme="management"
+          href="/management"
+          kicker="Management"
+          heading="Public people need private structure."
+          blurb="Vi bygger systemet bakom människor som syns."
+          cta="See clients"
+        />
       </BentoGrid>
     </div>
   </section>
