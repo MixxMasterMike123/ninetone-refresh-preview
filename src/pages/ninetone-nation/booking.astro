@@ -12,12 +12,17 @@ try {
   fetchError = (e as Error).message;
 }
 
+// Only render categories that have at least one talent — empty
+// categories add noise without adding value. The data still
+// exists in FM; this is purely a render filter.
+const populatedCategories = categories.filter((c) => c.artists.length > 0);
+
 // Section intro copy: pull from WebPosts (same as before).
 const webPosts = await getWebPostSection("Ninetone Nation").catch(() => null);
 const introBody =
   webPosts?.blocks?.find((b) => b.message)?.message ?? "";
 
-const totalArtists = categories.reduce((n, c) => n + c.artists.length, 0);
+const totalArtists = populatedCategories.reduce((n, c) => n + c.artists.length, 0);
 
 // Slugify category names for in-page anchors (and stable element ids)
 function slugifyTag(s: string): string {
@@ -48,7 +53,7 @@ function slugifyTag(s: string): string {
         </p>
       )}
 
-      {categories.length > 1 && (
+      {populatedCategories.length > 1 && (
         <nav
           class="mb-12 -mx-6 overflow-x-auto border-b border-ninetone-rule [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           aria-label="Jump to category"
@@ -58,7 +63,7 @@ function slugifyTag(s: string): string {
               <span class="kicker text-ninetone-green">{totalArtists} bookable</span>
             </li>
             <li class="mx-3 h-4 w-px shrink-0 bg-ninetone-rule" aria-hidden></li>
-            {categories.map((c) => (
+            {populatedCategories.map((c) => (
               <li class="shrink-0">
                 <a
                   href={`#cat-${slugifyTag(c.tag)}`}
@@ -74,7 +79,7 @@ function slugifyTag(s: string): string {
       )}
 
       <div class="space-y-24">
-        {categories.map((c) => {
+        {populatedCategories.map((c) => {
           const id = `cat-${slugifyTag(c.tag)}`;
           return (
             <section id={id} class="scroll-mt-28">
@@ -101,25 +106,20 @@ function slugifyTag(s: string): string {
 
               <div class={`mt-2 h-px w-full bg-ninetone-green opacity-80`} aria-hidden></div>
 
-              {c.artists.length === 0 ? (
-                <p class="mt-10 text-sm text-ninetone-ink/55">No talents in this category yet.</p>
-              ) : (
-                <div class="mt-10 grid grid-cols-2 gap-x-6 gap-y-12 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                  {c.artists.map((a) => (
-                    <ArtistCard
-                      theme="nation"
-                      name={a.name}
-                      slug={a.slug}
-                      blurb={a.blurb}
-                      image={a.imageSmall ?? a.imageBig}
-                      tags={[c.tag]}
-                      ctaLabel="Book"
-                      kicker={a.highlight ? "Featured" : undefined}
-                      socials={a.socials}
-                    />
-                  ))}
-                </div>
-              )}
+              <div class="mt-10 grid grid-cols-2 gap-x-6 gap-y-12 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                {c.artists.map((a) => (
+                  <ArtistCard
+                    theme="nation"
+                    name={a.name}
+                    slug={a.slug}
+                    blurb={a.blurb}
+                    image={a.imageSmall ?? a.imageBig}
+                    tags={[c.tag]}
+                    ctaLabel="Book"
+                    socials={a.socials}
+                  />
+                ))}
+              </div>
             </section>
           );
         })}

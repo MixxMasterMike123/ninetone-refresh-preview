@@ -65,6 +65,8 @@ The site is served from a sub-path (`/ninetone-refresh-preview/`) on GH Pages. *
 8. **Italic display for taglines** under headlines (`font-display italic` with `text-ninetone-ink/75`). Keeps voice without raising volume.
 9. **Three-archetype rule:** every page is one of (a) Editorial section page (kicker + h1 + lede + accent rule), (b) Detail page (sticky split, image col-span-5 / content col-span-7), (c) Landing/portal. See DESIGN.md §3.
 10. **No new fonts** without updating both [Base.astro](src/layouts/Base.astro) `<link>` AND `--font-*` tokens in [global.css](src/styles/global.css). Current stack: Newsreader (display) + Space Grotesk (sans) + Space Mono (mono). All Google Fonts, all OFL.
+11. **Paper-canvas is the brand — no dark mode pre-launch.** Don't propose a site-wide dark toggle; the editorial paper identity is load-bearing. Post-launch, the only defensible surface for `prefers-color-scheme` is the news article reading pages, not the brand surface.
+12. **Hide empty list sections, don't render empty-state copy.** When a category/list has zero items, filter it out of the render entirely (see `populatedCategories` pattern in [src/pages/ninetone-nation/booking.astro](src/pages/ninetone-nation/booking.astro)). FM data stays untouched so sections reappear automatically when populated. Exception: explicit user-action results (search, filter) — those *should* show an empty state.
 
 **Reusable primitives — check before building anew:** `BentoTile`, `ArtistCard`, `NewsCard`, `MerchCard`, `RosterStrip`, `MetricsPanel`, `EditorialNewsBlock`, `MarqueeBand`, `StreamingRow`, `ContactForm`, `SectionIntro`, `SplitPortalHero`. Full inventory in DESIGN.md §2.
 
