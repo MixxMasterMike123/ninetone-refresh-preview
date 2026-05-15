@@ -60,13 +60,14 @@ const href = url(hrefOverride ?? (
   `/records/artists/${slug}`
 ));
 
-const socialEntries: Array<{ label: string; href: string; glyph: string }> = [];
-if (socials?.spotify) socialEntries.push({ label: "Spotify", href: socials.spotify, glyph: "S" });
-if (socials?.apple) socialEntries.push({ label: "Apple Music", href: socials.apple, glyph: "" });
-if (socials?.youtubeMusic || socials?.youtube) socialEntries.push({ label: "YouTube", href: socials.youtubeMusic || socials.youtube!, glyph: "▶" });
-if (socials?.soundcloud) socialEntries.push({ label: "SoundCloud", href: socials.soundcloud, glyph: "☁" });
-if (socials?.instagram) socialEntries.push({ label: "Instagram", href: socials.instagram, glyph: "ig" });
-if (socials?.tiktok) socialEntries.push({ label: "TikTok", href: socials.tiktok, glyph: "tk" });
+type SocialIcon = "spotify" | "apple" | "youtube" | "soundcloud" | "instagram" | "tiktok";
+const socialEntries: Array<{ label: string; href: string; icon: SocialIcon }> = [];
+if (socials?.spotify) socialEntries.push({ label: "Spotify", href: socials.spotify, icon: "spotify" });
+if (socials?.apple) socialEntries.push({ label: "Apple Music", href: socials.apple, icon: "apple" });
+if (socials?.youtubeMusic || socials?.youtube) socialEntries.push({ label: "YouTube", href: socials.youtubeMusic || socials.youtube!, icon: "youtube" });
+if (socials?.soundcloud) socialEntries.push({ label: "SoundCloud", href: socials.soundcloud, icon: "soundcloud" });
+if (socials?.instagram) socialEntries.push({ label: "Instagram", href: socials.instagram, icon: "instagram" });
+if (socials?.tiktok) socialEntries.push({ label: "TikTok", href: socials.tiktok, icon: "tiktok" });
 ---
 
 <article class="group relative flex flex-col bg-ninetone-paper-warm text-ninetone-ink">
@@ -121,11 +122,42 @@ if (socials?.tiktok) socialEntries.push({ label: "TikTok", href: socials.tiktok,
             href={s.href}
             target="_blank"
             rel="noopener"
-            class="inline-flex h-6 min-w-6 items-center justify-center border border-ninetone-ink/15 px-1.5 text-[0.625rem] font-semibold text-ninetone-ink/70 transition-colors hover:border-ninetone-ink hover:text-ninetone-ink"
+            class="inline-flex h-6 w-6 items-center justify-center border border-ninetone-ink/15 text-ninetone-ink/70 transition-colors hover:border-ninetone-ink hover:text-ninetone-ink"
             aria-label={s.label}
             title={s.label}
           >
-            {s.glyph || s.label.slice(0, 2)}
+            {s.icon === "spotify" && (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.586 14.424a.622.622 0 01-.857.207c-2.348-1.435-5.304-1.76-8.785-.964a.622.622 0 11-.277-1.213c3.808-.87 7.077-.496 9.713 1.114a.622.622 0 01.206.856zm1.223-2.722a.778.778 0 01-1.07.257c-2.688-1.652-6.785-2.131-9.965-1.166a.778.778 0 11-.452-1.49c3.633-1.102 8.147-.568 11.232 1.328a.778.778 0 01.255 1.07zm.105-2.835c-3.225-1.915-8.542-2.09-11.62-1.156a.933.933 0 11-.542-1.787c3.532-1.072 9.404-.866 13.115 1.337a.933.933 0 01-.953 1.606z"/>
+              </svg>
+            )}
+            {s.icon === "apple" && (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true">
+                <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+              </svg>
+            )}
+            {s.icon === "youtube" && (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true">
+                <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+              </svg>
+            )}
+            {s.icon === "soundcloud" && (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true">
+                <path d="M11.56 8.87V17h8.76c1.85-.13 3.32-1.67 3.32-3.56 0-1.97-1.6-3.57-3.57-3.57-.49 0-.96.1-1.38.28-.28-3.34-3.07-5.96-6.48-5.96-.83 0-1.62.16-2.35.45-.18.07-.3.25-.3.45zM9.5 9.39c-.36 0-.71.04-1.04.11L8.43 17h2.14V9.49c-.33-.07-.69-.1-1.07-.1zm-2.6.74L7 17h1.5l-.1-6.87a4.7 4.7 0 00-1.5 0zM4.85 11.13L4.5 17h1.5l-.35-5.87a3.5 3.5 0 00-.8 0zM2 13.91l-.35 1.6.35 1.49h1l.35-1.49-.35-1.6z"/>
+              </svg>
+            )}
+            {s.icon === "instagram" && (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5" aria-hidden="true">
+                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                <path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"></path>
+                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+              </svg>
+            )}
+            {s.icon === "tiktok" && (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true">
+                <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005.8 20.1a6.34 6.34 0 0010.86-4.43V8.85a8.16 8.16 0 004.77 1.52V6.93a4.85 4.85 0 01-1.84-.24z"/>
+              </svg>
+            )}
           </a>
         </li>
       ))}
