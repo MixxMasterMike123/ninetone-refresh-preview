@@ -79,6 +79,7 @@ const sortedTags = Array.from(tagCounts.entries())
                 blurb={String(c.clientPresentationString ?? c.artistPresentationShort ?? "")}
                 image={c.artistPicture_small ? String(c.artistPicture_small) : undefined}
                 tags={tags}
+                highlight={String(c.highLight_client ?? "") === "true"}
                 socials={{
                   instagram: c.url_instagram ? String(c.url_instagram) : undefined,
                   tiktok: c.url_tiktok_artist ? String(c.url_tiktok_artist) : undefined,

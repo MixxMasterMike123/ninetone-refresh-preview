@@ -12,6 +12,12 @@ interface Props {
 
 const { limit = 2, heading = "News" } = Astro.props as Props;
 
+const hasNewsVideo = (p: Record<string, unknown>): boolean =>
+  ["ytLinkA", "ytLinkB", "ytLinkC", "ytLinkD"].some((k) => {
+    const v = p[k];
+    return typeof v === "string" && v.trim().length > 0;
+  });
+
 let posts: Awaited<ReturnType<typeof getNews>> = [];
 try {
   posts = (await getNews()).slice(0, limit);
@@ -43,6 +49,7 @@ if (posts.length === 0) return Astro.redirect("");
           date={String(p.Date ?? "")}
           author={String(p["Created By"] ?? "")}
           category={String(p.category ?? "")}
+          hasVideo={hasNewsVideo(p)}
           size="lg"
         />
       ))}

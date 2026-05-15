@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
+    "postbuild": "node scripts/audit-dist.mjs",
+    "audit": "node scripts/audit-dist.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },

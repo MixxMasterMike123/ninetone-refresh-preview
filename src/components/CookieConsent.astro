@@ -5,6 +5,7 @@
 // can reopen the banner. Wires Google Consent Mode v2, Meta Pixel
 // (fbq consent), TikTok Pixel (ttq consent), Clarity gating on
 // analytics consent.
+import { url } from "../lib/url";
 ---
 <div id="cookie-consent" class="cookie-consent" hidden role="dialog" aria-labelledby="cookie-consent-title" aria-describedby="cookie-consent-desc">
   <div class="cookie-consent__inner">
@@ -13,7 +14,7 @@
       <p id="cookie-consent-desc" class="cookie-consent__text">
         <strong id="cookie-consent-title" class="cookie-consent__title">Vi använder cookies</strong>
         för att webbplatsen ska fungera, för att förstå hur besökare använder den och för att mäta marknadsföring.
-        <a href="/integritet">Läs mer</a>.
+        <a href={url("/integritet")}>Läs mer</a>.
       </p>
     </div>
 

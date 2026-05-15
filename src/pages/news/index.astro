@@ -3,6 +3,12 @@ import Base from "../../layouts/Base.astro";
 import NewsCard from "../../components/NewsCard.astro";
 import { getNews } from "../../lib/ninetone";
 
+const hasNewsVideo = (p: Record<string, unknown>): boolean =>
+  ["ytLinkA", "ytLinkB", "ytLinkC", "ytLinkD"].some((k) => {
+    const v = p[k];
+    return typeof v === "string" && v.trim().length > 0;
+  });
+
 let posts: Awaited<ReturnType<typeof getNews>> = [];
 let fetchError: string | null = null;
 try {
@@ -51,6 +57,7 @@ const grid = rest.slice(2);
           date={String(lead.Date ?? "")}
           author={String(lead["Created By"] ?? "")}
           category={String(lead.category ?? "")}
+          hasVideo={hasNewsVideo(lead)}
           size="lg"
         />
       </div>
@@ -68,6 +75,7 @@ const grid = rest.slice(2);
               date={String(p.Date ?? "")}
               author={String(p["Created By"] ?? "")}
               category={String(p.category ?? "")}
+              hasVideo={hasNewsVideo(p)}
               size="md"
             />
           ))}
@@ -89,6 +97,7 @@ const grid = rest.slice(2);
               excerpt={String(p.shortMessage ?? p.Message ?? "")}
               date={String(p.Date ?? "")}
               category={String(p.category ?? "")}
+              hasVideo={hasNewsVideo(p)}
               size="sm"
             />
           ))}

@@ -22,7 +22,12 @@ const navItems = [
   { href: "/team", labelEn: "Team", labelSv: "Team", match: ["/team"] },
 ];
 
-const pathname = Astro.url.pathname;
+// Strip the configured base so matches work under `/ninetone-refresh-preview`.
+const basePrefix = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+const rawPath = Astro.url.pathname.replace(/\/$/, "") || "/";
+const pathname = basePrefix && rawPath.startsWith(basePrefix)
+  ? rawPath.slice(basePrefix.length) || "/"
+  : rawPath;
 const isActive = (matches: string[]) =>
   matches.some((m) => (m === "/" ? pathname === "/" : pathname === m || pathname.startsWith(`${m}/`)));
 ---

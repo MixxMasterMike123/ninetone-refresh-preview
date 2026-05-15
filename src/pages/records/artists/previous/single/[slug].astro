@@ -138,6 +138,7 @@ const ytLinks = [String(artist.yotubeHighlight_one ?? ""), String(artist.yotubeH
                       image={p.image_webp ? String(p.image_webp) : undefined}
                       date={String(p.Date ?? "")}
                       category={String(p.category ?? "")}
+                      hasVideo={["ytLinkA","ytLinkB","ytLinkC","ytLinkD"].some((k) => typeof (p as Record<string, unknown>)[k] === "string" && ((p as Record<string, unknown>)[k] as string).trim().length > 0)}
                       size="sm"
                     />
                   </li>

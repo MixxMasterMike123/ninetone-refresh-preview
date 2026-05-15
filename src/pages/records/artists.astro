@@ -76,6 +76,7 @@ const sortedTags = Array.from(tagCounts.entries())
                 blurb={String(a.artistPresentationShort ?? "")}
                 image={a.artistPicture_small ? String(a.artistPicture_small) : undefined}
                 tags={tags}
+                highlight={String(a.highLight_music ?? "") === "true"}
                 socials={{
                   spotify: a.url_spotify ? String(a.url_spotify) : undefined,
                   apple: a.url_applemusic ? String(a.url_applemusic) : undefined,

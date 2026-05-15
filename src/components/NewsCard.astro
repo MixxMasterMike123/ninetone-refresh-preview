@@ -12,9 +12,11 @@ interface Props {
   lang?: "en" | "sv";
   /** Visual scale — sm/md/lg drive type sizes for grid hierarchy. */
   size?: "sm" | "md" | "lg";
+  /** Article includes one or more embedded YouTube videos (ytLinkA-D). */
+  hasVideo?: boolean;
 }
 
-const { title, slug, image, excerpt, date, author, category, lang = "en", size = "md" } = Astro.props;
+const { title, slug, image, excerpt, date, author, category, lang = "en", size = "md", hasVideo = false } = Astro.props;
 const readMore = lang === "sv" ? "Läs" : "Read";
 const href = url(`/news/${slug}`);
 
@@ -39,6 +41,17 @@ const aspectClass = size === "lg" ? "aspect-[16/9]" : "aspect-[16/10]";
       />
     )}
     <span class="absolute left-0 top-0 h-1 w-12 bg-ninetone-red transition-[width] duration-300 ease-out group-hover:w-full" aria-hidden></span>
+    {hasVideo && (
+      <span
+        class="absolute bottom-3 right-3 inline-flex h-9 w-9 items-center justify-center bg-ninetone-paper/95 text-ninetone-ink shadow-[0_1px_0_rgba(0,0,0,0.04)] backdrop-blur-sm"
+        aria-label={lang === "sv" ? "Innehåller video" : "Contains video"}
+        title={lang === "sv" ? "Innehåller video" : "Contains video"}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true">
+          <path d="M8 5v14l11-7z"></path>
+        </svg>
+      </span>
+    )}
   </a>
 
   <div class="flex flex-1 flex-col gap-3 pt-4">

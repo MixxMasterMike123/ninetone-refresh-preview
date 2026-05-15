@@ -27,6 +27,12 @@ const {
   variant = "warm",
 } = Astro.props as Props;
 
+const hasNewsVideo = (p: Record<string, unknown>): boolean =>
+  ["ytLinkA", "ytLinkB", "ytLinkC", "ytLinkD"].some((k) => {
+    const v = p[k];
+    return typeof v === "string" && v.trim().length > 0;
+  });
+
 let posts: Awaited<ReturnType<typeof getNews>> = [];
 try {
   posts = (await getNews()).slice(0, limit);
@@ -66,6 +72,7 @@ const bg = variant === "warm" ? "bg-ninetone-paper-warm" : "bg-ninetone-paper";
             date={String(lead.Date ?? "")}
             author={String(lead["Created By"] ?? "")}
             category={String(lead.category ?? "")}
+            hasVideo={hasNewsVideo(lead)}
             size="lg"
           />
         </div>
@@ -81,6 +88,7 @@ const bg = variant === "warm" ? "bg-ninetone-paper-warm" : "bg-ninetone-paper";
                 excerpt={String(p.shortMessage ?? p.Message ?? "")}
                 date={String(p.Date ?? "")}
                 category={String(p.category ?? "")}
+                hasVideo={hasNewsVideo(p)}
                 size="sm"
               />
             </li>
