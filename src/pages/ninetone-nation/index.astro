@@ -13,16 +13,16 @@ let webPosts = await getWebPostSection("Ninetone Nation").catch(() => null);
     theme="nation"
     kicker="Ninetone Nation"
     left={{
-      href: "/team",
-      label: "The team",
-      blurb: "The booking desk — the people handling every detail behind the scenes.",
-      bgImage: "/images/meetTheTeamBanner.png",
-    }}
-    right={{
       href: "/ninetone-nation/booking",
       label: "Entertainers",
       blurb: "Sweden's leading artists, hosts, and speakers — available for your event.",
       bgImage: "/images/nationBannerSection.png",
+    }}
+    right={{
+      href: "/team",
+      label: "The team",
+      blurb: "The booking desk — the people handling every detail behind the scenes.",
+      bgImage: "/images/meetTheTeamBanner.png",
     }}
   />
   <WebPostsSection data={webPosts} />

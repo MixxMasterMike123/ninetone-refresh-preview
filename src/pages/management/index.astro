@@ -13,16 +13,16 @@ let webPosts = await getWebPostSection("Ninetone Management").catch(() => null);
     theme="management"
     kicker="Ninetone Management"
     left={{
-      href: "/team",
-      label: "The team",
-      blurb: "Day-to-day partners — the people building careers alongside our clients.",
-      bgImage: "/images/meetTheTeamBanner.png",
-    }}
-    right={{
       href: "/management/clients",
       label: "Clients",
       blurb: "A roster of Sweden's most extraordinary creators and influencers.",
       bgImage: "/images/clientsBanner-management.png",
+    }}
+    right={{
+      href: "/team",
+      label: "The team",
+      blurb: "Day-to-day partners — the people building careers alongside our clients.",
+      bgImage: "/images/meetTheTeamBanner.png",
     }}
   />
   <WebPostsSection data={webPosts} />
