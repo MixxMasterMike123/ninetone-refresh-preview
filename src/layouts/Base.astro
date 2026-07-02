@@ -26,7 +26,12 @@ const {
 const fullTitle = title === "Ninetone Group" ? title : `${title} | Ninetone Group`;
 
 // Promo bar is opt-in: nothing shows unless a "Promo" WebPosts category exists.
-const promo = await getPromo().catch(() => null);
+// Optional chrome — a failed fetch must not take the page down, but it should
+// be visible in build/Worker logs.
+const promo = await getPromo().catch((err) => {
+  console.error("[base] promo fetch failed:", err);
+  return null;
+});
 
 // Site-wide noindex while the preview is gated. Flip PUBLIC_NOINDEX=false (or
 // unset) at launch. Belt-and-braces with public/robots.txt and the X-Robots-Tag

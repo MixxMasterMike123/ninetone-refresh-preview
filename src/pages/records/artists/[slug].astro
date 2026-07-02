@@ -18,12 +18,22 @@ export async function getStaticPaths() {
   }));
 }
 
-const { artist, allArtists } = Astro.props as { artist: Record<string, unknown>; allArtists: Record<string, unknown>[] };
+// Static build (gh): artist arrives via getStaticPaths props.
+// Live server (cf): resolve at request time from the cached roster.
+let { artist, allArtists } = Astro.props as {
+  artist?: Record<string, unknown>;
+  allArtists?: Record<string, unknown>[];
+};
+if (!artist || !allArtists) {
+  allArtists = await getArtists();
+  artist = allArtists.find((a) => String(a.SLUG ?? "") === Astro.params.slug);
+  if (!artist) return Astro.rewrite("/404");
+}
 const slug = String(artist.SLUG ?? "");
 
-// Pull releases portal for the discography section. Errors out silently —
-// detail page still renders without releases if FM hiccups.
-const detail = await getArtistDetailWithReleases(slug).catch(() => null);
+// Discography is core page content — a failed fetch fails the render (the
+// data layer serves last-known-good on transient errors; see lib/cache.ts).
+const detail = await getArtistDetailWithReleases(slug);
 const releases = detail?.releases ?? [];
 
 const name = String(artist["Head Artist"] ?? "");
@@ -57,16 +67,22 @@ const socials = {
 const spotifyArtistMatch = String(artist.url_spotify_artist ?? "").match(/embed\/artist\/([a-zA-Z0-9]+)/);
 const spotifyArtistId = spotifyArtistMatch ? spotifyArtistMatch[1] : null;
 
+// News strip + merch are optional embellishments — log failures, don't fail
+// the page over them.
 let latestNews: Awaited<ReturnType<typeof getNewsForArtist>> = [];
 try {
   latestNews = await getNewsForArtist(name, 4);
-} catch {}
+} catch (err) {
+  console.error(`[artist:${slug}] news strip failed:`, err);
+}
 
 let merch: Awaited<ReturnType<typeof getProducts>> = [];
 if (collectionId) {
   try {
     merch = await getProducts({ collectionId, limit: 8 });
-  } catch {}
+  } catch (err) {
+    console.error(`[artist:${slug}] merch fetch failed:`, err);
+  }
 }
 
 // "In good company" — same-genre artists ranked by tag overlap, padded with

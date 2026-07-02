@@ -4,13 +4,9 @@ import ArtistCard from "../../components/ArtistCard.astro";
 import SectionIntro from "../../components/SectionIntro.astro";
 import { getBookingCategories, getWebPostSection } from "../../lib/ninetone";
 
-let categories: Awaited<ReturnType<typeof getBookingCategories>> = [];
-let fetchError: string | null = null;
-try {
-  categories = await getBookingCategories();
-} catch (e) {
-  fetchError = (e as Error).message;
-}
+// Core content — failures render the error page (never edge-cached) instead
+// of a silently-empty booking roster. Transients are absorbed by lib/cache.ts.
+const categories = await getBookingCategories();
 
 // Only render categories that have at least one talent — empty
 // categories add noise without adding value. The data still
@@ -18,7 +14,7 @@ try {
 const populatedCategories = categories.filter((c) => c.artists.length > 0);
 
 // Section intro copy: pull from WebPosts (same as before).
-const webPosts = await getWebPostSection("Ninetone Nation").catch(() => null);
+const webPosts = await getWebPostSection("Ninetone Nation");
 const introBody =
   webPosts?.blocks?.find((b) => b.message)?.message ?? "";
 
@@ -47,12 +43,6 @@ function slugifyTag(s: string): string {
 
   <section class="bg-ninetone-paper pb-24">
     <div class="mx-auto max-w-7xl px-6">
-      {fetchError && (
-        <p class="border-l-2 border-ninetone-green bg-ninetone-paper-warm p-4 text-sm text-ninetone-ink/80">
-          Couldn't load booking categories yet — set FM_USER / FM_PASS in .env to enable. ({fetchError})
-        </p>
-      )}
-
       {populatedCategories.length > 1 && (
         <nav
           class="mb-12 -mx-6 overflow-x-auto border-b border-ninetone-rule [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"

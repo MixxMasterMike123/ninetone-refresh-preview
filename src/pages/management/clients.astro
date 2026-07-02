@@ -6,15 +6,11 @@ import RosterFilters from "../../components/RosterFilters.astro";
 import RosterIndex from "../../components/RosterIndex.astro";
 import { getClients, getWebPostSection } from "../../lib/ninetone";
 
-let clients: Awaited<ReturnType<typeof getClients>> = [];
-let fetchError: string | null = null;
-try {
-  clients = await getClients();
-} catch (e) {
-  fetchError = (e as Error).message;
-}
+// Core content — failures render the error page (never edge-cached) instead
+// of a silently-empty client roster. Transients are absorbed by lib/cache.ts.
+const clients = await getClients();
 const introBody = String((clients[0] as Record<string, unknown> | undefined)?.readMoreClients ?? "");
-const webPosts = await getWebPostSection("Ninetone Management").catch(() => null);
+const webPosts = await getWebPostSection("Ninetone Management");
 
 function tagsOf(c: Record<string, unknown>): string[] {
   const raw = (c.tags ?? c.genre ?? "") as string;
@@ -45,12 +41,6 @@ const sortedTags = Array.from(tagCounts.entries())
 
   <section class="bg-ninetone-paper pb-20">
     <div class="mx-auto max-w-7xl px-6">
-      {fetchError && (
-        <p class="border-l-2 border-ninetone-navy bg-ninetone-paper-warm p-4 text-sm text-ninetone-ink/80">
-          Couldn't load clients yet — set FM_USER / FM_PASS in .env to enable.
-        </p>
-      )}
-
       <RosterFilters
         tags={sortedTags}
         theme="management"

@@ -4,52 +4,19 @@ import StreamingRow from "../../components/StreamingRow.astro";
 import NewsCard from "../../components/NewsCard.astro";
 import MerchCard from "../../components/MerchCard.astro";
 import RosterStrip from "../../components/RosterStrip.astro";
-import { getBookingRoster, getAllActiveBookingSlugs, getNewsForArtist, pickRelatedArtists } from "../../lib/ninetone";
-import { fmFind } from "../../lib/filemaker";
+import { getBookingPageSet, getNewsForArtist, pickRelatedArtists } from "../../lib/ninetone";
 import { getProducts } from "../../lib/shopify";
 import { renderBio } from "../../lib/markdown";
 import { url } from "../../lib/url";
 
 // Generate a page for every Active talent listed on the booking page.
 // Source of truth = the curated BOOKING_TAG portal set, filtered to
-// filterActive=Active. Keeps the linked-from-list set and the page-exists
-// set in lockstep; no orphan links, no 404s.
+// filterActive=Active (see getBookingPageSet). Keeps the linked-from-list
+// set and the page-exists set in lockstep; no orphan links, no 404s.
 export async function getStaticPaths() {
-  const [slugs, roster] = await Promise.all([
-    getAllActiveBookingSlugs(),
-    getBookingRoster().catch(() => [] as Record<string, unknown>[]),
-  ]);
-
-  // Most curated talents also exist in getBookingRoster() (the strict query)
-  // — for those we already have the full record. For the rest (booking-only
-  // talents who pass curation + active but don't pass the roster's stricter
-  // filters), fetch their record by slug from API_Booking directly.
-  const rosterBySlug = new Map<string, Record<string, unknown>>();
-  for (const a of roster) {
-    const s = String(a.SLUG ?? "");
-    if (s) rosterBySlug.set(s, a);
-  }
-
-  const missing = slugs.filter((s) => !rosterBySlug.has(s));
-  const extras = await Promise.all(
-    missing.map((slug) =>
-      fmFind<Record<string, unknown>>("API_Booking", {
-        query: [{ SLUG: `==${slug}`, filterActive: "==Active" }],
-        limit: 1,
-      })
-        .then((rows) => rows[0])
-        .catch(() => undefined),
-    ),
-  );
-  for (const r of extras) {
-    if (r && r.SLUG) rosterBySlug.set(String(r.SLUG), r);
-  }
-
-  // Build the union — used as allRoster for "More from Nation" related strip.
-  const allRoster = [...rosterBySlug.values()];
-
+  const { slugs, records, allRoster } = await getBookingPageSet();
   return slugs
-    .map((slug) => rosterBySlug.get(slug))
+    .map((slug) => records.get(slug))
     .filter((e): e is Record<string, unknown> => Boolean(e))
     .map((entertainer) => ({
       params: { slug: String(entertainer.SLUG ?? "") },
@@ -57,7 +24,19 @@ export async function getStaticPaths() {
     }));
 }
 
-const { entertainer: e, allRoster } = Astro.props as { entertainer: Record<string, unknown>; allRoster: Record<string, unknown>[] };
+// Static build (gh): entertainer arrives via getStaticPaths props.
+// Live server (cf): resolve at request time from the same curated set.
+let { entertainer: e, allRoster } = Astro.props as {
+  entertainer?: Record<string, unknown>;
+  allRoster?: Record<string, unknown>[];
+};
+if (!e || !allRoster) {
+  const { slugs, records, allRoster: roster } = await getBookingPageSet();
+  const slug = String(Astro.params.slug ?? "");
+  e = slugs.includes(slug) ? records.get(slug) : undefined;
+  allRoster = roster;
+  if (!e) return Astro.rewrite("/404");
+}
 
 const name = String(e["Head Artist"] ?? "");
 const tagline = String(e.bookingPresentationTitle ?? "");
@@ -93,11 +72,15 @@ const socials = {
 
 let merch: Awaited<ReturnType<typeof getProducts>> = [];
 if (collectionId) {
-  try { merch = await getProducts({ collectionId, limit: 8 }); } catch {}
+  try { merch = await getProducts({ collectionId, limit: 8 }); } catch (err) {
+    console.error("[nation] merch fetch failed:", err);
+  }
 }
 
 let latestNews: Awaited<ReturnType<typeof getNewsForArtist>> = [];
-try { latestNews = await getNewsForArtist(name, 4); } catch {}
+try { latestNews = await getNewsForArtist(name, 4); } catch (err) {
+  console.error("[nation] news strip failed:", err);
+}
 
 // "In good company" — same-tag entertainers ranked by overlap, padded with
 // random others if there aren't enough matches.

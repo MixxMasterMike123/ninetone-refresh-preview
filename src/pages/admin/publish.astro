@@ -1,0 +1,91 @@
+---
+import "../../styles/global.css";
+import { url } from "../../lib/url";
+
+/**
+ * Editor "Publish now" page (docs/cms-architecture.md §Editor freshness).
+ *
+ * Deliberately standalone — no Base layout, no FM fetches. If FM is
+ * misbehaving, this page must still load so an editor can flush the cache
+ * once things recover. Only meaningful on the Cloudflare deployment; on the
+ * static GH preview the endpoint answers 503 and the page says so.
+ */
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Publish | Ninetone Admin</title>
+  </head>
+  <body class="bg-ninetone-paper text-ninetone-ink">
+    <main class="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-6 py-16">
+      <span class="kicker text-ninetone-red">Ninetone — Admin</span>
+      <h1 class="mt-6 font-display text-5xl leading-[0.95] tracking-[-0.03em] md:text-6xl">
+        Publish.
+      </h1>
+      <p class="mt-6 max-w-md font-display text-lg italic leading-snug text-ninetone-ink/75">
+        Edits in FileMaker appear on the site by themselves within the hour.
+        This button makes them appear within a minute.
+      </p>
+
+      <form id="publish-form" class="mt-10 flex max-w-md flex-col gap-4">
+        <label class="text-xs uppercase tracking-[0.16em] text-ninetone-ink/60" for="password">
+          Publish password
+        </label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          required
+          autocomplete="current-password"
+          class="border border-ninetone-ink/25 bg-white px-4 py-3 text-base outline-none focus:border-ninetone-ink"
+        />
+        <button
+          type="submit"
+          class="inline-flex items-center justify-center gap-2 bg-ninetone-red px-4 py-3 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-red-dark"
+        >
+          Publish now <span aria-hidden>→</span>
+        </button>
+      </form>
+
+      <p id="status" class="mt-6 min-h-6 text-sm text-ninetone-ink/70" aria-live="polite"></p>
+
+      <p class="mt-16 border-t border-ninetone-rule pt-6 text-xs leading-relaxed text-ninetone-ink/55">
+        What this does: the whole site cache is flushed, so the next visitor
+        anywhere gets a fresh read from FileMaker. Nothing is deployed and no
+        content is changed — it only skips the automatic wait.
+      </p>
+    </main>
+
+    <script define:vars={{ endpoint: url("/api/publish") }}>
+      const form = document.getElementById("publish-form");
+      const status = document.getElementById("status");
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        status.textContent = "Publishing…";
+        try {
+          const res = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password: document.getElementById("password").value }),
+          });
+          const json = await res.json().catch(() => ({}));
+          if (res.ok && json.ok) {
+            status.textContent = "✓ Published — fresh content is live within a minute.";
+          } else if (res.status === 401) {
+            status.textContent = "Wrong password.";
+          } else if (res.status === 503) {
+            status.textContent = "Publish only works on the live Cloudflare site, not this static preview.";
+          } else {
+            status.textContent = `Something went wrong (${res.status}).`;
+          }
+        } catch {
+          status.textContent = "Network error — try again.";
+        }
+      });
+    </script>
+  </body>
+</html>

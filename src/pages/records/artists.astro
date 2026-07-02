@@ -7,15 +7,11 @@ import RosterFilters from "../../components/RosterFilters.astro";
 import RosterIndex from "../../components/RosterIndex.astro";
 import { getArtists, getWebPostSection } from "../../lib/ninetone";
 
-let artists: Awaited<ReturnType<typeof getArtists>> = [];
-let fetchError: string | null = null;
-try {
-  artists = await getArtists();
-} catch (e) {
-  fetchError = (e as Error).message;
-}
+// Core content — failures render the error page (never edge-cached) instead
+// of a silently-empty roster. Transients are absorbed by lib/cache.ts.
+const artists = await getArtists();
 const introBody = String((artists[0] as Record<string, unknown> | undefined)?.readMore ?? "");
-const webPosts = await getWebPostSection("Ninetone Records").catch(() => null);
+const webPosts = await getWebPostSection("Ninetone Records");
 
 // Distinct tag set across the roster, sorted by frequency desc, capped at 12
 const tagCounts = new Map<string, number>();
@@ -42,11 +38,6 @@ const sortedTags = Array.from(tagCounts.entries())
   <section class="bg-ninetone-paper pb-20">
     <div class="mx-auto max-w-7xl px-6">
       <ArtistsTabs active="current" />
-      {fetchError && (
-        <p class="border-l-2 border-ninetone-red bg-ninetone-paper-warm p-4 text-sm text-ninetone-ink/80">
-          Couldn't load artists yet — set FM_USER / FM_PASS in .env to enable. ({fetchError})
-        </p>
-      )}
 
       <RosterFilters
         tags={sortedTags}

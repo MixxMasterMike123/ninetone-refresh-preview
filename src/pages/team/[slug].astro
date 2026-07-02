@@ -14,7 +14,14 @@ export async function getStaticPaths() {
     }));
 }
 
-const { member } = Astro.props as { member: Record<string, unknown> };
+// Static build (gh): member arrives via getStaticPaths props.
+// Live server (cf): resolve at request time from the cached team list.
+let member = (Astro.props as { member?: Record<string, unknown> }).member;
+if (!member) {
+  const team = await getTeam();
+  member = team.find((m) => String(m.SLUG ?? "") === Astro.params.slug);
+  if (!member) return Astro.rewrite("/404");
+}
 
 const name = String(member.userNameCalc ?? "");
 const title = String(member.title ?? "");

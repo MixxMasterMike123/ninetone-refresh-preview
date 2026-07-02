@@ -57,6 +57,7 @@ export function getArtists() {
       { fieldName: "highLight_music", sortOrder: "descend" },
       { fieldName: "Head Artist", sortOrder: "ascend" },
     ],
+    limit: 500,
   });
 }
 
@@ -104,7 +105,8 @@ function pickReleasePortal(row: Record<string, unknown>, key: string): string {
 }
 
 // Parse FM date "MM/DD/YYYY" into a Date for sorting. Returns epoch 0 on
-// failure so missing dates sort last (after a descending sort = first).
+// failure so releases with missing dates sort to the end of a
+// newest-first (descending) list.
 function parseFmDate(s: string): number {
   const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (!m) return 0;
@@ -112,16 +114,17 @@ function parseFmDate(s: string): number {
   return new Date(Number(yyyy), Number(mm) - 1, Number(dd)).getTime();
 }
 
-// Build-time URL for a release cover. Worker resolves to fresh FM bytes per
-// request — see worker-fm-proxy/src/index.ts (release route). Index here MUST
-// match the order rendered in the discography (newest-first), so the Worker
-// can resolve to the same row by sorting the same way.
-function releaseCoverUrl(slug: string, index: number): string {
+// URL for a release cover, keyed by (artist slug, album name). The Worker
+// resolves the matching portal row and streams fresh FM bytes per request —
+// see worker-fm-proxy/src/index.ts (release/by-album route). Album identity is
+// stable across FM edits; the previous positional-index scheme shifted every
+// cover by one whenever a release was added or re-dated after a build.
+function releaseCoverUrl(slug: string, album: string): string {
   const PROXY_BASE = (
     import.meta.env.FM_IMAGE_PROXY_BASE ??
     "https://ninetone-fm-image-proxy.micke-ohlen.workers.dev"
   ).replace(/\/$/, "");
-  return `${PROXY_BASE}/release/${encodeURIComponent(slug)}/${index}`;
+  return `${PROXY_BASE}/release/${encodeURIComponent(slug)}/by-album/${encodeURIComponent(album)}`;
 }
 
 // Pull artist + releases (portalData) by slug. Used by detail pages that
@@ -130,6 +133,10 @@ export async function getArtistDetailWithReleases(slug: string): Promise<ArtistD
   const rows = await fmFindWithPortals<ArtistDetail>("API_ARTIST_DETAIL", {
     query: [{ filterActive: "==*", SLUG: slug }],
     limit: 1,
+    // FM caps portal rows at whatever the layout's portal shows unless told
+    // otherwise — be explicit so a prolific discography never truncates.
+    portal: ["Green Web Category"],
+    portalLimits: { "Green Web Category": 500 },
   });
   const row = rows[0];
   if (!row) return null;
@@ -140,7 +147,6 @@ export async function getArtistDetailWithReleases(slug: string): Promise<ArtistD
       album: pickReleasePortal(r, "Green Web Category::Album"),
       type: pickReleasePortal(r, "Green Web Category::Type"),
       releaseDate: pickReleasePortal(r, "Green Web Category::Releasedate First"),
-      // Cover URL replaced after sort, so the index lines up with newest-first.
       cover: "",
       pitch: pickReleasePortal(r, "Green Web Album::spotifyPitch"),
       social: pickReleasePortal(r, "Green Web Album::socialMedia"),
@@ -155,7 +161,7 @@ export async function getArtistDetailWithReleases(slug: string): Promise<ArtistD
     }))
     .filter((r) => r.album)
     .sort((a, b) => parseFmDate(b.releaseDate) - parseFmDate(a.releaseDate))
-    .map((r, i) => ({ ...r, cover: releaseCoverUrl(slug, i) }));
+    .map((r) => ({ ...r, cover: releaseCoverUrl(slug, r.album) }));
 
   return { fieldData: row.fieldData, releases };
 }
@@ -176,6 +182,8 @@ export function getPreviousArtists() {
     sort: [{ fieldName: "Head Artist", sortOrder: "ascend" }],
     offset: "1",
     limit: 1000,
+    // List view never reads releases — skip the portal payload on 340+ records.
+    portal: [],
   });
 }
 
@@ -212,12 +220,29 @@ function pickStr(row: Record<string, unknown>, key: string): string {
 export async function getWebPosts(category: string = "*"): Promise<WebPostCategory[]> {
   const records = await fmFindWithPortals<{ category?: string; title?: string; readMore?: string }>(
     "API_WEBPOSTS",
-    { query: [{ category }] },
+    {
+      query: [{ category }],
+      limit: 100,
+      // The layout's portal shows only 2 rows, and FM returns exactly that
+      // many unless told otherwise — every section was silently rendering
+      // 2 of its 3–6 content blocks before this was set. Verified 2026-07-02.
+      portal: ["webPost"],
+      portalLimits: { webPost: 500 },
+    },
   );
 
   return records.map((r) => {
     const portalRows = (r.portalData?.webPost ?? []) as Record<string, unknown>[];
-    const blocks: WebPostBlock[] = portalRows
+    // Portal rows carry an explicit editor-controlled ordering field. Sort by
+    // it (numeric ascending, blanks last); stable sort keeps FM's portal
+    // order for ties.
+    const orderOf = (row: Record<string, unknown>): number => {
+      const raw = pickStr(row, "sortOrder");
+      const n = Number(raw);
+      return raw !== "" && Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+    };
+    const blocks: WebPostBlock[] = [...portalRows]
+      .sort((a, b) => orderOf(a) - orderOf(b))
       .map((row) => ({
         subject: pickStr(row, "subject"),
         message: pickStr(row, "message"),
@@ -243,11 +268,14 @@ export async function getWebPostSection(category: WebPostSection): Promise<WebPo
   return all.find((c) => c.category === category) ?? null;
 }
 
-// API_NEWS — news feed for /news, sorted newest-first
+// API_NEWS — news feed for /news, sorted newest-first. 76 posts as of
+// 2026-07-02 — without the explicit limit, FM's default of 100 would start
+// silently dropping the oldest posts (and their pages) at post #101.
 export function getNews() {
   return fmFind<WebPost>("API_NEWS", {
     query: [{ Message: "*" }],
     sort: [{ fieldName: "Date", sortOrder: "descend" }],
+    limit: 500,
   });
 }
 
@@ -272,6 +300,7 @@ export function getTeam() {
   return fmFind<TeamMember>("API_USERS", {
     query: [{ Active: "==Ja", SLUG: "*" }],
     sort: [{ fieldName: "sortOrder", sortOrder: "ascend" }],
+    limit: 500,
   });
 }
 
@@ -290,6 +319,7 @@ export function getClients() {
       { fieldName: "highLight_client", sortOrder: "descend" },
       { fieldName: "Head Artist", sortOrder: "ascend" },
     ],
+    limit: 500,
   });
 }
 
@@ -305,6 +335,7 @@ export function getBookingRoster() {
         tagBooking: "*",
       },
     ],
+    limit: 500,
   });
 }
 
@@ -354,8 +385,13 @@ function pickPortal(row: Record<string, unknown>, key: string): string {
 export async function getBookingCategories(): Promise<BookingCategory[]> {
   const records = await fmFindWithPortals<{ tagBooking?: string; breadBooking?: string }>(
     "API_BOOKING_TAG",
-    { query: [{ tagBooking: "*" }] },
-  ).catch(() => []);
+    {
+      query: [{ tagBooking: "*" }],
+      limit: 100,
+      portal: ["Green HeadArtist"],
+      portalLimits: { "Green HeadArtist": 500 },
+    },
+  );
 
   return records.map((r) => {
     const portalRows = (r.portalData?.["Green HeadArtist"] ?? []) as Record<string, unknown>[];
@@ -412,7 +448,7 @@ export async function getBookingCategories(): Promise<BookingCategory[]> {
  * there also applies here.
  */
 export async function getAllActiveBookingSlugs(): Promise<string[]> {
-  const cats = await getBookingCategories().catch(() => []);
+  const cats = await getBookingCategories();
   const seen = new Set<string>();
   for (const c of cats) {
     for (const a of c.artists) {
@@ -420,6 +456,45 @@ export async function getAllActiveBookingSlugs(): Promise<string[]> {
     }
   }
   return [...seen];
+}
+
+/**
+ * The full Nation booking page set: every active curated slug, its full
+ * API_Booking record, and the union roster for "related" strips.
+ *
+ * Most curated talents also appear in getBookingRoster() (the strict query);
+ * booking-only talents (e.g. Quireboys) are fetched individually by slug.
+ * Used by /ninetone-nation/[slug].astro from BOTH paths — getStaticPaths on
+ * the static preview and request-time resolution on the live Worker — so the
+ * two can never drift.
+ */
+export async function getBookingPageSet(): Promise<{
+  slugs: string[];
+  records: Map<string, Record<string, unknown>>;
+  allRoster: Record<string, unknown>[];
+}> {
+  const [slugs, roster] = await Promise.all([getAllActiveBookingSlugs(), getBookingRoster()]);
+
+  const records = new Map<string, Record<string, unknown>>();
+  for (const a of roster) {
+    const s = String(a.SLUG ?? "");
+    if (s) records.set(s, a);
+  }
+
+  const missing = slugs.filter((s) => !records.has(s));
+  const extras = await Promise.all(
+    missing.map((slug) =>
+      fmFind<Record<string, unknown>>("API_Booking", {
+        query: [{ SLUG: `==${slug}`, filterActive: "==Active" }],
+        limit: 1,
+      }).then((rows) => rows[0]),
+    ),
+  );
+  for (const r of extras) {
+    if (r && r.SLUG) records.set(String(r.SLUG), r);
+  }
+
+  return { slugs, records, allRoster: [...records.values()] };
 }
 
 // ---------------------------------------------------------------------------
@@ -443,7 +518,9 @@ export type Promo = {
  */
 export async function getPromo(): Promise<Promo | null> {
   // We allow either a literal "Promo" category or a typed string fallback.
-  const all = await getWebPosts().catch(() => [] as WebPostCategory[]);
+  // NB: errors propagate — Base.astro decides whether missing promo chrome
+  // should take a page down (it doesn't; it catches and logs).
+  const all = await getWebPosts();
   const cat = all.find((c) => c.category.toLowerCase() === "promo");
   const block = cat?.blocks[0];
   if (!block || !block.subject) return null;
@@ -465,17 +542,17 @@ export async function getPromo(): Promise<Promo | null> {
  * (already applied in getArtists). Returned as the home-page featured strip.
  */
 export async function getFeaturedArtists(limit = 6): Promise<Artist[]> {
-  const list = await getArtists().catch(() => [] as Artist[]);
+  const list = await getArtists();
   return list.slice(0, limit);
 }
 
 export async function getFeaturedClients(limit = 6): Promise<Artist[]> {
-  const list = await getClients().catch(() => [] as Artist[]);
+  const list = await getClients();
   return list.slice(0, limit);
 }
 
 export async function getFeaturedBooking(limit = 6): Promise<Artist[]> {
-  const list = await getBookingRoster().catch(() => [] as Artist[]);
+  const list = await getBookingRoster();
   return list.slice(0, limit);
 }
 

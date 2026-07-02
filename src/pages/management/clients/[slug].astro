@@ -19,7 +19,17 @@ export async function getStaticPaths() {
   }));
 }
 
-const { client, allClients } = Astro.props as { client: Record<string, unknown>; allClients: Record<string, unknown>[] };
+// Static build (gh): client arrives via getStaticPaths props.
+// Live server (cf): resolve at request time from the cached client list.
+let { client, allClients } = Astro.props as {
+  client?: Record<string, unknown>;
+  allClients?: Record<string, unknown>[];
+};
+if (!client || !allClients) {
+  allClients = await getClients();
+  client = allClients.find((c) => String(c.SLUG ?? "") === Astro.params.slug);
+  if (!client) return Astro.rewrite("/404");
+}
 
 const name = String(client["Head Artist"] ?? "");
 const tagline = String(client.clientPresentationTitle ?? "");
@@ -55,13 +65,19 @@ const socials = {
   soundcloud: undefined,
 };
 
+// Merch + news strip are optional embellishments — log failures, don't fail
+// the page over them.
 let merch: Awaited<ReturnType<typeof getProducts>> = [];
 if (collectionId) {
-  try { merch = await getProducts({ collectionId, limit: 8 }); } catch {}
+  try { merch = await getProducts({ collectionId, limit: 8 }); } catch (err) {
+    console.error(`[client] merch fetch failed:`, err);
+  }
 }
 
 let latestNews: Awaited<ReturnType<typeof getNewsForArtist>> = [];
-try { latestNews = await getNewsForArtist(name, 4); } catch {}
+try { latestNews = await getNewsForArtist(name, 4); } catch (err) {
+  console.error(`[client] news strip failed:`, err);
+}
 
 // "In good company" — same-tag clients ranked by overlap, padded with random
 // others if there aren't enough matches.

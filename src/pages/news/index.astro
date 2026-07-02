@@ -9,13 +9,9 @@ const hasNewsVideo = (p: Record<string, unknown>): boolean =>
     return typeof v === "string" && v.trim().length > 0;
   });
 
-let posts: Awaited<ReturnType<typeof getNews>> = [];
-let fetchError: string | null = null;
-try {
-  posts = await getNews();
-} catch (e) {
-  fetchError = (e as Error).message;
-}
+// Core content — failures render the error page (never edge-cached) instead
+// of a silently-empty feed. Transients are absorbed by lib/cache.ts.
+const posts = await getNews();
 
 const [lead, ...rest] = posts;
 const featured = rest.slice(0, 2);
@@ -38,14 +34,6 @@ const grid = rest.slice(2);
       </div>
       <div class="mt-12 h-px w-full bg-ninetone-red opacity-80" aria-hidden></div>
     </div>
-
-    {fetchError && (
-      <div class="mx-auto max-w-7xl px-6">
-        <p class="border-l-2 border-ninetone-red bg-ninetone-paper-warm p-4 text-sm text-ninetone-ink/80">
-          Couldn't load news yet — set FM_USER / FM_PASS in .env to enable.
-        </p>
-      </div>
-    )}
 
     {lead && (
       <div class="mx-auto max-w-7xl px-6 pb-16">

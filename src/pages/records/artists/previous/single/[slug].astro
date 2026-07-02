@@ -19,10 +19,19 @@ export async function getStaticPaths() {
     }));
 }
 
-const { artist } = Astro.props as { artist: Record<string, unknown> };
+// Static build (gh): artist arrives via getStaticPaths props.
+// Live server (cf): resolve at request time from the cached previous list.
+let artist = (Astro.props as { artist?: Record<string, unknown> }).artist;
+if (!artist) {
+  const artists = await getPreviousArtists();
+  artist = artists.find((a) => String(a.SLUG ?? "") === Astro.params.slug);
+  if (!artist) return Astro.rewrite("/404");
+}
 const slug = String(artist.SLUG ?? "");
 
-const detail = await getArtistDetailWithReleases(slug).catch(() => null);
+// Discography is core page content — failures propagate (the data layer
+// serves last-known-good on transient errors; see lib/cache.ts).
+const detail = await getArtistDetailWithReleases(slug);
 const releases = detail?.releases ?? [];
 
 const name = String(artist["Head Artist"] ?? "");
@@ -51,11 +60,15 @@ const socials = {
 
 let merch: Awaited<ReturnType<typeof getProducts>> = [];
 if (collectionId) {
-  try { merch = await getProducts({ collectionId, limit: 8 }); } catch {}
+  try { merch = await getProducts({ collectionId, limit: 8 }); } catch (err) {
+    console.error(`[previous:${slug}] merch fetch failed:`, err);
+  }
 }
 
 let latestNews: Awaited<ReturnType<typeof getNewsForArtist>> = [];
-try { latestNews = await getNewsForArtist(name, 3); } catch {}
+try { latestNews = await getNewsForArtist(name, 3); } catch (err) {
+  console.error(`[previous:${slug}] news strip failed:`, err);
+}
 
 const ytLinks = [String(artist.yotubeHighlight_one ?? ""), String(artist.yotubeHighlight_two ?? "")].filter(Boolean);
 ---

@@ -32,13 +32,15 @@ function splitTags(v: unknown): string[] {
 }
 
 export const GET: APIRoute = async () => {
+  // No silent catches: a search index that quietly ships half-empty is worse
+  // than a failed build / visible 500. Transients are absorbed by lib/cache.ts.
   const [artists, previous, clients, roster, team, news] = await Promise.all([
-    getArtists().catch(() => []),
-    getPreviousArtists().catch(() => []),
-    getClients().catch(() => []),
-    getBookingRoster().catch(() => []),
-    getTeam().catch(() => []),
-    getNews().catch(() => []),
+    getArtists(),
+    getPreviousArtists(),
+    getClients(),
+    getBookingRoster(),
+    getTeam(),
+    getNews(),
   ]);
 
   const entries: SearchEntry[] = [];

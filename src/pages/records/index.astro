@@ -6,7 +6,7 @@ import MerchSection from "../../components/MerchSection.astro";
 import LatestNewsSection from "../../components/LatestNewsSection.astro";
 import { getWebPostSection } from "../../lib/ninetone";
 
-let webPosts = await getWebPostSection("Ninetone Records").catch(() => null);
+const webPosts = await getWebPostSection("Ninetone Records");
 ---
 
 <Base title="Ninetone Records" theme="records">

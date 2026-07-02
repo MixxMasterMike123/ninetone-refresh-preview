@@ -16,7 +16,12 @@
 
 import { cached } from "./cache";
 
-const API_KEY = import.meta.env.YOUTUBE_API_KEY as string | undefined;
+// Lazy read with process.env fallback for the Cloudflare Worker runtime,
+// where the key arrives as a binding instead of being baked at build.
+const apiKey = (): string | undefined =>
+  import.meta.env.YOUTUBE_API_KEY ||
+  (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
+    ?.YOUTUBE_API_KEY;
 
 export interface YouTubeVideo {
   id: string;
@@ -67,7 +72,8 @@ export function extractChannelId(raw: string | null | undefined): string | null 
  * Cached per-build via the shared cache so the same handle resolves once.
  */
 async function resolveChannelByHandle(url: string): Promise<string | null> {
-  if (!API_KEY) return null;
+  const key = apiKey();
+  if (!key) return null;
   const handleMatch = url.match(/\/@([\w.-]+)/);
   const vanityMatch = url.match(/\/c\/([\w.-]+)/);
   const query = handleMatch?.[1] ?? vanityMatch?.[1];
@@ -79,7 +85,7 @@ async function resolveChannelByHandle(url: string): Promise<string | null> {
     apiUrl.searchParams.set("q", query);
     apiUrl.searchParams.set("type", "channel");
     apiUrl.searchParams.set("maxResults", "1");
-    apiUrl.searchParams.set("key", API_KEY);
+    apiUrl.searchParams.set("key", key);
     try {
       const res = await fetch(apiUrl);
       if (!res.ok) return null;
@@ -155,7 +161,8 @@ async function fetchLatest(channelId: string): Promise<YouTubeVideo[]> {
 }
 
 async function fetchTopViewed(channelId: string): Promise<YouTubeVideo[]> {
-  if (!API_KEY) return [];
+  const key = apiKey();
+  if (!key) return [];
 
   // Step 1: search.list ordered by viewCount gets us the 5 candidate IDs.
   // 100 quota units per call.
@@ -165,7 +172,7 @@ async function fetchTopViewed(channelId: string): Promise<YouTubeVideo[]> {
   searchUrl.searchParams.set("type", "video");
   searchUrl.searchParams.set("order", "viewCount");
   searchUrl.searchParams.set("maxResults", "5");
-  searchUrl.searchParams.set("key", API_KEY);
+  searchUrl.searchParams.set("key", key);
 
   let candidateIds: string[];
   try {
@@ -186,7 +193,7 @@ async function fetchTopViewed(channelId: string): Promise<YouTubeVideo[]> {
   const videosUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
   videosUrl.searchParams.set("part", "snippet,statistics");
   videosUrl.searchParams.set("id", candidateIds.join(","));
-  videosUrl.searchParams.set("key", API_KEY);
+  videosUrl.searchParams.set("key", key);
 
   try {
     const res = await fetch(videosUrl);

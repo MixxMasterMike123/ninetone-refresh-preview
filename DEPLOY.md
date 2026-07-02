@@ -273,6 +273,87 @@ Same idea as Option 2 but using Workers instead of Pages. Functionally similar f
 
 **For preview (now):** stay on GH Pages. Works, free, simple.
 
-**For production:** **Option 2 (CF Pages with Direct Upload)**. The `_headers` support alone is worth it (cache control + security headers), and Cloudflare Access remains available if you ever need to gate a staging branch again. Migration is ~30 min and reversible.
+**For production:** superseded — see the next section. The live-data architecture
+(docs/cms-architecture.md) landed as a second build target in this repo, which
+replaces the static-hosting options above for production.
 
-The Worker we built for FM images keeps working unchanged across all three options — host-independent.
+The Worker we built for FM images keeps working unchanged across all options — host-independent.
+
+---
+
+## Live site on Cloudflare Workers (implemented 2026-07-02)
+
+The repo now has **two build targets** from one codebase (astro.config.mjs):
+
+| | `npm run build` (gh) | `npm run build:cf` (cf) |
+|---|---|---|
+| Output | static, 540+ pages | `output: "server"`, rendered per request |
+| Host | GH Pages under `/ninetone-refresh-preview/` | Worker `ninetone-site` + Static Assets |
+| Content | frozen at build | **live from FM**, tiered edge cache |
+| Node | ≥22.12 (unchanged) | ≥22.15 (use `nvm use 24`; adapter needs `module.registerHooks`) |
+
+How live data works (see src/middleware.ts + src/lib/cache.ts):
+1. Edge cache per route with tiered TTLs — homepage 5 min, news 15 min, detail 1 h, rosters 6 h, team 24 h. Cache keys embed a **version epoch** from KV.
+2. On miss, the page renders from FM through a 60s in-isolate data cache with in-flight dedup and stale-on-error (an FM hiccup serves last-known-good instead of a 500).
+3. **Publish button** (`/admin/publish`, password = `PUBLISH_PASSWORD` secret) bumps the KV epoch → whole site is fresh within ~a minute. Editors never trigger deploys; deploys are for code only.
+4. Caveat: the Cache API is a no-op on `*.workers.dev` — staging renders every request (fine at staging traffic). Edge caching engages on the custom domain at launch.
+
+Local prod-like run: `npm run preview:cf` (wrangler dev on the built output; secrets from `.dev.vars`, gitignored).
+
+### Accounts + config redirect — read before deploying
+
+Two gotchas discovered on first deploy (2026-07-02):
+
+1. **`build:cf` writes `.wrangler/deploy/config.json` at the repo root.** Any
+   `wrangler deploy` run anywhere under the repo — including inside
+   `worker-fm-proxy/` — gets redirected to the SITE's built config. Deploy the
+   image proxy with its config pinned: `npx wrangler deploy -c wrangler.toml`.
+   (At the repo root the redirect is what you want: plain `npx wrangler deploy`
+   deploys the site.)
+2. **Two Cloudflare accounts on this machine.** Everything Ninetone
+   (ninetone-fm-image-proxy, the Pages preview) lives on the
+   **micke.ohlen@gmail.com account** (`0d392e5c…`). Wrangler caches the account
+   per project in `node_modules/.cache/wrangler/wrangler-account.json`. Make
+   sure `npx wrangler whoami` shows the gmail account before deploying; if the
+   OAuth token is for another account, `npx wrangler login` first and delete a
+   stale account cache file if wrangler targets the wrong id.
+
+### Staging deploy (workers.dev)
+
+```bash
+npx wrangler login                     # as micke.ohlen@gmail.com (see above)
+rm -f node_modules/.cache/wrangler/wrangler-account.json  # drop stale account pin
+
+# 1. image proxy FIRST (new by-album cover route), config pinned:
+cd worker-fm-proxy && npx wrangler deploy -c wrangler.toml && cd ..
+
+# 2. KV namespaces must live on the same account — recreate if they were made
+#    elsewhere, then update the two ids in wrangler.jsonc:
+npx wrangler kv namespace create CACHE_STATE
+npx wrangler kv namespace create SESSION
+
+# 3. the site:
+nvm use 24                             # adapter needs Node ≥22.15
+npm run build:cf
+npx wrangler deploy                    # root redirect → dist/server/wrangler.json
+
+# 4. one-time secrets (values from .env), pinned to the site worker:
+npx wrangler secret put FM_USER --name ninetone-site
+npx wrangler secret put FM_PASS --name ninetone-site
+npx wrangler secret put SHOPIFY_ADMIN_TOKEN --name ninetone-site
+npx wrangler secret put YOUTUBE_API_KEY --name ninetone-site
+npx wrangler secret put PUBLISH_PASSWORD --name ninetone-site  # gates /admin/publish
+```
+
+**Order matters:** the site now addresses release covers as
+`/release/<slug>/by-album/<album>` — the image proxy must be redeployed
+**before** the next GH Pages push or site deploy, or discography covers 404.
+The old positional `/release/<slug>/<n>` route is kept for HTML built earlier.
+
+### At launch (ninetone.com)
+
+1. Point DNS at Cloudflare, add the custom domain to the `ninetone-site` Worker.
+2. Set `SITE_URL=https://www.ninetone.com` for `build:cf`, flip `PUBLIC_NOINDEX=false`.
+3. Move the image proxy to a subdomain (edge-caches images) — or fold it into the site Worker.
+4. Provision the dedicated read-only FM service account (docs/cms-architecture.md has the FM IT script).
+5. GH Pages preview can be retired or kept as a design sandbox.

@@ -1,0 +1,48 @@
+/**
+ * Cloudflare Worker config for the SITE (server-rendered Astro).
+ * The FM image proxy is a separate Worker — see worker-fm-proxy/wrangler.toml.
+ *
+ * Build first (`npm run build:cf`), then `npx wrangler deploy`.
+ * Secrets (never in this file): FM_USER, FM_PASS, SHOPIFY_ADMIN_TOKEN,
+ * YOUTUBE_API_KEY, PUBLISH_PASSWORD → set with `npx wrangler secret put <NAME>`.
+ * Local run: `npm run preview:cf` reads secrets from .dev.vars (gitignored).
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ninetone-site",
+  "compatibility_date": "2026-06-01",
+  // nodejs_compat also populates process.env from vars/secrets — the env
+  // fallback in src/lib/filemaker.ts (and shopify/youtube) relies on it.
+  "compatibility_flags": ["nodejs_compat"],
+  // Adapter-provided unified entrypoint (Astro 6 / adapter v13 convention) —
+  // handles both `astro dev` and production. Do NOT point at dist output.
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+  "kv_namespaces": [
+    {
+      // Cache epoch for the tiered edge cache (src/middleware.ts) — bumped by
+      // the Publish button (src/pages/api/publish.ts).
+      "binding": "CACHE_STATE",
+      "id": "9a5e09f3e19240c192104bb7de0f72a1"
+    },
+    {
+      // Astro sessions store — the adapter auto-enables the KV session
+      // driver and declares this binding, so it must resolve to a real
+      // namespace even though the site doesn't use Astro.session yet.
+      "binding": "SESSION",
+      "id": "95e1b100fcb945e2aecbe0dc2e090e12"
+    }
+  ],
+  "vars": {
+    // Non-secret runtime config. FM_HOST/FM_DB have code defaults; set here
+    // to be explicit. PUBLIC_NOINDEX stays true until launch.
+    "FM_HOST": "files.ninetone.com",
+    "FM_DB": "Ninetone Group AB"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

@@ -14,7 +14,14 @@ export async function getStaticPaths() {
     }));
 }
 
-const { post } = Astro.props as { post: Record<string, unknown> };
+// Static build (gh): the post arrives via getStaticPaths props.
+// Live server (cf): resolve at request time from the cached news list.
+let post = (Astro.props as { post?: Record<string, unknown> }).post;
+if (!post) {
+  const posts = await getNews();
+  post = posts.find((p) => String(p.slug ?? "") === Astro.params.slug);
+  if (!post) return Astro.rewrite("/404");
+}
 
 const title = String(post.Title ?? "");
 const author = String(post["Created By"] ?? "");

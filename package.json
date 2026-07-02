@@ -12,9 +12,14 @@
     "postbuild": "node scripts/audit-dist.mjs",
     "audit": "node scripts/audit-dist.mjs",
     "preview": "astro preview",
+    "dev:cf": "DEPLOY_TARGET=cf astro dev",
+    "build:cf": "DEPLOY_TARGET=cf FM_USER= FM_PASS= SHOPIFY_ADMIN_TOKEN= YOUTUBE_API_KEY= PUBLISH_PASSWORD= astro build",
+    "preview:cf": "npm run build:cf && wrangler dev",
+    "deploy:cf": "npm run build:cf && wrangler deploy",
     "astro": "astro"
   },
   "dependencies": {
+    "@astrojs/cloudflare": "^13.7.0",
     "@astrojs/sitemap": "^3.7.2",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.3.0",
@@ -22,5 +27,8 @@
     "fuse.js": "^7.3.0",
     "marked": "^18.0.3",
     "tailwindcss": "^4.3.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.106.0"
   }
 }

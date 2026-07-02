@@ -5,7 +5,7 @@ import WebPostsSection from "../../components/WebPostsSection.astro";
 import LatestNewsSection from "../../components/LatestNewsSection.astro";
 import { getWebPostSection } from "../../lib/ninetone";
 
-let webPosts = await getWebPostSection("Ninetone Nation").catch(() => null);
+const webPosts = await getWebPostSection("Ninetone Nation");
 ---
 
 <Base title="Ninetone Nation" theme="nation">

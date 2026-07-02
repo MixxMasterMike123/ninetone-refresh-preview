@@ -2,33 +2,67 @@
  * FileMaker Data API client.
  *
  * Token caching: FM tokens expire after ~15 min idle. We cache for 12 min to be safe.
- * Response caching: 10 min TTL via src/lib/cache.ts (in-memory + disk).
- * All calls happen at build time — token never reaches the browser.
+ * Response caching: short-TTL in-memory via src/lib/cache.ts (with stale-on-error).
+ * Runs at build time for the static GH Pages preview AND at request time on the
+ * Cloudflare Worker (server output) — the token never reaches the browser in
+ * either mode.
  */
 
 import { cached } from "./cache";
 import { mirrorRecordImages } from "./fm-image-mirror";
 
-const FM_HOST = import.meta.env.FM_HOST ?? "files.ninetone.com";
-const FM_DB = import.meta.env.FM_DB ?? "Ninetone Group AB";
-const FM_USER = import.meta.env.FM_USER;
-const FM_PASS = import.meta.env.FM_PASS;
+/**
+ * Env resolution that works in all four contexts:
+ *  - `astro dev` / static CI build: Vite bakes `import.meta.env.X` from .env / shell env
+ *  - Cloudflare build (`build:cf`): FM vars are blanked at build so nothing is baked
+ *  - Worker runtime: secrets arrive as bindings; nodejs_compat exposes them on process.env
+ * Read lazily (inside functions, not module scope) so the Worker isolate sees
+ * its bindings instead of whatever the build machine had.
+ */
+function runtimeEnv(baked: string | undefined, name: string): string | undefined {
+  if (baked) return baked;
+  const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  return proc?.env?.[name];
+}
+
+const fmHost = () => runtimeEnv(import.meta.env.FM_HOST, "FM_HOST") ?? "files.ninetone.com";
+const fmDb = () => runtimeEnv(import.meta.env.FM_DB, "FM_DB") ?? "Ninetone Group AB";
+const fmUser = () => runtimeEnv(import.meta.env.FM_USER, "FM_USER");
+const fmPass = () => runtimeEnv(import.meta.env.FM_PASS, "FM_PASS");
 
 const TOKEN_TTL_MS = 12 * 60 * 1000;
 
 let cachedToken: { value: string; expires: number } | null = null;
+let tokenInFlight: Promise<string> | null = null;
 
 function dbPath(): string {
-  return `https://${FM_HOST}/fmi/data/vLatest/databases/${encodeURIComponent(FM_DB)}`;
+  return `https://${fmHost()}/fmi/data/vLatest/databases/${encodeURIComponent(fmDb())}`;
 }
 
-async function getToken(): Promise<string> {
-  if (cachedToken && Date.now() < cachedToken.expires) return cachedToken.value;
-  if (!FM_USER || !FM_PASS) {
+/**
+ * Get (or create) the shared FM session token. Concurrent callers share one
+ * in-flight request — Astro renders pages in parallel and the Worker serves
+ * concurrent visitors, so without dedup every cold call would open its own
+ * FM session and leave it idling for 15 min.
+ */
+function getToken(): Promise<string> {
+  if (cachedToken && Date.now() < cachedToken.expires) return Promise.resolve(cachedToken.value);
+  if (!tokenInFlight) {
+    tokenInFlight = createSession().finally(() => {
+      tokenInFlight = null;
+    });
+  }
+  return tokenInFlight;
+}
+
+async function createSession(): Promise<string> {
+  const user = fmUser();
+  const pass = fmPass();
+  if (!user || !pass) {
     throw new Error("FM_USER / FM_PASS env vars not set");
   }
 
-  const auth = btoa(`${FM_USER}:${FM_PASS}`);
+  const auth = btoa(`${user}:${pass}`);
   const res = await fetch(`${dbPath()}/sessions`, {
     method: "POST",
     headers: {
@@ -47,6 +81,7 @@ async function getToken(): Promise<string> {
 
 type FmFindResponse<T> = {
   response: {
+    dataInfo?: { foundCount: number; returnedCount: number };
     data: { fieldData: T; portalData?: Record<string, unknown[]>; recordId: string }[];
   };
   messages: { code: string; message: string }[];
@@ -57,6 +92,13 @@ export type FmFindBody = {
   sort?: { fieldName: string; sortOrder: "ascend" | "descend" }[];
   offset?: string;
   limit?: number;
+  /** Portal tables to include. When set, FM returns ONLY these portals —
+   *  pass `[]` on list fetches against portal-heavy layouts to slim the payload. */
+  portal?: string[];
+  /** Per-portal row caps, sent as `limit.<portalName>`. FM returns only as many
+   *  portal rows as the LAYOUT's portal is configured to show unless this is
+   *  set (API_WEBPOSTS shows 2!) — always set it when portal data matters. */
+  portalLimits?: Record<string, number>;
 };
 
 export function fmFind<T = Record<string, unknown>>(
@@ -88,13 +130,23 @@ async function fmRequest<T>(
   isRetry = false,
 ): Promise<FmFindResponse<T> | null> {
   const token = await getToken();
+
+  // portalLimits is our ergonomic alias — FM wants flat `limit.<portal>` keys.
+  const { portalLimits, ...rest } = body;
+  const payload: Record<string, unknown> = { ...rest };
+  if (portalLimits) {
+    for (const [portalName, n] of Object.entries(portalLimits)) {
+      payload[`limit.${portalName}`] = String(n);
+    }
+  }
+
   const res = await fetch(`${dbPath()}/layouts/${layout}/_find`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   });
 
   // FM returns 401 if the token expired between cache check and request.
@@ -105,13 +157,31 @@ async function fmRequest<T>(
     return fmRequest<T>(layout, body, true);
   }
 
+  // A proxy/maintenance page in front of FM answers with HTML — surface the
+  // layout + status instead of a bare JSON SyntaxError.
+  let json: FmFindResponse<T>;
+  try {
+    json = (await res.json()) as FmFindResponse<T>;
+  } catch {
+    throw new Error(`FM find ${layout} failed: HTTP ${res.status}, non-JSON response body`);
+  }
+
   // FM returns 404 + message code 401 when query matches no records — that's not an error
-  const json = (await res.json()) as FmFindResponse<T>;
   const noRecords = json.messages?.some((m) => m.code === "401");
   if (noRecords) return null;
 
   if (!res.ok) {
     throw new Error(`FM find ${layout} failed: ${res.status} ${JSON.stringify(json.messages)}`);
+  }
+
+  // Truncation tripwire: FM's default limit is 100 records. If a query matched
+  // more than we got back, the site would silently build/render incomplete —
+  // fail loudly instead. limit:1 lookups intentionally take the first match.
+  const info = json.response.dataInfo;
+  if (info && info.foundCount > info.returnedCount && body.limit !== 1) {
+    throw new Error(
+      `FM find ${layout} returned ${info.returnedCount} of ${info.foundCount} matching records — raise \`limit\` on this query`,
+    );
   }
 
   return json;

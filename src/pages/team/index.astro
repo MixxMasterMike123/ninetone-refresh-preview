@@ -4,14 +4,10 @@ import { getTeam, getWebPostSection } from "../../lib/ninetone";
 import { renderBio } from "../../lib/markdown";
 import { url } from "../../lib/url";
 
-let team: Awaited<ReturnType<typeof getTeam>> = [];
-let fetchError: string | null = null;
-try {
-  team = await getTeam();
-} catch (e) {
-  fetchError = (e as Error).message;
-}
-const webPosts = await getWebPostSection("Ninetone Group Team").catch(() => null);
+// Core content — failures render the error page (never edge-cached) instead
+// of a silently-empty team grid. Transients are absorbed by lib/cache.ts.
+let team = await getTeam();
+const webPosts = await getWebPostSection("Ninetone Group Team");
 const introBlock = webPosts?.blocks?.[0];
 const ledeHtml = introBlock?.message ? renderBio(introBlock.message) : "";
 
@@ -57,12 +53,6 @@ team = [...team].sort((a, b) => {
 
   <section class="bg-ninetone-paper pb-24">
     <div class="mx-auto max-w-7xl px-6">
-      {fetchError && (
-        <p class="mb-8 border-l-2 border-ninetone-ink bg-ninetone-paper-warm p-4 text-sm text-ninetone-ink/80">
-          Couldn't load team yet — set FM_USER / FM_PASS in .env to enable.
-        </p>
-      )}
-
       <div class="grid grid-cols-2 gap-x-6 gap-y-12 md:grid-cols-3 lg:grid-cols-4">
         {team.map((m) => {
           const name = String(m.userNameCalc ?? "");

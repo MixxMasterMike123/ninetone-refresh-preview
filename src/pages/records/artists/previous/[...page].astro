@@ -5,27 +5,46 @@ import ArtistsTabs from "../../../../components/ArtistsTabs.astro";
 import Pagination from "../../../../components/Pagination.astro";
 import SectionIntro from "../../../../components/SectionIntro.astro";
 import { getArtists, getPreviousArtists, getWebPostSection } from "../../../../lib/ninetone";
-import { url } from "../../../../lib/url";
+
+// Exported so the hoisted getStaticPaths and the request-time path below
+// share one definition (only exports are hoisted to module scope in Astro).
+export const PAGE_SIZE = 30;
 
 export async function getStaticPaths({ paginate }: { paginate: any }) {
   const artists = await getPreviousArtists();
-  return paginate(artists, { pageSize: 30 });
+  return paginate(artists, { pageSize: PAGE_SIZE });
 }
 
-const { page } = Astro.props as {
-  page: {
-    data: Awaited<ReturnType<typeof getPreviousArtists>>;
-    currentPage: number;
-    lastPage: number;
-    total: number;
-    url: { current: string; prev?: string; next?: string };
-  };
+type PageShape = {
+  data: Awaited<ReturnType<typeof getPreviousArtists>>;
+  currentPage: number;
+  lastPage: number;
+  total: number;
 };
 
+// Static build (gh): `page` arrives from paginate() via getStaticPaths.
+// Live server (cf): paginate() never runs — slice the cached list by the
+// route param ("" = page 1, "2", "3", …) at request time.
+let page = (Astro.props as { page?: PageShape }).page;
+if (!page) {
+  const raw = String((Astro.params as { page?: string }).page ?? "");
+  if (raw !== "" && !/^\d+$/.test(raw)) return Astro.rewrite("/404");
+  const currentPage = raw === "" ? 1 : parseInt(raw, 10);
+  const all = await getPreviousArtists();
+  const lastPage = Math.max(1, Math.ceil(all.length / PAGE_SIZE));
+  if (currentPage < 1 || currentPage > lastPage) return Astro.rewrite("/404");
+  page = {
+    data: all.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    currentPage,
+    lastPage,
+    total: all.length,
+  };
+}
+
 // Reuse Records section intro. Both fetches cached, so effectively free.
-const active = await getArtists().catch(() => []);
+const active = await getArtists();
 const introBody = String((active[0] as Record<string, unknown> | undefined)?.readMore ?? "");
-const webPosts = await getWebPostSection("Ninetone Records").catch(() => null);
+const webPosts = await getWebPostSection("Ninetone Records");
 ---
 
 <Base title="Previous Artists" theme="records">

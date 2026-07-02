@@ -12,9 +12,17 @@
 
 import { cached } from "./cache";
 
-const SHOP_DOMAIN = import.meta.env.SHOPIFY_SHOP_DOMAIN ?? "fc6d3a-d9.myshopify.com";
-const PUBLIC_STORE_URL = import.meta.env.SHOPIFY_PUBLIC_STORE_URL ?? "https://shop.ninetone.com";
-const ADMIN_TOKEN = import.meta.env.SHOPIFY_ADMIN_TOKEN;
+// Lazy env reads with a process.env fallback — on the Cloudflare Worker
+// runtime, secrets arrive as bindings (exposed on process.env via
+// nodejs_compat) instead of being baked at build. See src/lib/filemaker.ts.
+type ProcHolder = { process?: { env?: Record<string, string | undefined> } };
+const procEnv = (name: string) => (globalThis as ProcHolder).process?.env?.[name];
+
+const shopDomain = () =>
+  import.meta.env.SHOPIFY_SHOP_DOMAIN || procEnv("SHOPIFY_SHOP_DOMAIN") || "fc6d3a-d9.myshopify.com";
+const publicStoreUrl = () =>
+  import.meta.env.SHOPIFY_PUBLIC_STORE_URL || procEnv("SHOPIFY_PUBLIC_STORE_URL") || "https://shop.ninetone.com";
+const adminToken = () => import.meta.env.SHOPIFY_ADMIN_TOKEN || procEnv("SHOPIFY_ADMIN_TOKEN");
 const API_VERSION = "2024-10";
 
 export interface ShopifyVariant {
@@ -48,13 +56,14 @@ interface ShopifyProductsResponse {
 }
 
 async function shopifyFetch(path: string): Promise<Response> {
-  if (!ADMIN_TOKEN) {
+  const token = adminToken();
+  if (!token) {
     throw new Error("SHOPIFY_ADMIN_TOKEN env var not set");
   }
-  return fetch(`https://${SHOP_DOMAIN}/admin/api/${API_VERSION}${path}`, {
+  return fetch(`https://${shopDomain()}/admin/api/${API_VERSION}${path}`, {
     headers: {
       "Content-Type": "application/json",
-      "X-Shopify-Access-Token": ADMIN_TOKEN,
+      "X-Shopify-Access-Token": token,
     },
   });
 }
@@ -83,7 +92,7 @@ export function getProducts(opts?: {
 
 /** Storefront URL for a product (so users can buy on shop.ninetone.com). */
 export function productUrl(product: ShopifyProduct): string {
-  return `${PUBLIC_STORE_URL}/products/${product.handle}`;
+  return `${publicStoreUrl()}/products/${product.handle}`;
 }
 
 /** Lowest variant price as a formatted SEK string. */

@@ -128,15 +128,14 @@ const ROUTES: Record<string, RouteSpec> = {
 };
 
 // Releases are a portal on the artist record (not their own layout). Looked up
-// by artist slug + a release index. The build-side rewriter assigns indices in
-// the same descending-by-release-date order it renders, so /release/<slug>/<n>
-// resolves consistently between build-time and runtime.
-async function fetchReleaseCover(
+// by artist slug + either an album name (current scheme — stable across FM
+// edits) or a positional index (legacy scheme kept alive for HTML built before
+// the by-album route existed).
+async function fetchReleasePortal(
   env: Env,
   artistSlug: string,
-  index: number,
   retried = false,
-): Promise<string | null> {
+): Promise<Array<Record<string, unknown>> | null> {
   const token = await getToken(env);
   const res = await fetch(
     `https://${env.FM_HOST}/fmi/data/vLatest/databases/${encodeURIComponent(env.FM_DB)}/layouts/API_ARTIST_DETAIL/_find`,
@@ -146,13 +145,20 @@ async function fetchReleaseCover(
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ query: [{ SLUG: `==${artistSlug}` }], limit: 1 }),
+      body: JSON.stringify({
+        query: [{ SLUG: `==${artistSlug}` }],
+        limit: 1,
+        // Match src/lib/ninetone.ts: explicit portal limit so big
+        // discographies aren't capped at the layout's portal row count.
+        portal: ["Green Web Category"],
+        "limit.Green Web Category": "500",
+      }),
     },
   );
   if (res.status === 401) {
     cachedToken = null;
     if (retried) throw new Error("FM auth failed after token refresh");
-    return fetchReleaseCover(env, artistSlug, index, true);
+    return fetchReleasePortal(env, artistSlug, true);
   }
   if (!res.ok) return null;
   const json = (await res.json()) as {
@@ -162,19 +168,53 @@ async function fetchReleaseCover(
   if (json.messages?.some((m) => m.code === "401")) return null;
   const portal = json.response.data?.[0]?.portalData?.["Green Web Category"];
   if (!portal) return null;
+  // Drop rows without an album name — the build-side rewriter filters these
+  // out before assigning covers, so the Worker must see the same set.
+  return portal.filter((r) => String(r["Green Web Category::Album"] ?? "") !== "");
+}
 
-  // Sort releases newest-first to match the build-side rewriter, then index.
+function releaseCoverField(row: Record<string, unknown>): string | null {
+  const url =
+    String(row["Green Web Category::coverPicture_webp"] ?? "") ||
+    String(row["Green Web Category::Cover_Picture"] ?? "");
+  return url || null;
+}
+
+async function fetchReleaseCoverByAlbum(
+  env: Env,
+  artistSlug: string,
+  album: string,
+): Promise<string | null> {
+  const portal = await fetchReleasePortal(env, artistSlug);
+  if (!portal) return null;
+  // Same album released twice (e.g. single + remaster) → prefer the newest.
+  const matches = portal
+    .filter((r) => String(r["Green Web Category::Album"] ?? "") === album)
+    .sort((a, b) => {
+      const da = parseDate(String(a["Green Web Category::Releasedate First"] ?? ""));
+      const db = parseDate(String(b["Green Web Category::Releasedate First"] ?? ""));
+      return db - da;
+    });
+  const row = matches[0];
+  return row ? releaseCoverField(row) : null;
+}
+
+// Legacy: HTML built before the by-album scheme addresses covers by
+// newest-first index. Keep resolving those until the preview is rebuilt.
+async function fetchReleaseCoverByIndex(
+  env: Env,
+  artistSlug: string,
+  index: number,
+): Promise<string | null> {
+  const portal = await fetchReleasePortal(env, artistSlug);
+  if (!portal) return null;
   const sorted = [...portal].sort((a, b) => {
     const da = parseDate(String(a["Green Web Category::Releasedate First"] ?? ""));
     const db = parseDate(String(b["Green Web Category::Releasedate First"] ?? ""));
     return db - da;
   });
   const row = sorted[index];
-  if (!row) return null;
-  const url =
-    String(row["Green Web Category::coverPicture_webp"] ?? "") ||
-    String(row["Green Web Category::Cover_Picture"] ?? "");
-  return url || null;
+  return row ? releaseCoverField(row) : null;
 }
 
 function parseDate(s: string): number {
@@ -246,21 +286,37 @@ export default {
       });
     }
 
-    const [kind, slug, variant] = parts;
+    const [kind, slug, variant, extra] = parts;
 
-    // /release/:artistSlug/:index — release cover art
+    // /release/:artistSlug/by-album/:album — release cover art (current)
+    // /release/:artistSlug/:index         — legacy positional lookup
     if (kind === "release" && slug && variant) {
-      const route = `release/${variant}`;
-      const idx = parseInt(variant, 10);
-      if (isNaN(idx)) {
-        return new Response("Bad index", {
-          status: 400,
-          headers: { ...corsHeaders(origin), ...obsHeaders(route, "error") },
-        });
+      const byAlbum = variant === "by-album";
+      const route = byAlbum ? "release/by-album" : `release/${variant}`;
+      let idx = -1;
+      let album = "";
+      if (byAlbum) {
+        if (!extra) {
+          return new Response("Missing album", {
+            status: 400,
+            headers: { ...corsHeaders(origin), ...obsHeaders(route, "error") },
+          });
+        }
+        album = decodeURIComponent(extra);
+      } else {
+        idx = parseInt(variant, 10);
+        if (isNaN(idx)) {
+          return new Response("Bad index", {
+            status: 400,
+            headers: { ...corsHeaders(origin), ...obsHeaders(route, "error") },
+          });
+        }
       }
       let imageUrl: string | null;
       try {
-        imageUrl = await fetchReleaseCover(env, slug, idx);
+        imageUrl = byAlbum
+          ? await fetchReleaseCoverByAlbum(env, slug, album)
+          : await fetchReleaseCoverByIndex(env, slug, idx);
       } catch (err) {
         return new Response(`FM error: ${err}`, {
           status: 502,

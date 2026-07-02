@@ -15,12 +15,17 @@ import {
   getNews,
 } from "../lib/ninetone";
 
-const collectionId = import.meta.env.SHOPIFY_HOMEPAGE_COLLECTION_ID;
+const collectionId =
+  import.meta.env.SHOPIFY_HOMEPAGE_COLLECTION_ID ||
+  (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
+    ?.SHOPIFY_HOMEPAGE_COLLECTION_ID;
 
+// Core homepage content — failures render the error page (never edge-cached)
+// instead of a silently-gutted homepage. Transients are absorbed by lib/cache.ts.
 const [featuredArtists, featuredClients, latestNews] = await Promise.all([
-  getFeaturedArtists(20).catch(() => []),
-  getFeaturedClients(6).catch(() => []),
-  getNews().then((p) => p.slice(0, 4)).catch(() => []),
+  getFeaturedArtists(20),
+  getFeaturedClients(6),
+  getNews().then((p) => p.slice(0, 4)),
 ]);
 
 const heroArtist = featuredArtists[0];
