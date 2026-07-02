@@ -193,7 +193,10 @@ async function fmFindUncached<T = Record<string, unknown>>(
 ): Promise<T[]> {
   const json = await fmRequest<T>(layout, body);
   if (!json) return [];
-  const rows = json.response.data.map((r) => r.fieldData);
+  // Attach FM's internal recordId (an ever-increasing serial) as __recordId.
+  // The public layouts expose no creation-date field, so this is the only
+  // creation-order signal — used e.g. for "latest addition" picks.
+  const rows = json.response.data.map((r) => ({ ...r.fieldData, __recordId: r.recordId }));
   // FM streaming URLs expire with the session token; rewrite them to point at
   // the FM image proxy Worker, which holds a live token and resolves a fresh
   // URL on each request. See src/lib/fm-image-mirror.ts.

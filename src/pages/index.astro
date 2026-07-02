@@ -11,7 +11,8 @@ import { sectionAccent } from "../lib/sections";
 import { url } from "../lib/url";
 import {
   getFeaturedArtists,
-  getFeaturedClients,
+  getArtistOfTheWeek,
+  getLatestClient,
   getNews,
 } from "../lib/ninetone";
 
@@ -22,17 +23,17 @@ const collectionId =
 
 // Core homepage content — failures render the error page (never edge-cached)
 // instead of a silently-gutted homepage. Transients are absorbed by lib/cache.ts.
-const [featuredArtists, featuredClients, latestNews] = await Promise.all([
+// The two "in focus" picks share the cached roster fetches — no extra FM calls.
+const [featuredArtists, heroArtist, heroClient, latestNews] = await Promise.all([
   getFeaturedArtists(20),
-  getFeaturedClients(6),
+  getArtistOfTheWeek(), // rotates Mondays 00:00 UTC — same artist all week
+  getLatestClient(), // newest management addition (FM recordId order)
   getNews().then((p) => p.slice(0, 4)),
 ]);
 
-const heroArtist = featuredArtists[0];
 const heroArtistImage = heroArtist?.artistPicture_big ?? heroArtist?.artistPicture_small;
 const heroArtistName = String(heroArtist?.["Head Artist"] ?? "");
 
-const heroClient = featuredClients[0];
 const heroClientImage = heroClient?.artistPicture_big ?? heroClient?.artistPicture_small;
 const heroClientName = String(heroClient?.["Head Artist"] ?? "");
 
@@ -285,7 +286,7 @@ const portals = [
             image={heroClientImage ? String(heroClientImage) : undefined}
             kicker="Client in focus"
             heading={heroClientName}
-            blurb={String(heroClient.artistPresentationShort ?? "")}
+            blurb={String(heroClient.clientPresentationShort || heroClient.artistPresentationShort || "")}
             cta="View profile"
           />
         )}

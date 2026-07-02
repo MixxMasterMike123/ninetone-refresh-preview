@@ -546,6 +546,42 @@ export async function getFeaturedArtists(limit = 6): Promise<Artist[]> {
   return list.slice(0, limit);
 }
 
+/**
+ * "Client in focus" — the most recently added active management client.
+ *
+ * The public layouts expose no creation-date field, so we order by FM's
+ * internal recordId (an ever-increasing serial attached as __recordId by
+ * lib/filemaker.ts). Prefers clients that have an image, since the homepage
+ * tile is image-led; falls back to the highlight-sorted list head if none
+ * qualify. On the live site this updates within the homepage cache TTL of a
+ * new client being added in FM — no deploy.
+ */
+export async function getLatestClient(): Promise<Artist | undefined> {
+  const clients = await getClients();
+  const byNewest = [...clients].sort(
+    (a, b) => Number(b.__recordId ?? 0) - Number(a.__recordId ?? 0),
+  );
+  return byNewest.find((c) => c.artistPicture_big || c.artistPicture_small) ?? clients[0];
+}
+
+/**
+ * "Artist in focus" — deterministic artist-of-the-week rotation.
+ *
+ * Same week → same artist for every visitor, build, and Worker isolate
+ * (cache-friendly, no flicker between edge nodes). The week index flips on
+ * Mondays 00:00 UTC: epoch day 0 was a Thursday, so +3 days aligns the
+ * 7-day window to Monday starts. Pool = active roster with an image, in the
+ * existing highlight-first order, so every artist gets a week and
+ * highlighted artists cycle back sooner after roster changes.
+ */
+export async function getArtistOfTheWeek(): Promise<Artist | undefined> {
+  const artists = await getArtists();
+  const pool = artists.filter((a) => a.artistPicture_big || a.artistPicture_small);
+  if (pool.length === 0) return artists[0];
+  const weekIndex = Math.floor((Date.now() / 86_400_000 + 3) / 7);
+  return pool[weekIndex % pool.length];
+}
+
 export async function getFeaturedClients(limit = 6): Promise<Artist[]> {
   const list = await getClients();
   return list.slice(0, limit);
