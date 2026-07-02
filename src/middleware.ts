@@ -24,13 +24,20 @@
  * `stale-while-revalidate` is included for the production domain, where
  * Cloudflare's CDN honors it; the Worker-level Cache API simply expires.
  *
- * Caveat known + accepted: the Cache API is a no-op on *.workers.dev, so
- * staging always renders (still fast — the 60s data cache does the heavy
- * lifting). Edge caching engages when the site moves to the custom domain.
+
+ * Cache keys embed BOTH invalidation signals:
+ *   - the KV version epoch (content: Publish button)
+ *   - the per-build id (code: every deploy starts a fresh generation)
+ * Verified live on workers.dev — x-cache: hit serves in ~20ms.
  */
 
 import { defineMiddleware } from "astro:middleware";
 import { getCfEnv } from "./lib/cf";
+
+// Statically replaced by Vite (astro.config define); guarded for any context
+// where the define isn't applied.
+declare const __BUILD_ID__: string | undefined;
+const BUILD_ID = typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "dev";
 
 /** First match wins — order specific → general. Seconds. */
 const TTL_RULES: Array<[RegExp, number]> = [
@@ -84,7 +91,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const ttl = ttlFor(url.pathname);
   // Cache keys must be requests; the host is arbitrary but must be stable.
   const cacheKey = new Request(
-    `https://edge-cache.ninetone.internal/v${version}${url.pathname}${url.search}`,
+    `https://edge-cache.ninetone.internal/v${version}/b${BUILD_ID}${url.pathname}${url.search}`,
   );
 
   const hit = await cacheApi.match(cacheKey);

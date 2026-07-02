@@ -45,6 +45,12 @@ export default defineConfig({
   integrations: [sitemap()],
   vite: {
     plugins: [tailwindcss()],
+    define: {
+      // Baked per build. Part of every edge-cache key (src/middleware.ts) so a
+      // DEPLOY naturally starts a fresh cache generation — old-code pages are
+      // never served after a release. Content freshness is the KV epoch's job.
+      __BUILD_ID__: JSON.stringify(Date.now().toString(36)),
+    },
     build: {
       rollupOptions: {
         // src/lib/cf.ts imports this dynamically; in the gh/static build it

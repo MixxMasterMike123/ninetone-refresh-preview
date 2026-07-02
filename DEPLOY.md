@@ -296,7 +296,7 @@ How live data works (see src/middleware.ts + src/lib/cache.ts):
 1. Edge cache per route with tiered TTLs — homepage 5 min, news 15 min, detail 1 h, rosters 6 h, team 24 h. Cache keys embed a **version epoch** from KV.
 2. On miss, the page renders from FM through a 60s in-isolate data cache with in-flight dedup and stale-on-error (an FM hiccup serves last-known-good instead of a 500).
 3. **Publish button** (`/admin/publish`, password = `PUBLISH_PASSWORD` secret) bumps the KV epoch → whole site is fresh within ~a minute. Editors never trigger deploys; deploys are for code only.
-4. Caveat: the Cache API is a no-op on `*.workers.dev` — staging renders every request (fine at staging traffic). Edge caching engages on the custom domain at launch.
+4. Edge caching is live on `*.workers.dev` too (verified: `x-cache: hit` in ~20ms). Cache keys embed the KV epoch (content invalidation via Publish) AND a per-build id — so every deploy automatically starts a fresh cache generation and old-code pages are never served after a release.
 
 Local prod-like run: `npm run preview:cf` (wrangler dev on the built output; secrets from `.dev.vars`, gitignored).
 
