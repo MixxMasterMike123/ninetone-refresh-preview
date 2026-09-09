@@ -1,5 +1,6 @@
 ---
 import type { ArtistSocials } from "./ArtistCard.astro";
+import { externalUrl } from "../lib/url";
 
 interface Props {
   socials: ArtistSocials;
@@ -25,10 +26,14 @@ if (socials.tiktok) entries.push({ label: "TikTok", href: socials.tiktok, group:
 if (socials.twitter) entries.push({ label: "X / Twitter", href: socials.twitter, group: "social" });
 if (socials.facebook) entries.push({ label: "Facebook", href: socials.facebook, group: "social" });
 
-if (entries.length === 0) return Astro.redirect("");
+const safeEntries = entries
+  .map((entry) => ({ ...entry, href: externalUrl(entry.href) }))
+  .filter((entry): entry is Entry => entry.href !== null);
 
-const stream = entries.filter((e) => e.group === "stream");
-const social = entries.filter((e) => e.group === "social");
+if (safeEntries.length === 0) return Astro.redirect("");
+
+const stream = safeEntries.filter((e) => e.group === "stream");
+const social = safeEntries.filter((e) => e.group === "social");
 
 const subTextClass = variant === "ink" ? "text-ninetone-paper/55" : "text-ninetone-ink/55";
 const ruleClass = variant === "ink" ? "border-ninetone-paper/15" : "border-ninetone-ink/15";

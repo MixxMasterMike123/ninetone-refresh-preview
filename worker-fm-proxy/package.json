@@ -1,15 +1,16 @@
 {
   "name": "worker-fm-proxy",
+  "type": "module",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --experimental-strip-types --test test/security.test.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "devDependencies": {
-    "wrangler": "^4.90.0"
+    "wrangler": "4.130.0"
   }
 }

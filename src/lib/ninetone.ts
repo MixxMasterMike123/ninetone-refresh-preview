@@ -6,6 +6,7 @@
  */
 
 import { fmFind, fmFindWithPortals } from "./filemaker";
+import { isActiveBookingArtist } from "./booking-status";
 
 export type Artist = Record<string, unknown> & {
   SLUG?: string;
@@ -336,7 +337,7 @@ export function getBookingRoster() {
       },
     ],
     limit: 500,
-  });
+  }).then((rows) => rows.filter(isActiveBookingArtist));
 }
 
 // ---------------------------------------------------------------------------
@@ -399,9 +400,7 @@ export async function getBookingCategories(): Promise<BookingCategory[]> {
     // the past but not pitchable today. Hides them from the list page AND
     // from getAllActiveBookingSlugs below (single-page generator), so the
     // two stay in lockstep.
-    const activeRows = portalRows.filter(
-      (row) => row["Green HeadArtist::filterActive"] === "Active",
-    );
+    const activeRows = portalRows.filter(isActiveBookingArtist);
     const artists: BookingCategoryArtist[] = activeRows
       .map((row) => ({
         slug: pickPortal(row, "SLUG"),
@@ -491,7 +490,9 @@ export async function getBookingPageSet(): Promise<{
     ),
   );
   for (const r of extras) {
-    if (r && r.SLUG) records.set(String(r.SLUG), r);
+    // Keep the local invariant even if a layout/query is changed in FM:
+    // a detail page and its related-roster strip may only contain Active talent.
+    if (r && r.SLUG && isActiveBookingArtist(r)) records.set(String(r.SLUG), r);
   }
 
   return { slugs, records, allRoster: [...records.values()] };

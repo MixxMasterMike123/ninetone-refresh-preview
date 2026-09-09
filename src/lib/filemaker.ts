@@ -72,7 +72,7 @@ async function createSession(): Promise<string> {
     body: "{}",
   });
   if (!res.ok) {
-    throw new Error(`FM session failed: ${res.status} ${await res.text()}`);
+    throw new Error(`FM session failed: HTTP ${res.status}`);
   }
   const json = (await res.json()) as { response: { token: string } };
   cachedToken = { value: json.response.token, expires: Date.now() + TOKEN_TTL_MS };
@@ -171,7 +171,8 @@ async function fmRequest<T>(
   if (noRecords) return null;
 
   if (!res.ok) {
-    throw new Error(`FM find ${layout} failed: ${res.status} ${JSON.stringify(json.messages)}`);
+    const codes = (json.messages ?? []).map((message) => message.code).join(",") || "unknown";
+    throw new Error(`FM find ${layout} failed: HTTP ${res.status}, code ${codes}`);
   }
 
   // Truncation tripwire: FM's default limit is 100 records. If a query matched

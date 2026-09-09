@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { timingSafeEqual as cryptoTimingSafeEqual } from "node:crypto";
 
 /**
  * "Publish now" — instant cache flush for editors (docs/cms-architecture.md).
@@ -16,56 +17,103 @@ import type { APIRoute } from "astro";
  * simple for v1 — one org, trusted editors, HTTPS.
  */
 
-import { getCfEnv } from "../../lib/cf";
+import { getCfEnv, type CfEnv } from "../../lib/cf.ts";
 
-function timingSafeEqual(a: string, b: string): boolean {
+async function timingSafeEqual(a: string, b: string): Promise<boolean> {
   const enc = new TextEncoder();
-  const ab = enc.encode(a);
-  const bb = enc.encode(b);
-  if (ab.length !== bb.length) return false;
-  let diff = 0;
-  for (let i = 0; i < ab.length; i++) diff |= ab[i] ^ bb[i];
-  return diff === 0;
+  const [ab, bb] = await Promise.all([
+    crypto.subtle.digest("SHA-256", enc.encode(a)),
+    crypto.subtle.digest("SHA-256", enc.encode(b)),
+  ]).then((values) => values.map((value) => new Uint8Array(value)));
+  return cryptoTimingSafeEqual(ab, bb);
+}
+
+async function readLimitedBody(request: Request, maxBytes: number): Promise<string> {
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel();
+      throw new RangeError("Request too large");
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
+  return new TextDecoder().decode(body);
 }
 
 function json(status: number, body: Record<string, unknown>): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
   });
 }
 
-export const POST: APIRoute = async ({ request }) => {
-  const env = await getCfEnv();
+export async function handlePublish(request: Request, env: CfEnv | null): Promise<Response> {
+  if (request.headers.get("sec-fetch-site") === "cross-site") {
+    return json(403, { ok: false, error: "Cross-site request rejected" });
+  }
+  const origin = request.headers.get("origin");
+  if (origin && origin !== new URL(request.url).origin) {
+    return json(403, { ok: false, error: "Cross-site request rejected" });
+  }
   const kv = env?.CACHE_STATE;
   const expected = env?.PUBLISH_PASSWORD;
+  const limiter = env?.PUBLISH_RATE_LIMITER;
 
-  if (!kv || !expected) {
+  if (!kv || !expected || !limiter) {
     return json(503, {
       ok: false,
       error: "Publish is only available on the live (Cloudflare) deployment",
     });
   }
 
-  let password = "";
+  const connectingIp = request.headers.get("cf-connecting-ip") ?? "unknown";
+  const rateKeyBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(connectingIp));
+  const rateKey = Array.from(new Uint8Array(rateKeyBytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
   try {
-    const ct = request.headers.get("content-type") || "";
-    if (ct.includes("application/json")) {
-      const body = (await request.json()) as { password?: string };
-      password = String(body.password ?? "");
-    } else {
-      const form = await request.formData();
-      password = String(form.get("password") ?? "");
+    if (!(await limiter.limit({ key: rateKey })).success) {
+      return json(429, { ok: false, error: "Too many attempts" });
     }
   } catch {
+    return json(503, { ok: false, error: "Publish protection is unavailable" });
+  }
+
+  let password = "";
+  try {
+    const raw = await readLimitedBody(request, 4_096);
+    const ct = request.headers.get("content-type") || "";
+    if (ct.includes("application/json")) {
+      const body = JSON.parse(raw) as { password?: string } | null;
+      password = String(body?.password ?? "");
+    } else if (ct.includes("application/x-www-form-urlencoded")) {
+      password = new URLSearchParams(raw).get("password") ?? "";
+    } else {
+      return json(415, { ok: false, error: "Unsupported content type" });
+    }
+  } catch (err) {
+    if (err instanceof RangeError) return json(413, { ok: false, error: "Request too large" });
     return json(400, { ok: false, error: "Invalid body" });
   }
 
-  if (!password || !timingSafeEqual(password, expected)) {
+  if (!password || !(await timingSafeEqual(password, expected))) {
     return json(401, { ok: false, error: "Wrong password" });
   }
 
   const version = `${Date.now().toString(36)}`;
-  await kv.put("cache-version", version);
+  try {
+    await kv.put("cache-version", version);
+  } catch {
+    return json(503, { ok: false, error: "Publish is temporarily unavailable" });
+  }
   return json(200, { ok: true, version });
-};
+}
+
+export const POST: APIRoute = async ({ request }) => handlePublish(request, await getCfEnv());

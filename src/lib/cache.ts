@@ -21,6 +21,7 @@
 
 const TTL_MS = 60_000;
 const RETRY_AFTER_ERROR_MS = 30_000;
+const MAX_ENTRIES = 500;
 
 type Entry = {
   promise: Promise<unknown>;
@@ -71,5 +72,14 @@ export function cached<T>(
     },
   );
   memCache.set(k, entry);
+  // Request-derived slugs can otherwise grow a long-lived Worker isolate's
+  // map without bound. Map.keys() yields insertion order and re-setting an
+  // existing key doesn't move it, so this evicts the oldest-inserted entry —
+  // plain FIFO, not an LRU (a frequently-hit old entry is evicted just the
+  // same as an unused one).
+  if (memCache.size > MAX_ENTRIES) {
+    const oldest = memCache.keys().next().value as string | undefined;
+    if (oldest && oldest !== k) memCache.delete(oldest);
+  }
   return entry.promise as Promise<T>;
 }

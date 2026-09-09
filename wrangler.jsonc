@@ -36,6 +36,16 @@
       "id": "95e1b100fcb945e2aecbe0dc2e090e12"
     }
   ],
+  "ratelimits": [
+    {
+      "name": "PUBLISH_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": {
+        "limit": 10,
+        "period": 60
+      }
+    }
+  ],
   "vars": {
     // Non-secret runtime config. FM_HOST/FM_DB have code defaults; set here
     // to be explicit. PUBLIC_NOINDEX stays true until launch.

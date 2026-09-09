@@ -22,6 +22,8 @@ interface Env {
   FM_DB: string;
   FM_USER: string;
   FM_PASS: string;
+  /** Overridable for tests; production uses the UPSTREAM_TIMEOUT_MS default. */
+  UPSTREAM_TIMEOUT_MS?: string;
 }
 
 const ALLOWED_ORIGINS = new Set([
@@ -35,6 +37,89 @@ const ALLOWED_ORIGINS = new Set([
 // isolate is torn down or the token expires, next request grabs a fresh one.
 let cachedToken: { value: string; expires: number } | null = null;
 const TOKEN_TTL_MS = 12 * 60 * 1000; // refresh at 12 min, FM expires at 15
+const MAX_SLUG_LENGTH = 160;
+const MAX_ALBUM_LENGTH = 240;
+// Upstream FM streaming host is outside our control — a slow or hung
+// response would otherwise pin a Worker invocation indefinitely.
+const UPSTREAM_TIMEOUT_MS = 15_000;
+// Raster images only; this is well above any legitimate artist/cover photo.
+// Caps memory/bandwidth if an upstream response is unexpectedly huge.
+const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
+
+function upstreamTimeoutMs(env: Env): number {
+  const raw = env.UPSTREAM_TIMEOUT_MS ? Number(env.UPSTREAM_TIMEOUT_MS) : NaN;
+  return Number.isFinite(raw) && raw > 0 ? raw : UPSTREAM_TIMEOUT_MS;
+}
+
+/**
+ * Wrap a readable stream so it errors once more than `maxBytes` have passed
+ * through — lets us reject an oversized body without buffering it first.
+ */
+function capStream(body: ReadableStream<Uint8Array>, maxBytes: number): ReadableStream<Uint8Array> {
+  let seen = 0;
+  return body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        seen += chunk.byteLength;
+        if (seen > maxBytes) {
+          controller.error(new Error("Upstream image exceeded size cap"));
+          return;
+        }
+        controller.enqueue(chunk);
+      },
+    }),
+  );
+}
+
+function decodePathSegment(value: string, maxLength: number): string | null {
+  try {
+    const decoded = decodeURIComponent(value);
+    if (!decoded || decoded.length > maxLength || /[\u0000-\u001f\u007f]/.test(decoded)) return null;
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
+function fmUrl(raw: string, env: Env): URL | null {
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "https:" || parsed.hostname.toLowerCase() !== env.FM_HOST.toLowerCase() || !parsed.pathname.includes("/Streaming_SSL/")) return null;
+    if (parsed.username || parsed.password || parsed.port) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/** Distinguishes an upstream timeout from any other fetch failure so the
+ * caller can return 504 instead of a generic 502. */
+class UpstreamTimeoutError extends Error {}
+
+// One deadline covers the whole redirect chain, not a fresh timeout per hop —
+// a chain of otherwise-fast redirects shouldn't be able to add up past it.
+async function fetchFmImage(raw: string, env: Env, signal: AbortSignal): Promise<Response | null> {
+  let target = fmUrl(raw, env);
+  if (!target) return null;
+  for (let redirects = 0; redirects < 4; redirects++) {
+    let response: Response;
+    try {
+      response = await fetch(target, { redirect: "manual", signal });
+    } catch (err) {
+      if (signal.aborted) throw new UpstreamTimeoutError();
+      return null;
+    }
+    if (response.status < 300 || response.status >= 400) return response;
+    const location = response.headers.get("Location");
+    try {
+      target = location ? fmUrl(new URL(location, target).toString(), env) : null;
+    } catch {
+      target = null;
+    }
+    if (!target) return null;
+  }
+  return null;
+}
 
 async function getToken(env: Env): Promise<string> {
   if (cachedToken && Date.now() < cachedToken.expires) return cachedToken.value;
@@ -51,9 +136,10 @@ async function getToken(env: Env): Promise<string> {
     },
   );
   if (!res.ok) {
-    throw new Error(`FM session failed: ${res.status} ${await res.text()}`);
+    throw new Error(`FM session failed: ${res.status}`);
   }
-  const json = (await res.json()) as { response: { token: string } };
+  const json = (await res.json()) as { response?: { token?: string } };
+  if (!json.response?.token) throw new Error("FM session returned no token");
   cachedToken = { value: json.response.token, expires: Date.now() + TOKEN_TTL_MS };
   return cachedToken.value;
 }
@@ -99,7 +185,7 @@ interface RouteSpec {
   fields: Record<string, string>;
 }
 
-const ROUTES: Record<string, RouteSpec> = {
+const ROUTES: Record<string, RouteSpec> = Object.assign(Object.create(null), {
   artist: {
     layout: "API_ARTIST_DETAIL",
     query: (slug) => ({ SLUG: `==${slug}` }),
@@ -125,7 +211,7 @@ const ROUTES: Record<string, RouteSpec> = {
     query: (slug) => ({ SLUG: `==${slug}` }),
     fields: { big: "userPhoto", small: "userPhotoSmall" },
   },
-};
+});
 
 // Releases are a portal on the artist record (not their own layout). Looked up
 // by artist slug + either an album name (current scheme — stable across FM
@@ -246,10 +332,82 @@ function obsHeaders(route: string, status: "hit" | "miss" | "error" = "miss"): R
   };
 }
 
+const SUPPORTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"];
+
+/**
+ * Resolve + stream one upstream image, applying the shared timeout and size
+ * cap. Returns either a ready-to-send Response or an error status/body pair
+ * for the caller to wrap with its own CORS/observability headers.
+ */
+async function streamImage(
+  imageUrl: string,
+  env: Env,
+  origin: string | null,
+  route: string,
+): Promise<Response> {
+  const timeoutMs = upstreamTimeoutMs(env);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let imgRes: Response | null;
+  try {
+    imgRes = await fetchFmImage(imageUrl, env, controller.signal);
+  } catch (err) {
+    if (err instanceof UpstreamTimeoutError) {
+      return new Response("Upstream timed out", {
+        status: 504,
+        headers: { ...corsHeaders(origin), ...obsHeaders(route, "error") },
+      });
+    }
+    return new Response("Image fetch failed", {
+      status: 502,
+      headers: { ...corsHeaders(origin), ...obsHeaders(route, "error") },
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!imgRes) {
+    return new Response("Image fetch failed", {
+      status: 502,
+      headers: { ...corsHeaders(origin), ...obsHeaders(route, "error") },
+    });
+  }
+  if (!imgRes.ok) {
+    return new Response("Image fetch failed", {
+      status: 502,
+      headers: { ...corsHeaders(origin), ...obsHeaders(route, "error") },
+    });
+  }
+  const contentLength = Number(imgRes.headers.get("Content-Length"));
+  if (Number.isFinite(contentLength) && contentLength > MAX_IMAGE_BYTES) {
+    return new Response("Image too large", {
+      status: 502,
+      headers: { ...corsHeaders(origin), ...obsHeaders(route, "error") },
+    });
+  }
+  const contentType = imgRes.headers.get("Content-Type")?.split(";", 1)[0].toLowerCase();
+  if (!contentType || !SUPPORTED_IMAGE_TYPES.includes(contentType)) {
+    return new Response("Unsupported image type", {
+      status: 502,
+      headers: { ...corsHeaders(origin), ...obsHeaders(route, "error") },
+    });
+  }
+  const headers = new Headers({ "Content-Type": contentType });
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("Cache-Control", "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400");
+  for (const [k, v] of Object.entries(corsHeaders(origin))) headers.set(k, v);
+  for (const [k, v] of Object.entries(obsHeaders(route, "miss"))) headers.set(k, v);
+  const body = imgRes.body ? capStream(imgRes.body, MAX_IMAGE_BYTES) : imgRes.body;
+  return new Response(body, { headers });
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const origin = req.headers.get("Origin");
     if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders(origin) });
+    if (req.method !== "GET") return new Response("Method not allowed", {
+      status: 405,
+      headers: { Allow: "GET, OPTIONS", ...corsHeaders(origin) },
+    });
 
     const url = new URL(req.url);
     const parts = url.pathname.split("/").filter(Boolean);
@@ -263,7 +421,7 @@ export default {
         await getToken(env);
         checks.token = "ok";
       } catch (err) {
-        checks.token = `failed: ${err}`;
+        checks.token = "failed";
         return new Response(JSON.stringify({ ok: false, ...checks }), {
           status: 502,
           headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
@@ -275,7 +433,7 @@ export default {
         const probe = await fmFind(env, "API_ARTIST_DETAIL", { SLUG: "*" });
         checks.fmFind = probe ? "ok" : "no-records";
       } catch (err) {
-        checks.fmFind = `failed: ${err}`;
+        checks.fmFind = "failed";
         return new Response(JSON.stringify({ ok: false, ...checks }), {
           status: 502,
           headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
@@ -291,6 +449,8 @@ export default {
     // /release/:artistSlug/by-album/:album — release cover art (current)
     // /release/:artistSlug/:index         — legacy positional lookup
     if (kind === "release" && slug && variant) {
+      const safeSlug = decodePathSegment(slug, MAX_SLUG_LENGTH);
+      if (!safeSlug) return new Response("Bad slug", { status: 400, headers: corsHeaders(origin) });
       const byAlbum = variant === "by-album";
       const route = byAlbum ? "release/by-album" : `release/${variant}`;
       let idx = -1;
@@ -302,10 +462,12 @@ export default {
             headers: { ...corsHeaders(origin), ...obsHeaders(route, "error") },
           });
         }
-        album = decodeURIComponent(extra);
+        const decodedAlbum = decodePathSegment(extra, MAX_ALBUM_LENGTH);
+        if (!decodedAlbum) return new Response("Bad album", { status: 400, headers: corsHeaders(origin) });
+        album = decodedAlbum;
       } else {
         idx = parseInt(variant, 10);
-        if (isNaN(idx)) {
+        if (!Number.isInteger(idx) || idx < 0 || String(idx) !== variant) {
           return new Response("Bad index", {
             status: 400,
             headers: { ...corsHeaders(origin), ...obsHeaders(route, "error") },
@@ -315,10 +477,10 @@ export default {
       let imageUrl: string | null;
       try {
         imageUrl = byAlbum
-          ? await fetchReleaseCoverByAlbum(env, slug, album)
-          : await fetchReleaseCoverByIndex(env, slug, idx);
+          ? await fetchReleaseCoverByAlbum(env, safeSlug, album)
+          : await fetchReleaseCoverByIndex(env, safeSlug, idx);
       } catch (err) {
-        return new Response(`FM error: ${err}`, {
+        return new Response("FM error", {
           status: 502,
           headers: { ...corsHeaders(origin), ...obsHeaders(route, "error") },
         });
@@ -329,18 +491,7 @@ export default {
           headers: { ...corsHeaders(origin), ...obsHeaders(route, "error") },
         });
       }
-      const imgRes = await fetch(imageUrl);
-      if (!imgRes.ok) {
-        return new Response(`Image fetch failed: ${imgRes.status}`, {
-          status: 502,
-          headers: { ...corsHeaders(origin), ...obsHeaders(route, "error") },
-        });
-      }
-      const headers = new Headers(imgRes.headers);
-      headers.set("Cache-Control", "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400");
-      for (const [k, v] of Object.entries(corsHeaders(origin))) headers.set(k, v);
-      for (const [k, v] of Object.entries(obsHeaders(route, "miss"))) headers.set(k, v);
-      return new Response(imgRes.body, { headers });
+      return streamImage(imageUrl, env, origin, route);
     }
 
     const route = ROUTES[kind];
@@ -358,12 +509,14 @@ export default {
         headers: { ...corsHeaders(origin), ...obsHeaders(routeTag, "error") },
       });
     }
+    const safeSlug = decodePathSegment(slug, MAX_SLUG_LENGTH);
+    if (!safeSlug) return new Response("Bad slug", { status: 400, headers: corsHeaders(origin) });
 
     let record: FmRecord | null;
     try {
-      record = await fmFind(env, route.layout, route.query(slug));
+      record = await fmFind(env, route.layout, route.query(safeSlug));
     } catch (err) {
-      return new Response(`FM error: ${err}`, {
+      return new Response("FM error", {
         status: 502,
         headers: { ...corsHeaders(origin), ...obsHeaders(routeTag, "error") },
       });
@@ -385,17 +538,6 @@ export default {
 
     // Stream the image bytes through. FM URL is fresh — generated this same
     // request — so it works for the brief moment we need it.
-    const imgRes = await fetch(imageUrl);
-    if (!imgRes.ok) {
-      return new Response(`Image fetch failed: ${imgRes.status}`, {
-        status: 502,
-        headers: { ...corsHeaders(origin), ...obsHeaders(routeTag, "error") },
-      });
-    }
-    const headers = new Headers(imgRes.headers);
-    headers.set("Cache-Control", "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400");
-    for (const [k, v] of Object.entries(corsHeaders(origin))) headers.set(k, v);
-    for (const [k, v] of Object.entries(obsHeaders(routeTag, "miss"))) headers.set(k, v);
-    return new Response(imgRes.body, { headers });
+    return streamImage(imageUrl, env, origin, routeTag);
   },
 };

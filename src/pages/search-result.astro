@@ -77,6 +77,20 @@ import { url } from "../lib/url";
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
+  function safeInternalUrl(value: string): string {
+    try {
+      const parsed = new URL(value, window.location.origin);
+      return parsed.origin === window.location.origin ? parsed.pathname + parsed.search + parsed.hash : "#";
+    } catch { return "#"; }
+  }
+
+  function safeImageUrl(value: string): string {
+    try {
+      const parsed = new URL(value, window.location.origin);
+      return ["http:", "https:"].includes(parsed.protocol) ? parsed.href : "";
+    } catch { return ""; }
+  }
+
   function renderResults(query: string, hits: SearchEntry[]): string {
     if (hits.length === 0) {
       return `<p class="text-base text-ninetone-ink/65">No results for <strong>${escapeHtml(query)}</strong>.</p>`;
@@ -96,8 +110,8 @@ import { url } from "../lib/url";
         const cards = items
           .map(
             (e) => `
-              <a href="${escapeHtml(e.href)}" class="group flex flex-col gap-3 border-t border-ninetone-rule pt-4 transition-colors">
-                ${e.image ? `<div class="aspect-[4/3] w-full overflow-hidden bg-ninetone-paper-warm"><img src="${escapeHtml(e.image)}" alt="" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" loading="lazy" /></div>` : ""}
+              <a href="${escapeHtml(safeInternalUrl(e.href))}" class="group flex flex-col gap-3 border-t border-ninetone-rule pt-4 transition-colors">
+                ${e.image && safeImageUrl(e.image) ? `<div class="aspect-[4/3] w-full overflow-hidden bg-ninetone-paper-warm"><img src="${escapeHtml(safeImageUrl(e.image))}" alt="" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" loading="lazy" /></div>` : ""}
                 <div>
                   <h3 class="font-display text-xl font-medium leading-tight tracking-tight transition-colors group-hover:opacity-70">${escapeHtml(e.name)}</h3>
                   ${e.blurb ? `<p class="mt-2 line-clamp-2 text-sm text-ninetone-ink/65">${escapeHtml(e.blurb)}</p>` : ""}

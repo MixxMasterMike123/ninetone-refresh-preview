@@ -13,8 +13,8 @@
  *     might trip this; surface for review, don't fail the build)
  *
  * Writes dist/_audit.json (machine-readable) and prints a human summary.
- * Always exits 0 — advisory only. CI can grep the JSON if it wants to gate
- * on specific issues.
+ * FM URL leaks fail the build. Other findings remain advisory so a legitimate
+ * template exception does not block deployment.
  */
 
 import { readdir, readFile, writeFile } from "node:fs/promises";
@@ -57,7 +57,7 @@ async function main() {
       const leaks = content.match(FM_LEAK_RE);
       if (leaks) {
         for (const url of [...new Set(leaks)]) {
-          issues.push({ kind: "fm-url-leak", file: rel, detail: url });
+          issues.push({ kind: "fm-url-leak", file: rel, detail: "redacted FM streaming URL" });
         }
       }
     }
@@ -112,10 +112,10 @@ async function main() {
     }
   }
   process.stdout.write(lines.join("\n") + "\n");
+  if (byKind.has("fm-url-leak")) process.exitCode = 1;
 }
 
 main().catch((err) => {
   process.stderr.write(`Audit failed: ${err}\n`);
-  // Never fail the build over an audit problem.
-  process.exit(0);
+  process.exit(1);
 });

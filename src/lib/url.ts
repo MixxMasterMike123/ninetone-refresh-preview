@@ -22,3 +22,14 @@ export function url(path: string): string {
   if (path === "/") return base || "/";
   return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
+
+/** Accept only web URLs supplied by CMS/API data for clickable external links. */
+export function externalUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const parsed = new URL(String(value).trim());
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}

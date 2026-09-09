@@ -33,6 +33,7 @@
 
 import { defineMiddleware } from "astro:middleware";
 import { getCfEnv } from "./lib/cf";
+import { edgeCacheKey, shouldBypassCache } from "./lib/cache-policy";
 
 // Statically replaced by Vite (astro.config define); guarded for any context
 // where the define isn't applied.
@@ -58,9 +59,6 @@ const TTL_RULES: Array<[RegExp, number]> = [
 ];
 const DEFAULT_TTL = 3600;
 
-/** Never edge-cache these. */
-const SKIP = [/^\/api\//, /^\/admin(\/|$)/];
-
 function ttlFor(pathname: string): number {
   for (const [re, ttl] of TTL_RULES) {
     if (re.test(pathname)) return ttl;
@@ -68,16 +66,29 @@ function ttlFor(pathname: string): number {
   return DEFAULT_TTL;
 }
 
+function harden(res: Response): Response {
+  // Some platform responses expose immutable headers; clone before applying
+  // policy so redirects/errors receive the same protection reliably.
+  res = new Response(res.body, res);
+  res.headers.set("X-Content-Type-Options", "nosniff");
+  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.headers.set("X-Frame-Options", "DENY");
+  res.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+  res.headers.set("Content-Security-Policy", "base-uri 'self'; object-src 'none'; frame-ancestors 'none'");
+  res.headers.set("Strict-Transport-Security", "max-age=31536000");
+  return res;
+}
+
 export const onRequest = defineMiddleware(async (context, next) => {
   const { request, url, locals } = context;
 
   const cacheApi = (globalThis as { caches?: { default?: Cache } }).caches?.default;
-  if (!cacheApi || request.method !== "GET" || SKIP.some((re) => re.test(url.pathname))) {
-    return next();
+  if (!cacheApi || shouldBypassCache(request, url.pathname, url.search)) {
+    return harden(await next());
   }
 
   const env = await getCfEnv();
-  if (!env) return next(); // Node runtime (static build / plain dev)
+  if (!env) return harden(await next()); // Node runtime (static build / plain dev)
 
   // Publish-button epoch. KV read is edge-cached 60s, so a Publish takes
   // effect within ~a minute per colo — and costs ~nothing per request.
@@ -89,25 +100,31 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   const ttl = ttlFor(url.pathname);
-  // Cache keys must be requests; the host is arbitrary but must be stable.
-  const cacheKey = new Request(
-    `https://edge-cache.ninetone.internal/v${version}/b${BUILD_ID}${url.pathname}${url.search}`,
-  );
+  // Include the request origin so Host-dependent SSR output cannot cross hosts.
+  const cacheKey = new Request(edgeCacheKey(url.origin, url.pathname, version, BUILD_ID));
 
   const hit = await cacheApi.match(cacheKey);
   if (hit) {
     const res = new Response(hit.body, hit);
     res.headers.set("x-cache", "hit");
-    return res;
+    return harden(res);
   }
 
-  const res = await next();
+  // Clone immediately: platform-generated redirects can expose immutable
+  // Headers, while the cache decision needs to annotate every response.
+  const rendered = await next();
+  const res = new Response(rendered.body, rendered);
 
   // Only cache successful full responses — a transient error page must never
   // be pinned at the edge for an hour.
-  if (res.status !== 200 || res.headers.has("set-cookie")) {
+  const responseCacheControl = res.headers.get("cache-control") ?? "";
+  if (
+    res.status !== 200 ||
+    res.headers.has("set-cookie") ||
+    /(?:^|,)\s*(?:private|no-store|no-cache)\b/i.test(responseCacheControl)
+  ) {
     res.headers.set("x-cache", "bypass");
-    return res;
+    return harden(res);
   }
 
   // Browser gets a short lease (60s), the edge holds the tiered TTL, and the
@@ -129,5 +146,5 @@ export const onRequest = defineMiddleware(async (context, next) => {
     await store.catch((err) => console.error("[edge-cache] put failed:", err));
   }
 
-  return res;
+  return harden(res);
 });

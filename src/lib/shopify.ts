@@ -83,7 +83,7 @@ export function getProducts(opts?: {
 
     const res = await shopifyFetch(`/products.json?${params}`);
     if (!res.ok) {
-      throw new Error(`Shopify products failed: ${res.status} ${await res.text()}`);
+      throw new Error(`Shopify products failed: HTTP ${res.status}`);
     }
     const json = (await res.json()) as ShopifyProductsResponse;
     return json.products;

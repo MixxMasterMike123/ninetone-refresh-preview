@@ -4,13 +4,15 @@
   "version": "0.1.0",
   "description": "Ninetone Group website (Astro + Cloudflare Pages, FileMaker-driven)",
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.19.0"
   },
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
     "postbuild": "node scripts/audit-dist.mjs",
     "audit": "node scripts/audit-dist.mjs",
+    "test": "node --experimental-strip-types --test test/*.test.mjs",
+    "test:booking": "node --experimental-strip-types --test test/booking-status.test.mjs",
     "preview": "astro preview",
     "dev:cf": "DEPLOY_TARGET=cf astro dev",
     "build:cf": "DEPLOY_TARGET=cf FM_USER= FM_PASS= SHOPIFY_ADMIN_TOKEN= YOUTUBE_API_KEY= PUBLISH_PASSWORD= astro build",
@@ -19,16 +21,16 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "^13.7.0",
+    "@astrojs/cloudflare": "14.3.1",
     "@astrojs/sitemap": "^3.7.2",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.3.0",
-    "astro": "^6.3.1",
+    "astro": "7.3.2",
     "fuse.js": "^7.3.0",
     "marked": "^18.0.3",
     "tailwindcss": "^4.3.0"
   },
   "devDependencies": {
-    "wrangler": "^4.106.0"
+    "wrangler": "4.130.0"
   }
 }

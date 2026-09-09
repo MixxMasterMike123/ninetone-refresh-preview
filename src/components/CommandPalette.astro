@@ -120,6 +120,20 @@ const { lang = "en" } = Astro.props as Props;
       .replace(/"/g, "&quot;");
   }
 
+  function safeInternalUrl(value: string): string {
+    try {
+      const parsed = new URL(value, window.location.origin);
+      return parsed.origin === window.location.origin ? parsed.pathname + parsed.search + parsed.hash : "#";
+    } catch { return "#"; }
+  }
+
+  function safeImageUrl(value: string): string {
+    try {
+      const parsed = new URL(value, window.location.origin);
+      return ["http:", "https:"].includes(parsed.protocol) ? parsed.href : "";
+    } catch { return ""; }
+  }
+
   function open() {
     if (isOpen) return;
     isOpen = true;
@@ -171,11 +185,11 @@ const { lang = "en" } = Astro.props as Props;
             return `
               <li>
                 <a
-                  href="${escapeHtml(e.href)}"
+                  href="${escapeHtml(safeInternalUrl(e.href))}"
                   data-cmdk-index="${i}"
                   class="flex items-center gap-3 px-3 py-2.5 transition-colors ${i === activeIndex ? "bg-ninetone-ink text-ninetone-paper" : "hover:bg-ninetone-paper-warm"}"
                 >
-                  ${e.image ? `<img src="${escapeHtml(e.image)}" alt="" loading="lazy" class="h-9 w-9 shrink-0 object-cover" />` : `<span class="h-9 w-9 shrink-0 bg-current opacity-10"></span>`}
+                  ${e.image && safeImageUrl(e.image) ? `<img src="${escapeHtml(safeImageUrl(e.image))}" alt="" loading="lazy" class="h-9 w-9 shrink-0 object-cover" />` : `<span class="h-9 w-9 shrink-0 bg-current opacity-10"></span>`}
                   <span class="flex min-w-0 flex-1 items-baseline justify-between gap-3">
                     <span class="truncate font-display text-base font-medium leading-tight tracking-tight">${escapeHtml(e.name)}</span>
                     <span class="shrink-0 text-[0.625rem] uppercase tracking-[0.16em] opacity-60">${SECTION_LABELS[e.section]}</span>

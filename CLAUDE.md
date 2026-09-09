@@ -4,14 +4,14 @@ Astro + Tailwind v4 site for Ninetone Group, built statically and deployed to Gi
 
 ## Stack
 
-- **Framework:** Astro 6, `output: "static"` (no adapter — we tried `@astrojs/cloudflare`, dropped it)
+- **Framework:** Astro 7, `output: "static"` (no adapter — we tried `@astrojs/cloudflare`, dropped it)
 - **Hosting:** GitHub Pages via GitHub Actions ([.github/workflows/deploy.yml](.github/workflows/deploy.yml))
 - **Image proxy:** Cloudflare Worker at [worker-fm-proxy/](worker-fm-proxy/) — see [DEPLOY.md](DEPLOY.md) for *why* this exists; it's load-bearing
 - **Styling:** Tailwind v4 (Vite plugin) + `@tailwindcss/typography`
 - **Search:** `fuse.js` client-side
 - **Markdown:** `marked`
 - **Sitemap:** `@astrojs/sitemap`
-- **Node:** >=22.12.0 (use `nvm use 22` — system default 20.x will fail)
+- **Node:** >=22.19.0 (use `nvm use 22` — system default 20.x will fail)
 
 ## Run
 

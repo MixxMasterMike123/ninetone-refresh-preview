@@ -172,12 +172,6 @@ const TIKTOK_PIXEL_ID = "TIKTOK-PLACEHOLDER"; // TODO: replace with real pixel I
     <title>{fullTitle}</title>
   </head>
   <body class="min-h-screen bg-ninetone-paper text-ninetone-ink antialiased">
-    {tracking && (
-      <noscript>
-        <iframe src={`https://www.googletagmanager.com/ns.html?id=${GTM_ID}`} title="Google Tag Manager" height="0" width="0" style="display:none;visibility:hidden"></iframe>
-        <img height="1" width="1" style="display:none" src={`https://www.facebook.com/tr?id=${META_PIXEL_ID}&ev=PageView&noscript=1`} />
-      </noscript>
-    )}
     <PromoBar promo={promo} />
     <Header theme={theme} lang={lang} />
     <main>

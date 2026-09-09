@@ -1,8 +1,54 @@
-import { marked } from "marked";
+import { marked, Renderer } from "marked";
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** Only navigation schemes which are safe in an HTML href/src attribute. */
+function safeUrl(value: string, image = false): string | null {
+  const href = value.trim();
+  if (!href || /[\u0000-\u001F\u007F]/.test(href)) return null;
+  // Protocol-relative ("//host/...") and backslash variants ("\\host",
+  // "/\host") resolve against the https://markdown.invalid/ base below as a
+  // live cross-origin https:// URL, bypassing the intent of the scheme
+  // allowlist. Reject before URL parsing.
+  if (/^[/\\]{2}/.test(href)) return null;
+  try {
+    const parsed = new URL(href, "https://markdown.invalid/");
+    const allowed = image ? ["http:", "https:"] : ["http:", "https:", "mailto:", "tel:"];
+    return allowed.includes(parsed.protocol) ? href : null;
+  } catch {
+    return null;
+  }
+}
+
+const renderer = new Renderer();
+// FM content is untrusted. Preserve literal HTML as text rather than allowing
+// scriptable tags/attributes to reach Astro's set:html consumers.
+renderer.html = ({ text }) => escapeHtml(text);
+renderer.link = function ({ href, title, tokens }) {
+  const label = this.parser.parseInline(tokens);
+  const safe = safeUrl(href);
+  if (!safe) return label;
+  const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+  return `<a href="${escapeHtml(safe)}"${titleAttr}>${label}</a>`;
+};
+renderer.image = ({ href, title, text }) => {
+  const safe = safeUrl(href, true);
+  if (!safe) return escapeHtml(text);
+  const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+  return `<img src="${escapeHtml(safe)}" alt="${escapeHtml(text)}"${titleAttr}>`;
+};
 
 marked.setOptions({
   gfm: true,
   breaks: true,
+  renderer,
 });
 
 /**

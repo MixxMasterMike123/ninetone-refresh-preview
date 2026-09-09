@@ -16,6 +16,9 @@ export type CacheStateKv = {
 export type CfEnv = Record<string, unknown> & {
   CACHE_STATE?: CacheStateKv;
   PUBLISH_PASSWORD?: string;
+  PUBLISH_RATE_LIMITER?: {
+    limit(opts: { key: string }): Promise<{ success: boolean }>;
+  };
 };
 
 let cfEnvPromise: Promise<CfEnv | null> | null = null;

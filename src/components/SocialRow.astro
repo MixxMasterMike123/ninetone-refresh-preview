@@ -1,4 +1,5 @@
 ---
+import { externalUrl } from "../lib/url";
 interface Props {
   spotify?: string;
   applemusic?: string;
@@ -29,7 +30,9 @@ const links: { url?: string; label: string; icon: string }[] = [
   { url: p.wikipedia, label: "Wikipedia", icon: "W" },
 ];
 
-const visible = links.filter((l) => l.url && l.url.trim() !== "");
+const visible = links
+  .map((l) => ({ ...l, url: externalUrl(l.url) }))
+  .filter((l): l is typeof l & { url: string } => l.url !== null);
 const dim = size === "sm" ? "h-6 w-6 text-[9px]" : "h-8 w-8 text-xs";
 ---
 
