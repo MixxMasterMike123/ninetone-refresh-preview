@@ -24,7 +24,7 @@ export const sectionColors: Record<SectionTheme, { bg: string; text: string; cta
   nation: {
     bg: "bg-ninetone-green",
     text: "text-white",
-    cta: "bg-white text-ninetone-green hover:bg-neutral-100",
+    cta: "bg-white text-ninetone-green-dark hover:bg-neutral-100",
   },
 };
 
@@ -73,10 +73,10 @@ export const sectionAccent: Record<SectionTheme, {
   },
   nation: {
     hex: "#1a936f",
-    text: "text-ninetone-green",
+    text: "text-ninetone-green-dark",
     border: "border-ninetone-green",
     bg: "bg-ninetone-green",
-    cta: "bg-ninetone-green text-ninetone-paper hover:bg-ninetone-green-dark",
+    cta: "bg-ninetone-green-dark text-ninetone-paper hover:bg-ninetone-green-deep",
     label: "Ninetone Nation",
   },
 };

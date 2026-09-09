@@ -23,8 +23,9 @@ All tokens live in [src/styles/global.css](src/styles/global.css) under `@theme 
 | Records dark | `bg-ninetone-red-dark` | `#6b0009` | Hover state. |
 | **Management accent** | `text-ninetone-navy` | `#13486f` | Management division accent. |
 | Management dark | `bg-ninetone-navy-dark` | `#0d3450` | Hover. |
-| **Nation accent** | `text-ninetone-green` | `#1a936f` | Nation division accent. |
-| Nation dark | `bg-ninetone-green-dark` | `#126b51` | Hover. |
+| **Nation accent** | `text-ninetone-green` | `#1a936f` | Nation division accent for non-text UI (bg fills, border rules) — text uses the dark variant below (`#1a936f` on paper is 3.48:1, fails AA). |
+| Nation dark | `text-ninetone-green-dark` / `bg-ninetone-green-dark` | `#126b51` | All Nation text-scale uses (kickers, links) and the Nation CTA fill — 5.83:1 on paper, AA-compliant. |
+| Nation deep | `bg-ninetone-green-deep` | `#0e5540` | Hover state for the Nation CTA (dark → deep, mirroring red → red-dark). |
 
 **Color rule:** Brand colors are **accents, not backdrops.** A division identity is signalled with one accent — usually the kicker label color, the section underline rule, and the CTA button. The page canvas stays paper. The full-color brand backgrounds are reserved for: Footer, PromoBar, MetricsPanel, MarqueeBand, and the *hover state* of the homepage portal cards.
 
@@ -206,7 +207,7 @@ The bar appears site-wide, dismissible per-user via `localStorage`.
 ## 6. Accessibility checklist (kept up to date)
 
 - All interactive elements meet `min-h-11` (44px touch target).
-- Color contrast: ink-on-paper > 14:1, accent-on-paper red 5.6:1, navy 7.2:1, green 4.6:1 — all AA.
+- Color contrast: ink-on-paper > 14:1, accent-on-paper red 5.6:1, navy 7.2:1. Green text-scale uses `ninetone-green-dark` (5.83:1) — the base `ninetone-green` (#1a936f) measures **3.48:1 on paper, which fails AA for text** and is restricted to non-text UI (bg fills at ≥3:1, border rules). Corrected 2026-09-09; §1 previously stated 4.6:1 in error.
 - Focus rings: rely on browser default ring + `focus:border-ninetone-ink` for inputs. Never `outline-none` without a replacement.
 - Hover-only nav avoided — every nav target is also reachable via tab + Enter.
 - `prefers-reduced-motion` honored on marquee.

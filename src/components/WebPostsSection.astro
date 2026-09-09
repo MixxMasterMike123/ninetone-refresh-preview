@@ -1,6 +1,7 @@
 ---
 import { renderBio } from "../lib/markdown";
 import type { WebPostCategory } from "../lib/ninetone";
+import { displayTitle } from "../lib/display-title";
 
 interface Props {
   data: WebPostCategory | null;
@@ -19,11 +20,11 @@ function stripOuterTag(s: string): string {
 }
 
 const blocks = data.blocks.map((b) => ({
-  subject: stripOuterTag(b.subject),
+  subject: displayTitle(stripOuterTag(b.subject)),
   messageHtml: renderBio(b.message),
 }));
 
-const pageTitle = heading ?? data.title;
+const pageTitle = displayTitle(heading ?? data.title);
 ---
 
 <section class="bg-ninetone-paper py-20">

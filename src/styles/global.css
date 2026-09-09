@@ -8,6 +8,7 @@
   --color-ninetone-navy-dark: #0d3450;
   --color-ninetone-green: #1a936f;
   --color-ninetone-green-dark: #126b51;
+  --color-ninetone-green-deep: #0e5540;
   --color-ninetone-card: #1a2b3f;
   --color-ninetone-card-sage: #b8c9b3;
   --color-ninetone-ink: #0a1420;
@@ -97,7 +98,7 @@ nav, header nav a, footer nav a {
   width: 1.5rem;
   height: 1px;
   background: currentColor;
-  opacity: 0.6;
+  opacity: 0.8;
 }
 
 .display-italic {

@@ -3,6 +3,7 @@ import Base from "../../layouts/Base.astro";
 import ArtistCard from "../../components/ArtistCard.astro";
 import SectionIntro from "../../components/SectionIntro.astro";
 import { getBookingCategories, getWebPostSection } from "../../lib/ninetone";
+import { displayTitle } from "../../lib/display-title";
 
 // Core content — failures render the error page (never edge-cached) instead
 // of a silently-empty booking roster. Transients are absorbed by lib/cache.ts.
@@ -34,7 +35,7 @@ function slugifyTag(s: string): string {
 <Base title="Booking" theme="nation">
   <SectionIntro
     title="Entertainers"
-    tagline={webPosts?.title}
+    tagline={displayTitle(webPosts?.title)}
     readMore={introBody}
     theme="nation"
     logo="/images/nationLogo.png"
@@ -50,7 +51,7 @@ function slugifyTag(s: string): string {
         >
           <ul class="flex items-center gap-1 px-6 pb-3">
             <li class="shrink-0">
-              <span class="kicker text-ninetone-green">{totalArtists} bookable</span>
+              <span class="kicker text-ninetone-green-dark">{totalArtists} bookable</span>
             </li>
             <li class="mx-3 h-4 w-px shrink-0 bg-ninetone-rule" aria-hidden></li>
             {populatedCategories.map((c) => (
@@ -75,7 +76,7 @@ function slugifyTag(s: string): string {
             <section id={id} class="scroll-mt-28">
               <header class="mb-10 grid gap-6 md:grid-cols-12 md:gap-16">
                 <div class="md:col-span-7">
-                  <span class="kicker text-ninetone-green">
+                  <span class="kicker text-ninetone-green-dark">
                     {c.tag} · {c.artists.length} {c.artists.length === 1 ? "talent" : "talents"}
                   </span>
                   <h2 class="mt-4 font-display text-[clamp(2rem,5vw,4rem)] leading-[0.95] tracking-[-0.035em]">

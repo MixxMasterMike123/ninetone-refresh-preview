@@ -5,6 +5,7 @@ import SectionIntro from "../../components/SectionIntro.astro";
 import RosterFilters from "../../components/RosterFilters.astro";
 import RosterIndex from "../../components/RosterIndex.astro";
 import { getClients, getWebPostSection } from "../../lib/ninetone";
+import { displayTitle } from "../../lib/display-title";
 
 // Core content — failures render the error page (never edge-cached) instead
 // of a silently-empty client roster. Transients are absorbed by lib/cache.ts.
@@ -32,7 +33,7 @@ const sortedTags = Array.from(tagCounts.entries())
 <Base title="Clients" theme="management">
   <SectionIntro
     title="Clients"
-    tagline={webPosts?.title}
+    tagline={displayTitle(webPosts?.title)}
     readMore={introBody}
     theme="management"
     logo="/images/managementLogo.png"

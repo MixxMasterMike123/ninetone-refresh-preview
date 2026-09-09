@@ -5,6 +5,7 @@ import ArtistsTabs from "../../../../components/ArtistsTabs.astro";
 import Pagination from "../../../../components/Pagination.astro";
 import SectionIntro from "../../../../components/SectionIntro.astro";
 import { getArtists, getPreviousArtists, getWebPostSection } from "../../../../lib/ninetone";
+import { displayTitle } from "../../../../lib/display-title";
 
 // Exported so the hoisted getStaticPaths and the request-time path below
 // share one definition (only exports are hoisted to module scope in Astro).
@@ -50,7 +51,7 @@ const webPosts = await getWebPostSection("Ninetone Records");
 <Base title="Previous Artists" theme="records">
   <SectionIntro
     title="Previous Artists"
-    tagline={webPosts?.title}
+    tagline={displayTitle(webPosts?.title)}
     readMore={introBody}
     theme="records"
     logo="/images/recordsLogo.png"
