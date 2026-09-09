@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { timingSafeEqual as cryptoTimingSafeEqual } from "node:crypto";
+import { readLimitedBody, json, isCrossSite, sha256Hex } from "../../lib/http.ts";
 
 /**
  * "Publish now" — instant cache flush for editors (docs/cms-architecture.md).
@@ -28,40 +29,8 @@ async function timingSafeEqual(a: string, b: string): Promise<boolean> {
   return cryptoTimingSafeEqual(ab, bb);
 }
 
-async function readLimitedBody(request: Request, maxBytes: number): Promise<string> {
-  if (!request.body) return "";
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > maxBytes) {
-      await reader.cancel();
-      throw new RangeError("Request too large");
-    }
-    chunks.push(value);
-  }
-  const body = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
-  return new TextDecoder().decode(body);
-}
-
-function json(status: number, body: Record<string, unknown>): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
-  });
-}
-
 export async function handlePublish(request: Request, env: CfEnv | null): Promise<Response> {
-  if (request.headers.get("sec-fetch-site") === "cross-site") {
-    return json(403, { ok: false, error: "Cross-site request rejected" });
-  }
-  const origin = request.headers.get("origin");
-  if (origin && origin !== new URL(request.url).origin) {
+  if (isCrossSite(request)) {
     return json(403, { ok: false, error: "Cross-site request rejected" });
   }
   const kv = env?.CACHE_STATE;
@@ -76,8 +45,7 @@ export async function handlePublish(request: Request, env: CfEnv | null): Promis
   }
 
   const connectingIp = request.headers.get("cf-connecting-ip") ?? "unknown";
-  const rateKeyBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(connectingIp));
-  const rateKey = Array.from(new Uint8Array(rateKeyBytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const rateKey = await sha256Hex(connectingIp);
   try {
     if (!(await limiter.limit({ key: rateKey })).success) {
       return json(429, { ok: false, error: "Too many attempts" });

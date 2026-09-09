@@ -34,6 +34,12 @@
       // namespace even though the site doesn't use Astro.session yet.
       "binding": "SESSION",
       "id": "95e1b100fcb945e2aecbe0dc2e090e12"
+    },
+    {
+      // Contact-form submissions (src/pages/api/contact.ts) — source of
+      // truth, written before email is attempted. 90-day TTL set per-key.
+      "binding": "CONTACT_SUBMISSIONS",
+      "id": "8724541e66e647a29022860aa49aca2f"
     }
   ],
   "ratelimits": [
@@ -44,6 +50,26 @@
         "limit": 10,
         "period": 60
       }
+    },
+    {
+      // Contact endpoint rate limit — 5 requests/min per hashed connecting
+      // IP, same fail-closed pattern as PUBLISH_RATE_LIMITER above.
+      "name": "CONTACT_RATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": {
+        "limit": 5,
+        "period": 60
+      }
+    }
+  ],
+  // Email Sending binding (src/pages/api/contact.ts) — sends division
+  // enquiries via env.CONTACT_EMAIL.send(). Requires the `ninetone.com`
+  // domain onboarded via `wrangler email sending enable ninetone.com`
+  // before sends will succeed; see contact.ts for the from/to addresses.
+  "send_email": [
+    {
+      "name": "CONTACT_EMAIL",
+      "allowed_sender_addresses": ["noreply@ninetone.com"]
     }
   ],
   "vars": {

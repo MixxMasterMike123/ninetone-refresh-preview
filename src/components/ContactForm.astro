@@ -3,6 +3,18 @@ import type { SectionTheme } from "../lib/sections";
 import { sectionAccent } from "../lib/sections";
 import { url } from "../lib/url";
 
+export interface ContactField {
+  type: "text" | "email" | "tel" | "textarea";
+  name: string;
+  label: string;
+  placeholder?: string;
+  required?: boolean;
+  /** For textarea only — visible row count. */
+  rows?: number;
+  /** For input fields — 1 spans full width, omit for half-width. */
+  cols?: 1 | 2;
+}
+
 interface Props {
   /** Theme drives accent color (button + rule). */
   theme?: SectionTheme;
@@ -16,17 +28,28 @@ interface Props {
   blurb: string;
   /** Optional metric tiles rendered in the left column. */
   metrics?: Array<{ value: string; label: string }>;
-  /** Contact-side micro headline. */
+  /** Form-side micro headline. */
   formTitle: string;
-  /** Contact-side description. */
+  /** Form-side description. */
   formBlurb?: string;
-  /** Accepted for backwards-compatible page calls; not rendered without delivery. */
-  fields?: unknown;
-  /** Accepted for backwards-compatible page calls; not rendered without delivery. */
-  submitLabel?: string;
-  /** Direct mailbox used while web-form delivery is unavailable. */
+  /** Field config — drives the real form layout on the Cloudflare build. */
+  fields: ContactField[];
+  /** Submit button label. */
+  submitLabel: string;
+  /**
+   * Which division this form delivers to — required so /api/contact can
+   * route the email and so the mailto fallback has a sane default address.
+   */
+  division: "records" | "management" | "nation";
+  /** Direct mailbox used on the static build / as the error-state fallback. */
   contactEmail?: string;
 }
+
+const DIVISION_EMAIL: Record<Props["division"], string> = {
+  records: "office@ninetone.com",
+  management: "office@ninetone.com",
+  nation: "booking@ninetone.com",
+};
 
 const {
   theme = "group",
@@ -37,10 +60,21 @@ const {
   metrics = [],
   formTitle,
   formBlurb,
-  contactEmail = "hello@ninetone.com",
+  fields,
+  submitLabel,
+  division,
+  contactEmail = DIVISION_EMAIL[division],
 } = Astro.props as Props;
 
 const accent = sectionAccent[theme];
+
+// Real form delivery only exists on the Cloudflare (server) build — see
+// astro.config.mjs's PUBLIC_HAS_RUNTIME and CLAUDE.md's dual-build note.
+// The static GitHub Pages build has no /api/contact behind it, so it must
+// keep showing the honest mailto fallback instead of a form that can't send.
+const hasRuntime = import.meta.env.PUBLIC_HAS_RUNTIME === true || import.meta.env.PUBLIC_HAS_RUNTIME === "true";
+
+const action = url("/api/contact");
 ---
 
 <section class="bg-ninetone-paper">
@@ -72,9 +106,7 @@ const accent = sectionAccent[theme];
         )}
       </div>
 
-      <!-- Right: direct-email contact card. The API intentionally returns 503
-           until a delivery provider is configured, so do not offer a form
-           that can make a visitor think their enquiry was sent. -->
+      <!-- Right: form card (Cloudflare build) or direct-email card (static build) -->
       <div class="md:col-span-6">
         <div class="border border-ninetone-rule bg-ninetone-paper-warm p-6 md:p-8">
           <span class={`kicker ${accent.text}`}>{accent.label}</span>
@@ -83,22 +115,188 @@ const accent = sectionAccent[theme];
             <p class="mt-3 text-sm text-ninetone-ink/65">{formBlurb}</p>
           )}
 
-          <div class="mt-8 border-t border-ninetone-rule pt-6">
-            <p class="max-w-md text-sm leading-relaxed text-ninetone-ink/65">
-              Please email your enquiry directly. Include the details above so the right team can respond.
-            </p>
-            <a
-              href={`mailto:${contactEmail}`}
-              class={`mt-6 inline-flex min-h-11 items-center gap-2 px-5 py-3 text-sm font-semibold ${accent.cta} transition-colors`}
+          {hasRuntime ? (
+            <div data-contact-wrapper>
+            <form
+              class="mt-8 grid gap-5"
+              method="post"
+              action={action}
+              data-contact-form
+              data-division={division}
+              data-fallback-email={contactEmail}
             >
-              Email {contactEmail} <span aria-hidden>→</span>
-            </a>
-            <p class="mt-5 text-[0.6875rem] leading-relaxed text-ninetone-ink/55">
-              Your email app will open with a new message. Read our <a href={url("/integritet")} class="underline underline-offset-2 hover:text-ninetone-ink">privacy policy</a> for how we handle personal data.
-            </p>
-          </div>
+              <input type="hidden" name="division" value={division} />
+
+              {/* Honeypot — hidden from sighted and AT users, left blank by humans. */}
+              <div class="absolute -left-[9999px]" aria-hidden="true">
+                <label>
+                  Leave this field blank
+                  <input type="text" name="website" tabindex={-1} autocomplete="off" aria-hidden="true" />
+                </label>
+              </div>
+
+              {fields.map((f) => {
+                if (f.type === "textarea") {
+                  return (
+                    <label class="grid gap-1.5">
+                      <span class="font-mono text-[0.625rem] uppercase tracking-[0.16em] text-ninetone-ink/65">
+                        {f.label}{f.required && <span class={`ml-1 ${accent.text}`}>*</span>}
+                      </span>
+                      <textarea
+                        name={f.name}
+                        rows={f.rows ?? 4}
+                        placeholder={f.placeholder}
+                        required={f.required}
+                        class="w-full border border-ninetone-ink/15 bg-ninetone-paper px-3 py-2.5 text-sm text-ninetone-ink placeholder-ninetone-ink/35 focus:border-ninetone-ink focus:outline-none"
+                      ></textarea>
+                    </label>
+                  );
+                }
+                const colSpan = f.cols === 1 ? "sm:col-span-2" : "";
+                return (
+                  <label class={`grid gap-1.5 ${colSpan}`}>
+                    <span class="font-mono text-[0.625rem] uppercase tracking-[0.16em] text-ninetone-ink/65">
+                      {f.label}{f.required && <span class={`ml-1 ${accent.text}`}>*</span>}
+                    </span>
+                    <input
+                      type={f.type}
+                      name={f.name}
+                      placeholder={f.placeholder}
+                      required={f.required}
+                      class="min-h-11 w-full border border-ninetone-ink/15 bg-ninetone-paper px-3 py-2.5 text-sm text-ninetone-ink placeholder-ninetone-ink/35 focus:border-ninetone-ink focus:outline-none"
+                    />
+                  </label>
+                );
+              })}
+
+              <p class="mt-4 text-[0.6875rem] leading-relaxed text-ninetone-ink/55">
+                Genom att skicka in samtycker du till att Ninetone Group AB behandlar dina uppgifter för att besvara din förfrågan. Läs vår <a href={url("/integritet")} class="underline underline-offset-2 hover:text-ninetone-ink">integritetspolicy</a>.
+              </p>
+
+              <div class="mt-3 flex items-center justify-between gap-3">
+                <p class="text-[0.6875rem] text-ninetone-ink/50" data-form-hint>
+                  We reply within one business day.
+                </p>
+                <button
+                  type="submit"
+                  class={`min-h-11 inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold ${accent.cta} transition-colors disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  <span data-form-button-label>{submitLabel}</span> <span aria-hidden>→</span>
+                </button>
+              </div>
+
+            </form>
+              <div data-form-result class="hidden mt-2 border-t border-ninetone-rule pt-4" role="status" aria-live="polite">
+                <span class={`kicker ${accent.text}`} data-form-result-kicker></span>
+                <p class="mt-2 text-sm leading-relaxed text-ninetone-ink/80" data-form-result-message></p>
+              </div>
+            </div>
+          ) : (
+            <div class="mt-8 border-t border-ninetone-rule pt-6">
+              <p class="max-w-md text-sm leading-relaxed text-ninetone-ink/65">
+                Please email your enquiry directly. Include the details above so the right team can respond.
+              </p>
+              <a
+                href={`mailto:${contactEmail}`}
+                class={`mt-6 inline-flex min-h-11 items-center gap-2 px-5 py-3 text-sm font-semibold ${accent.cta} transition-colors`}
+              >
+                Email {contactEmail} <span aria-hidden>→</span>
+              </a>
+              <p class="mt-5 text-[0.6875rem] leading-relaxed text-ninetone-ink/55">
+                Your email app will open with a new message. Read our <a href={url("/integritet")} class="underline underline-offset-2 hover:text-ninetone-ink">privacy policy</a> for how we handle personal data.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
   </div>
 </section>
+
+{hasRuntime && (
+  <script>
+    document.querySelectorAll<HTMLFormElement>("form[data-contact-form]").forEach((form) => {
+      const wrapper = form.closest<HTMLElement>("[data-contact-wrapper]") ?? form.parentElement;
+      const button = form.querySelector<HTMLButtonElement>("button[type=submit]");
+      const buttonLabel = form.querySelector<HTMLElement>("[data-form-button-label]");
+      const hint = form.querySelector<HTMLElement>("[data-form-hint]");
+      const result = wrapper?.querySelector<HTMLElement>("[data-form-result]") ?? null;
+      const resultKicker = wrapper?.querySelector<HTMLElement>("[data-form-result-kicker]") ?? null;
+      const resultMessage = wrapper?.querySelector<HTMLElement>("[data-form-result-message]") ?? null;
+      const fallbackEmail = form.dataset.fallbackEmail || "hello@ninetone.com";
+      const originalLabel = buttonLabel?.textContent ?? "Send";
+
+      function showResult(kind: "success" | "error", kickerText: string, message: string) {
+        if (!result || !resultKicker || !resultMessage) return;
+        result.classList.remove("hidden");
+        resultKicker.textContent = kickerText;
+        resultMessage.innerHTML = message;
+        result.dataset.state = kind;
+        if (hint) hint.classList.add("hidden");
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (!button || !buttonLabel) return;
+
+        button.disabled = true;
+        buttonLabel.textContent = "Sending…";
+
+        try {
+          const formData = new FormData(form);
+          const payload: Record<string, string> = {};
+          formData.forEach((value, key) => {
+            payload[key] = String(value);
+          });
+
+          const res = await fetch(form.action, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          if (res.status === 429) {
+            showResult(
+              "error",
+              "Too many attempts",
+              "Too many attempts. Try again in a minute.",
+            );
+            button.disabled = false;
+            buttonLabel.textContent = originalLabel;
+            return;
+          }
+
+          const data = await res.json().catch(() => null);
+
+          if (res.ok && data?.ok) {
+            form.reset();
+            form.hidden = true;
+            showResult(
+              "success",
+              "Sent",
+              "Thanks. We read everything and reply when it's a fit.",
+            );
+            return;
+          }
+
+          showResult(
+            "error",
+            "Something went wrong",
+            `Something went wrong. Email us at <a href="mailto:${fallbackEmail}" class="underline underline-offset-2 hover:text-ninetone-ink">${fallbackEmail}</a> instead.`,
+          );
+          button.disabled = false;
+          buttonLabel.textContent = originalLabel;
+        } catch {
+          showResult(
+            "error",
+            "Something went wrong",
+            `Something went wrong. Email us at <a href="mailto:${fallbackEmail}" class="underline underline-offset-2 hover:text-ninetone-ink">${fallbackEmail}</a> instead.`,
+          );
+          button.disabled = false;
+          buttonLabel.textContent = originalLabel;
+        }
+      });
+    });
+  </script>
+)}

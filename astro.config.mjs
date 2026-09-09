@@ -50,6 +50,13 @@ export default defineConfig({
       // DEPLOY naturally starts a fresh cache generation — old-code pages are
       // never served after a release. Content freshness is the KV epoch's job.
       __BUILD_ID__: JSON.stringify(Date.now().toString(36)),
+      // Single source of truth for "are we on the Cloudflare (server) target".
+      // DEPLOY_TARGET itself is a build-time process.env var, invisible to
+      // client <script> tags and not conventionally read from Astro
+      // frontmatter — this re-exposes the same decision as a PUBLIC_ var so
+      // components can branch consistently in both places via
+      // `import.meta.env.PUBLIC_HAS_RUNTIME`.
+      "import.meta.env.PUBLIC_HAS_RUNTIME": JSON.stringify(TARGET === "cf"),
     },
     build: {
       rollupOptions: {

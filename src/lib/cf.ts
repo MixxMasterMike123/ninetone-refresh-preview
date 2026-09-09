@@ -13,12 +13,36 @@ export type CacheStateKv = {
   put(key: string, value: string): Promise<void>;
 };
 
+export type ContactSubmissionsKv = {
+  put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
+};
+
+export type EmailAddress = { email: string; name?: string };
+
+export type EmailSendResult = { messageId?: string };
+
+export type SendEmailBinding = {
+  send(message: {
+    to: string | string[];
+    from: EmailAddress;
+    replyTo?: string;
+    subject: string;
+    text?: string;
+    html?: string;
+  }): Promise<EmailSendResult>;
+};
+
+export type RateLimiter = {
+  limit(opts: { key: string }): Promise<{ success: boolean }>;
+};
+
 export type CfEnv = Record<string, unknown> & {
   CACHE_STATE?: CacheStateKv;
   PUBLISH_PASSWORD?: string;
-  PUBLISH_RATE_LIMITER?: {
-    limit(opts: { key: string }): Promise<{ success: boolean }>;
-  };
+  PUBLISH_RATE_LIMITER?: RateLimiter;
+  CONTACT_SUBMISSIONS?: ContactSubmissionsKv;
+  CONTACT_RATE_LIMITER?: RateLimiter;
+  CONTACT_EMAIL?: SendEmailBinding;
 };
 
 let cfEnvPromise: Promise<CfEnv | null> | null = null;
