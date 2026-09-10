@@ -43,6 +43,12 @@ const {
   jsonLd,
 } = Astro.props;
 
+// FM bios and taglines routinely carry leading/trailing whitespace and hard
+// line breaks straight from the database, which surfaced as meta descriptions
+// beginning with a space. Normalize once here so every caller benefits rather
+// than making each page remember to trim.
+const metaDescription = String(description ?? "").replace(/\s+/g, " ").trim();
+
 const fullTitle = title === "Ninetone Group" ? title : `${title} | Ninetone Group`;
 
 // Canonical + OG URL: the origin always comes from siteOrigin() — the
@@ -231,14 +237,14 @@ const TIKTOK_PIXEL_ID = "TIKTOK-PLACEHOLDER"; // TODO: replace with real pixel I
 
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content={description} />
+    <meta name="description" content={metaDescription} />
     {noindex && <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex" />}
     <link rel="canonical" href={canonicalUrl} />
 
     <!-- Open Graph -->
     <meta property="og:site_name" content="Ninetone Group" />
     <meta property="og:title" content={fullTitle} />
-    <meta property="og:description" content={description} />
+    <meta property="og:description" content={metaDescription} />
     <meta property="og:url" content={canonicalUrl} />
     <meta property="og:image" content={ogImageUrl} />
     <meta property="og:type" content={ogType} />
@@ -247,7 +253,7 @@ const TIKTOK_PIXEL_ID = "TIKTOK-PLACEHOLDER"; // TODO: replace with real pixel I
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={fullTitle} />
-    <meta name="twitter:description" content={description} />
+    <meta name="twitter:description" content={metaDescription} />
     <meta name="twitter:image" content={ogImageUrl} />
 
     <meta name="theme-color" content="#f5f3ee" />

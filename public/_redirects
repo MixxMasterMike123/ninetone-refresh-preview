@@ -1,4 +1,15 @@
-# Previous Artists moved under Records as a tab
-/previous-artists/single/:slug  /records/artists/previous/single/:slug  301
-/previous-artists/*             /records/artists/previous/:splat        301
-/previous-artists               /records/artists/previous               301
+# Legacy /previous-artists paths. The exact-path rules (bare path and
+# /single/:slug) now live in astro.config.mjs's `redirects`, which Astro
+# APPENDS to this file at build time — keeping them here too produced
+# "Duplicate rule for path" and failed `wrangler deploy` outright.
+#
+# This splat is the one rule with no Astro equivalent: Astro validates that a
+# dynamic redirect's destination matches a real route, and the paginated route
+# is [...page], so /records/artists/previous/[...rest] is rejected. It stays
+# here to catch anything else under /previous-artists.
+#
+# Note: _redirects IS honoured on Workers Static Assets (the same way _headers
+# from this directory is) — it just doesn't fire for routes the Worker renders.
+# DEPLOY.md currently claims this file is inert on our targets; that claim is
+# stale and is being corrected separately.
+/previous-artists/*  /records/artists/previous/:splat  301
