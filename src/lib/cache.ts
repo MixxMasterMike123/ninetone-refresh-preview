@@ -83,3 +83,65 @@ export function cached<T>(
   }
   return entry.promise as Promise<T>;
 }
+
+/**
+ * Minimal KV shape `kvCached` needs — a structural subset of
+ * `CacheStateKv` (src/lib/cf.ts) so this module doesn't have to import the
+ * Cloudflare-flavored type for what is otherwise a generic helper.
+ */
+export type KvLike = {
+  get(key: string, opts?: { cacheTtl?: number }): Promise<string | null>;
+  put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
+};
+
+const NEGATIVE_TTL_SECONDS = 10 * 60; // 10 min — see module doc below.
+
+/**
+ * Cache a JSON-serializable value across Worker isolates via the shared
+ * `CACHE_STATE` KV binding, for loaders far too expensive to re-run every
+ * 60s (e.g. YouTube Data API quota — see src/lib/youtube.ts).
+ *
+ * Falls through to the in-process `cached()` when no KV binding is present
+ * (static build, local dev, or the gh target) — same call shape either way,
+ * so callers don't need to branch.
+ *
+ * Negative-result guard: a "no result" value (null, or an empty array) is
+ * only ever stored for `NEGATIVE_TTL_SECONDS` regardless of the requested
+ * `ttlSeconds`, so a transient API failure or empty API response can't pin
+ * an empty result for the full (e.g. 30-day) TTL. A genuinely empty steady
+ * state just gets re-fetched every 10 minutes — cheap relative to the win.
+ *
+ * KV writes are best-effort: a `put` failure is logged and swallowed so a
+ * KV hiccup degrades to "recompute every call" rather than throwing.
+ */
+export async function kvCached<T>(
+  kv: KvLike | null | undefined,
+  key: string,
+  ttlSeconds: number,
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (!kv) {
+    return cached<T>("kv-fallback", key, fn, ttlSeconds * 1000);
+  }
+
+  try {
+    const raw = await kv.get(key);
+    if (raw !== null) {
+      return JSON.parse(raw) as T;
+    }
+  } catch (err) {
+    console.error(`[kv-cache] read failed for ${key} — recomputing:`, err);
+  }
+
+  const value = await fn();
+  const isEmpty = value === null || value === undefined || (Array.isArray(value) && value.length === 0);
+  const effectiveTtl = isEmpty ? Math.min(ttlSeconds, NEGATIVE_TTL_SECONDS) : ttlSeconds;
+
+  try {
+    await kv.put(key, JSON.stringify(value), { expirationTtl: effectiveTtl });
+  } catch (err) {
+    console.error(`[kv-cache] write failed for ${key}:`, err);
+  }
+
+  return value;
+}

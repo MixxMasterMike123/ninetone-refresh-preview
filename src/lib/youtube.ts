@@ -14,7 +14,8 @@
  * RSS-only results) and when channel resolution fails (returns empty).
  */
 
-import { cached } from "./cache";
+import { cached, kvCached } from "./cache";
+import { getCfEnv } from "./cf";
 
 // Lazy read with process.env fallback for the Cloudflare Worker runtime,
 // where the key arrives as a binding instead of being baked at build.
@@ -66,10 +67,20 @@ export function extractChannelId(raw: string | null | undefined): string | null 
   return null;
 }
 
+// Handle→channelId resolution barely ever changes — a handle is effectively
+// permanent once claimed — so it's cached hard (30 days) in the shared KV
+// to keep it off the 100-unit search.list quota on the live site.
+const CHANNEL_RESOLVE_TTL_SECONDS = 30 * 24 * 60 * 60;
+
 /**
  * Resolve a YouTube handle (/@something) or vanity URL (/c/customname) to
  * a channel ID via the Data API. Returns null if no API key or no match.
- * Cached per-build via the shared cache so the same handle resolves once.
+ *
+ * Cached in the shared `CACHE_STATE` KV (30-day TTL) when running with a
+ * runtime (Cloudflare target) so repeated requests across isolates and
+ * across days don't re-spend the 100-unit search.list quota; falls back to
+ * the in-process cache (effectively "once per build") on the static target
+ * or when KV is unavailable.
  */
 async function resolveChannelByHandle(url: string): Promise<string | null> {
   const key = apiKey();
@@ -79,7 +90,13 @@ async function resolveChannelByHandle(url: string): Promise<string | null> {
   const query = handleMatch?.[1] ?? vanityMatch?.[1];
   if (!query) return null;
 
-  return cached<string | null>("yt-handle-resolve", query, async () => {
+  // Normalize so equivalent handle URLs (case, scheme, trailing slash) share
+  // one cache entry.
+  const normalized = query.toLowerCase();
+  const cacheKey = `yt:channel:${normalized}`;
+
+  const cfEnv = await getCfEnv();
+  return kvCached<string | null>(cfEnv?.CACHE_STATE, cacheKey, CHANNEL_RESOLVE_TTL_SECONDS, async () => {
     const apiUrl = new URL("https://www.googleapis.com/youtube/v3/search");
     apiUrl.searchParams.set("part", "snippet");
     apiUrl.searchParams.set("q", query);
@@ -160,10 +177,24 @@ async function fetchLatest(channelId: string): Promise<YouTubeVideo[]> {
   }
 }
 
+// 12 hours — the top-viewed ranking moves slowly; this is the guard against
+// burning the daily 10,000-unit Data API quota on search.list (100 units/call).
+const TOP_VIEWED_TTL_SECONDS = 12 * 60 * 60;
+
 async function fetchTopViewed(channelId: string): Promise<YouTubeVideo[]> {
   const key = apiKey();
   if (!key) return [];
 
+  const cfEnv = await getCfEnv();
+  return kvCached<YouTubeVideo[]>(
+    cfEnv?.CACHE_STATE,
+    `yt:top:${channelId}`,
+    TOP_VIEWED_TTL_SECONDS,
+    () => fetchTopViewedUncached(channelId, key),
+  );
+}
+
+async function fetchTopViewedUncached(channelId: string, key: string): Promise<YouTubeVideo[]> {
   // Step 1: search.list ordered by viewCount gets us the 5 candidate IDs.
   // 100 quota units per call.
   const searchUrl = new URL("https://www.googleapis.com/youtube/v3/search");

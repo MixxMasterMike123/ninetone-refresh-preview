@@ -10,7 +10,7 @@
 
 export type CacheStateKv = {
   get(key: string, opts?: { cacheTtl?: number }): Promise<string | null>;
-  put(key: string, value: string): Promise<void>;
+  put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
 };
 
 export type ContactSubmissionsKv = {

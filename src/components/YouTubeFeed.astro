@@ -28,6 +28,13 @@ const topViewed = feed?.topViewed ?? [];
 const hasTopViewed = topViewed.length > 0;
 const total = latest.length;
 
+// Cloudflare target renders this block per request (60s in-process + edge
+// cache — see src/lib/cache.ts, src/lib/youtube.ts), so "refreshes on each
+// deploy" is wrong there; the static (gh) build really does freeze at
+// build time. See astro.config.mjs / CLAUDE.md for PUBLIC_HAS_RUNTIME.
+const hasRuntime = import.meta.env.PUBLIC_HAS_RUNTIME === true || import.meta.env.PUBLIC_HAS_RUNTIME === "true";
+const freshnessLabel = hasRuntime ? "live from YouTube" : "refreshes on each deploy";
+
 function formatDate(iso: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "";
@@ -54,7 +61,7 @@ function formatViews(n: number | undefined): string {
           </h2>
         </div>
         <p class="text-sm text-ninetone-ink/60 md:col-span-5 md:pb-1 md:text-right">
-          {total} {total === 1 ? "video" : "videos"} · refreshes on each deploy
+          {total} {total === 1 ? "video" : "videos"} · {freshnessLabel}
         </p>
       </header>
 
