@@ -1,6 +1,5 @@
 // @ts-check
 import { defineConfig } from "astro/config";
-import sitemap from "@astrojs/sitemap";
 import tailwindcss from "@tailwindcss/vite";
 
 /**
@@ -42,7 +41,12 @@ export default defineConfig({
   // avoids any IMAGES binding expectations on the Worker.
   adapter: cloudflare ? cloudflare({ imageService: "passthrough" }) : undefined,
   trailingSlash: "ignore",
-  integrations: [sitemap()],
+  // No integrations: src/pages/sitemap-index.xml.ts + sitemap-pages.xml.ts
+  // (SEO Phase 1 §3) replace @astrojs/sitemap with hand-written endpoints
+  // that use siteOrigin() and the real FM list helpers — see that file's
+  // doc comment for why the integration was dropped rather than kept
+  // alongside them.
+  integrations: [],
   vite: {
     plugins: [tailwindcss()],
     define: {

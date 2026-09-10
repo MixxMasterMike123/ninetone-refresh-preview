@@ -102,8 +102,9 @@ const promo = await getPromo().catch((err) => {
 });
 
 // Site-wide noindex while the preview is gated. Flip PUBLIC_NOINDEX=false (or
-// unset) at launch. Belt-and-braces with public/robots.txt and the X-Robots-Tag
-// header in public/_headers — any one of them is enough to stop indexing.
+// unset) at launch. Belt-and-braces with the /robots.txt endpoint (reads this
+// same env flag — src/pages/robots.txt.ts) and the X-Robots-Tag header in
+// public/_headers — any one of them is enough to stop indexing.
 // Page-level `noindex` prop ORs in on top — a page can opt itself out of
 // indexing even once the site-wide flag goes false, but never the reverse.
 const envNoindex = String(import.meta.env.PUBLIC_NOINDEX ?? "true") !== "false";

@@ -1,0 +1,229 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { buildRobotsTxt } from "../src/pages/robots.txt.ts";
+import { buildLlmsTxt, bookingTalentLines } from "../src/lib/llms.ts";
+
+const ORIGIN = "https://ninetone.com";
+
+// ---------------------------------------------------------------------------
+// robots.txt
+// ---------------------------------------------------------------------------
+
+test("robots.txt: PUBLIC_NOINDEX flag on (default/preview) -> disallow-all, no Sitemap/Content-Signal", () => {
+  const body = buildRobotsTxt(ORIGIN, true);
+  assert.equal(body, "User-agent: *\nDisallow: /\n");
+  assert.ok(!body.includes("Sitemap"));
+  assert.ok(!body.includes("Content-Signal"));
+});
+
+test("robots.txt: PUBLIC_NOINDEX=false -> Variant A, allow-all with Sitemap + Content-Signal", () => {
+  const body = buildRobotsTxt(ORIGIN, false);
+  assert.match(body, /^User-agent: \*\nAllow: \/\n/);
+  assert.ok(body.includes(`Sitemap: ${ORIGIN}/sitemap-index.xml`));
+  assert.ok(body.includes("Content-Signal: ai-train=yes, search=yes, ai-input=yes"));
+  assert.ok(!body.includes("Disallow"));
+});
+
+test("robots.txt: Variant A sitemap line uses the passed-in origin, never hardcoded", () => {
+  const body = buildRobotsTxt("https://staging.example.workers.dev", false);
+  assert.ok(body.includes("Sitemap: https://staging.example.workers.dev/sitemap-index.xml"));
+  assert.ok(!body.includes("ninetone.com"));
+});
+
+// ---------------------------------------------------------------------------
+// llms.txt
+// ---------------------------------------------------------------------------
+
+function stubData(overrides = {}) {
+  return {
+    artists: [],
+    previousArtists: [],
+    clients: [],
+    team: [],
+    news: [],
+    bookingLines: [],
+    ...overrides,
+  };
+}
+
+test("llms.txt: always includes the four static sections and intro blurb", () => {
+  const body = buildLlmsTxt(ORIGIN, stubData());
+  assert.ok(body.startsWith("# Ninetone Group"));
+  assert.ok(body.includes("## Ninetone Records"));
+  assert.ok(body.includes("## Ninetone Management"));
+  assert.ok(body.includes("## Ninetone Nation"));
+  assert.ok(body.includes("## Company"));
+  assert.ok(body.includes(`(${ORIGIN}/records/artists)`));
+  assert.ok(body.includes(`(${ORIGIN}/management/clients)`));
+  assert.ok(body.includes(`(${ORIGIN}/ninetone-nation/booking)`));
+  assert.ok(body.includes(`(${ORIGIN}/team)`));
+  assert.ok(body.includes(`(${ORIGIN}/news)`));
+  assert.ok(body.includes(`(${ORIGIN}/integritet)`));
+});
+
+test("llms.txt: 'Previous artists' links to the bare /records/artists/previous, not the brief skeleton's /previous/1 (which 404s)", () => {
+  const body = buildLlmsTxt(ORIGIN, stubData());
+  assert.ok(body.includes(`[Previous artists](${ORIGIN}/records/artists/previous)`));
+  assert.ok(!body.includes(`${ORIGIN}/records/artists/previous/1)`));
+});
+
+test("llms.txt: expands an active artist into one factual line with genre + tagline + absolute URL", () => {
+  const body = buildLlmsTxt(
+    ORIGIN,
+    stubData({
+      artists: [
+        {
+          SLUG: "anjo",
+          "Head Artist": "Anjo",
+          genre: "Pop\nDance",
+          "Artist Presentation Title": "Chart-topping pop from the north.",
+        },
+      ],
+    }),
+  );
+  assert.ok(body.includes(`[Anjo](${ORIGIN}/records/artists/anjo): Pop — Chart-topping pop from the north.`));
+});
+
+test("llms.txt: skips artist rows missing SLUG or name", () => {
+  const body = buildLlmsTxt(
+    ORIGIN,
+    stubData({
+      artists: [
+        { SLUG: "", "Head Artist": "No Slug" },
+        { SLUG: "no-name", "Head Artist": "" },
+      ],
+    }),
+  );
+  assert.ok(!body.includes("No Slug"));
+  assert.ok(!body.includes("no-name"));
+});
+
+test("llms.txt: previous artists use the real previous/single/{slug} route, not the brief skeleton's shorter path", () => {
+  const body = buildLlmsTxt(
+    ORIGIN,
+    stubData({
+      previousArtists: [{ SLUG: "old-act", "Head Artist": "Old Act", genre: "Rock" }],
+    }),
+  );
+  assert.ok(body.includes(`[Old Act](${ORIGIN}/records/artists/previous/single/old-act): Rock — previous artist`));
+});
+
+test("llms.txt: expands a management client with category and tagline", () => {
+  const body = buildLlmsTxt(
+    ORIGIN,
+    stubData({
+      clients: [
+        {
+          SLUG: "client-a",
+          "Head Artist": "Client A",
+          tags: "Influencer",
+          clientPresentationTitle: "Creator and brand partner.",
+        },
+      ],
+    }),
+  );
+  assert.ok(
+    body.includes(`[Client A](${ORIGIN}/management/clients/client-a): Influencer — Creator and brand partner.`),
+  );
+});
+
+test("llms.txt: expands team members with title", () => {
+  const body = buildLlmsTxt(
+    ORIGIN,
+    stubData({ team: [{ SLUG: "pat", userNameCalc: "Pat Person", title: "CEO" }] }),
+  );
+  assert.ok(body.includes(`[Pat Person](${ORIGIN}/team/pat): CEO`));
+});
+
+test("llms.txt: expands news posts with date", () => {
+  const body = buildLlmsTxt(
+    ORIGIN,
+    stubData({ news: [{ slug: "big-news", Title: "Big news", Date: "01/15/2026" }] }),
+  );
+  assert.ok(body.includes(`[Big news](${ORIGIN}/news/big-news): 01/15/2026`));
+});
+
+test("llms.txt: booking talent lines (pre-expanded by bookingTalentLines) are inserted as-is", () => {
+  const body = buildLlmsTxt(
+    ORIGIN,
+    stubData({ bookingLines: [`- [Someone](${ORIGIN}/ninetone-nation/someone): Artist — On tour now.`] }),
+  );
+  assert.ok(body.includes(`[Someone](${ORIGIN}/ninetone-nation/someone): Artist — On tour now.`));
+});
+
+test("llms.txt: markdown in taglines is stripped to plain text, not raw markdown", () => {
+  const body = buildLlmsTxt(
+    ORIGIN,
+    stubData({
+      artists: [
+        {
+          SLUG: "md-artist",
+          "Head Artist": "MD Artist",
+          "Artist Presentation Title": "**Bold** claim about _sound_.",
+        },
+      ],
+    }),
+  );
+  assert.ok(!body.includes("**Bold**"));
+  assert.ok(!body.includes("_sound_"));
+  assert.ok(body.includes("Bold"));
+});
+
+test("llms.txt: every generated URL is absolute under the given origin", () => {
+  const body = buildLlmsTxt(
+    ORIGIN,
+    stubData({
+      artists: [{ SLUG: "a1", "Head Artist": "A1" }],
+      clients: [{ SLUG: "c1", "Head Artist": "C1" }],
+      team: [{ SLUG: "t1", userNameCalc: "T1" }],
+      news: [{ slug: "n1", Title: "N1" }],
+    }),
+  );
+  const links = [...body.matchAll(/\]\(([^)]+)\)/g)].map((m) => m[1]);
+  assert.ok(links.length > 0);
+  for (const link of links) {
+    assert.ok(link.startsWith(ORIGIN), `expected absolute URL under origin, got: ${link}`);
+  }
+});
+
+test("llms.txt: uses the passed-in origin, never a hardcoded domain", () => {
+  const other = "https://ninetone-site.micke-ohlen.workers.dev";
+  const body = buildLlmsTxt(other, stubData({ artists: [{ SLUG: "a1", "Head Artist": "A1" }] }));
+  assert.ok(body.includes(`(${other}/records/artists/a1)`));
+  assert.ok(!body.includes("ninetone.com"));
+});
+
+// ---------------------------------------------------------------------------
+// bookingTalentLines
+// ---------------------------------------------------------------------------
+
+test("bookingTalentLines: one line per talent, tagged with its category", () => {
+  const categories = [
+    { tag: "Artist", artists: [{ slug: "a1", name: "Someone", tagline: "On tour now." }] },
+    { tag: "Föreläsare", artists: [{ slug: "s1", name: "Speaker One", tagline: "" }] },
+  ];
+  const lines = bookingTalentLines(categories, ORIGIN);
+  assert.equal(lines.length, 2);
+  assert.ok(lines[0].includes(`[Someone](${ORIGIN}/ninetone-nation/a1): Artist — On tour now.`));
+  assert.ok(lines[1].includes(`[Speaker One](${ORIGIN}/ninetone-nation/s1): Föreläsare`));
+});
+
+test("bookingTalentLines: dedupes a talent booked under more than one category, keeping the first", () => {
+  const categories = [
+    { tag: "Artist", artists: [{ slug: "dual", name: "Dual Act", tagline: "" }] },
+    { tag: "Konferencier", artists: [{ slug: "dual", name: "Dual Act", tagline: "" }] },
+  ];
+  const lines = bookingTalentLines(categories, ORIGIN);
+  assert.equal(lines.length, 1);
+  assert.ok(lines[0].includes("Artist"));
+  assert.ok(!lines[0].includes("Konferencier"));
+});
+
+test("bookingTalentLines: skips rows missing slug or name", () => {
+  const categories = [
+    { tag: "Artist", artists: [{ slug: "", name: "No Slug", tagline: "" }, { slug: "no-name", name: "", tagline: "" }] },
+  ];
+  const lines = bookingTalentLines(categories, ORIGIN);
+  assert.equal(lines.length, 0);
+});
