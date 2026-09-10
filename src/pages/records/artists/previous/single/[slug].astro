@@ -11,7 +11,7 @@ import { getProducts } from "../../../../../lib/shopify";
 import { renderBio } from "../../../../../lib/markdown";
 import { url } from "../../../../../lib/url";
 import { pageJsonLdOrigin } from "../../../../../lib/site";
-import { breadcrumbs, musicGroup, markdownToPlainText, fmDateToIso } from "../../../../../lib/schema";
+import { breadcrumbs, musicGroup, markdownToPlainText, fmDateToIso, descriptionWithBioFallback } from "../../../../../lib/schema";
 import { notFound } from "../../../../../lib/not-found";
 
 export async function getStaticPaths() {
@@ -42,11 +42,24 @@ const releases = detail?.releases ?? [];
 const name = String(artist["Head Artist"] ?? "");
 const tagline = String(artist["Artist Presentation Title"] ?? "");
 const bioHtml = renderBio(String(artist.artistPresentationString ?? ""));
+
+// Same rule as the active-artist and client pages (seo-phase-1b P1 item 7):
+// a tagline under 70 characters is too thin to serve as a meta description, so
+// fall back to the opening of the bio, plain text, cut at a word boundary.
+// These 341 pages share the detail-page layout and the same FM bio field, so
+// the brief's records/management scoping was about where the collisions were,
+// not a reason to leave the largest group of pages with thin descriptions.
+const metaDescription =
+  descriptionWithBioFallback(tagline, String(artist.artistPresentationString ?? "")) ||
+  `${name} | Previous Artists | Ninetone Group`;
 const heroImage = artist.artistPicture_big
   ? String(artist.artistPicture_big)
   : artist.artistPicture_small
   ? String(artist.artistPicture_small)
   : undefined;
+// worker-fm-proxy /artist/:slug/big|small are verified fixed sizes
+// (1000×1000 / 500×500) — track whichever field heroImage resolved to.
+const heroImageSize = artist.artistPicture_big ? 1000 : 500;
 const tags = artist.genre ? String(artist.genre).split(/\r|\n/).map((s) => s.trim()).filter(Boolean) : [];
 const collectionId = String(artist.collectionId ?? "").trim();
 
@@ -117,7 +130,7 @@ const jsonLd = [
 <Base
   title={name}
   theme="records"
-  description={tagline || `${name} | Previous Artists | Ninetone Group`}
+  description={metaDescription}
   ogImage={heroImage}
   ogType="profile"
   jsonLd={jsonLd}
@@ -136,6 +149,8 @@ const jsonLd = [
                 <img
                   src={heroImage}
                   alt={name}
+                  width={heroImageSize}
+                  height={heroImageSize}
                   class="fm-img h-full w-full object-cover"
                   fetchpriority="high"
                   onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"

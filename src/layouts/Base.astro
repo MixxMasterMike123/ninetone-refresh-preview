@@ -14,6 +14,12 @@ import { organization, website } from "../lib/schema";
 
 interface Props {
   title: string;
+  /** When false, `title` is used verbatim for <title>/og:title/twitter:title
+   * with no " | Ninetone Group" suffix appended. Use this when the caller has
+   * already built a complete, disambiguated title (e.g. "{Name} · Artist |
+   * Ninetone Records") — Base must never double up or conflict with a
+   * suffix the page already added. Defaults to true (existing behavior). */
+  appendSiteName?: boolean;
   description?: string;
   theme?: SectionTheme;
   lang?: "en" | "sv";
@@ -33,6 +39,7 @@ interface Props {
 
 const {
   title,
+  appendSiteName = true,
   description = "Ninetone Group — Music Production, Talent Management & Booking",
   theme = "group",
   lang = "en",
@@ -49,7 +56,8 @@ const {
 // than making each page remember to trim.
 const metaDescription = String(description ?? "").replace(/\s+/g, " ").trim();
 
-const fullTitle = title === "Ninetone Group" ? title : `${title} | Ninetone Group`;
+const fullTitle =
+  title === "Ninetone Group" || !appendSiteName ? title : `${title} | Ninetone Group`;
 
 // Canonical + OG URL: the origin always comes from siteOrigin() — the
 // production-shaped host, never hardcoded.
@@ -263,12 +271,15 @@ const TIKTOK_PIXEL_ID = "TIKTOK-PLACEHOLDER"; // TODO: replace with real pixel I
     <link rel="icon" type="image/x-icon" sizes="32x32" href={url("/favicon.ico")} />
     <link rel="apple-touch-icon" sizes="180x180" href={url("/apple-touch-icon.png")} />
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..800;1,6..72,300..800&family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap"
-    />
+    <!-- Self-hosted fonts (SEO Phase 1b P1 §11) — @font-face rules live in
+         src/styles/global.css, files in public/fonts/. Preload only the two
+         Newsreader (display) files the homepage/editorial hero renders above
+         the fold: the h1 (roman) and the italic hero tagline directly under
+         it (e.g. src/pages/index.astro's ".font-display italic" paragraph).
+         Space Grotesk/Space Mono are body/kicker text, not the LCP element,
+         so they load via the ordinary @font-face (no preload needed). -->
+    <link rel="preload" as="font" type="font/woff2" href={url("/fonts/newsreader-roman.woff2")} crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href={url("/fonts/newsreader-italic.woff2")} crossorigin />
     <meta name="generator" content={Astro.generator} />
     <title>{fullTitle}</title>
 

@@ -12,6 +12,7 @@ import { url } from "../lib/url";
 import {
   getFeaturedArtists,
   getArtistOfTheWeek,
+  getArtistBySlug,
   getLatestClient,
   getNews,
 } from "../lib/ninetone";
@@ -31,10 +32,21 @@ const [featuredArtists, heroArtist, heroClient, latestNews] = await Promise.all(
   getNews().then((p) => p.slice(0, 4)),
 ]);
 
-const heroArtistImage = heroArtist?.artistPicture_big ?? heroArtist?.artistPicture_small;
+// getArtistOfTheWeek() sources from the API_ARTIST roster layout, which
+// (verified live on staging) carries only artistPicture_small — never _big —
+// unlike API_Management (heroClient below). The `??` here used to read as a
+// "prefer big" fallback but was actually always resolving to small, loading
+// a 500×500 image with fetchpriority="high" into this 610px-tall feature
+// tile as the page's LCP element. Fetch the real detail record (same
+// API_ARTIST_DETAIL lookup every artist page already uses) to get the
+// genuine 1000×1000 big picture instead of guessing from roster fields.
+const heroArtistDetail = heroArtist?.SLUG ? await getArtistBySlug(String(heroArtist.SLUG)) : undefined;
+const heroArtistImage = heroArtistDetail?.artistPicture_big ?? heroArtist?.artistPicture_small;
+const heroArtistImageSize = heroArtistDetail?.artistPicture_big ? 1000 : 500;
 const heroArtistName = String(heroArtist?.["Head Artist"] ?? "");
 
 const heroClientImage = heroClient?.artistPicture_big ?? heroClient?.artistPicture_small;
+const heroClientImageSize = heroClient?.artistPicture_big ? 1000 : 500;
 const heroClientName = String(heroClient?.["Head Artist"] ?? "");
 
 const featuredNewsItem = latestNews[0];
@@ -231,6 +243,8 @@ const portals = [
             theme="records"
             href={`/records/artists/${String(heroArtist.SLUG ?? "")}`}
             image={heroArtistImage ? String(heroArtistImage) : undefined}
+            imageWidth={heroArtistImageSize}
+            imageHeight={heroArtistImageSize}
             kicker="Artist of the week"
             heading={heroArtistName}
             blurb={String(heroArtist.artistPresentationShort ?? "")}
@@ -289,6 +303,8 @@ const portals = [
             theme="management"
             href={`/management/clients/${String(heroClient.SLUG ?? "")}`}
             image={heroClientImage ? String(heroClientImage) : undefined}
+            imageWidth={heroClientImageSize}
+            imageHeight={heroClientImageSize}
             kicker="Client in focus"
             heading={heroClientName}
             blurb={String(heroClient.clientPresentationShort || heroClient.artistPresentationShort || "")}

@@ -4,10 +4,12 @@ import ArtistCard from "../../../../components/ArtistCard.astro";
 import ArtistsTabs from "../../../../components/ArtistsTabs.astro";
 import Pagination from "../../../../components/Pagination.astro";
 import SectionIntro from "../../../../components/SectionIntro.astro";
+import RosterIndex from "../../../../components/RosterIndex.astro";
 import { getArtists, getPreviousArtists, getWebPostSection } from "../../../../lib/ninetone";
-import { displayTitle } from "../../../../lib/display-title";
+import { displayTitle, paginatedTitle } from "../../../../lib/display-title";
 import { PREVIOUS_ARTISTS_PAGE_SIZE } from "../../../../lib/routes";
 import { notFound } from "../../../../lib/not-found";
+import { sectionAccent } from "../../../../lib/sections";
 
 // Single source of truth lives in src/lib/routes.ts so the sitemap derives the
 // same page count from the same number. Re-exported because only exports are
@@ -50,9 +52,25 @@ if (!page) {
 const active = await getArtists();
 const introBody = String((active[0] as Record<string, unknown> | undefined)?.readMore ?? "");
 const webPosts = await getWebPostSection("Ninetone Records");
+
+// seo-phase-1b-brief.md P1 item 7: paginated pages 2+ need a distinct
+// <title> from page 1 (and from each other) or they read as duplicates to a
+// crawler. Page 1 (currentPage === 1) is unchanged.
+const pageTitle = paginatedTitle("Previous Artists", page.currentPage);
+
+// seo-phase-1b-brief.md P1 item 8: page 1 gets a compact A–Ö index linking
+// every previous-artist detail page, so none sit more than three clicks
+// from home (they'd otherwise be buried up to 12 pagination pages deep).
+// Pages 2+ must not repeat it. `all` is already fetched above for the
+// request-time page-slice path, but getPreviousArtists() is cached
+// (src/lib/filemaker.ts per-call cache) so re-reading it here on the
+// static-build path (where `page` arrives pre-sliced via getStaticPaths
+// props and `all` was never bound) costs no extra FM read either way.
+const allPrevious = page.currentPage === 1 ? await getPreviousArtists() : [];
+const accent = sectionAccent.records;
 ---
 
-<Base title="Previous Artists" theme="records">
+<Base title={pageTitle} theme="records">
   <SectionIntro
     title="Previous Artists"
     tagline={displayTitle(webPosts?.title)}
@@ -69,6 +87,63 @@ const webPosts = await getWebPostSection("Ninetone Records");
     </div>
   </section>
 
+  {allPrevious.length > 0 && (
+    <section class="bg-ninetone-paper pb-4" data-previous-index>
+      <div class="mx-auto max-w-7xl px-6">
+        <div class="flex items-end justify-between gap-4 border-b border-ninetone-rule pb-4">
+          <div>
+            <span class={`kicker ${accent.text}`}>Full index, A–Ö</span>
+            <p class="mt-2 max-w-2xl text-sm text-ninetone-ink/65">
+              Every previous artist, alphabetically — {allPrevious.length} in total.
+            </p>
+          </div>
+          <button
+            type="button"
+            data-previous-index-toggle
+            aria-expanded="false"
+            class={`mb-1 inline-flex shrink-0 items-center gap-2 whitespace-nowrap text-xs font-semibold uppercase tracking-[0.16em] ${accent.text}`}
+          >
+            <span data-previous-index-toggle-label>Show full index</span>
+            <span aria-hidden>↓</span>
+          </button>
+        </div>
+
+        <div
+          data-previous-index-panel
+          class="max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-300 ease-out"
+        >
+          <div class="pt-8">
+            <RosterIndex artists={allPrevious} hrefBase="/records/artists/previous/single" visible />
+          </div>
+        </div>
+      </div>
+    </section>
+  )}
+
+  <script>
+    document.querySelectorAll<HTMLElement>("[data-previous-index]").forEach((root) => {
+      const btn = root.querySelector<HTMLButtonElement>("[data-previous-index-toggle]");
+      const label = root.querySelector<HTMLElement>("[data-previous-index-toggle-label]");
+      const panel = root.querySelector<HTMLElement>("[data-previous-index-panel]");
+      if (!btn || !label || !panel) return;
+
+      btn.addEventListener("click", () => {
+        const open = btn.getAttribute("aria-expanded") === "true";
+        if (open) {
+          panel.style.maxHeight = "0px";
+          panel.style.opacity = "0";
+          label.textContent = "Show full index";
+          btn.setAttribute("aria-expanded", "false");
+        } else {
+          panel.style.maxHeight = `${panel.scrollHeight}px`;
+          panel.style.opacity = "1";
+          label.textContent = "Hide full index";
+          btn.setAttribute("aria-expanded", "true");
+        }
+      });
+    });
+  </script>
+
   <section class="bg-ninetone-paper pb-20">
     <div class="mx-auto max-w-7xl px-6">
       <ArtistsTabs active="previous" />
@@ -82,6 +157,8 @@ const webPosts = await getWebPostSection("Ninetone Records");
             slug={String(a.SLUG ?? "")}
             blurb={String(a.artistPresentationShort ?? "")}
             image={a.artistPicture_small ? String(a.artistPicture_small) : undefined}
+            imageWidth={500}
+            imageHeight={500}
             tags={a.genre ? String(a.genre).split(/\r|\n/).filter(Boolean) : []}
             socials={{
               spotify: a.url_spotify ? String(a.url_spotify) : undefined,

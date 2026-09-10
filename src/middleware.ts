@@ -45,6 +45,28 @@ import {
 declare const __BUILD_ID__: string | undefined;
 const BUILD_ID = typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "dev";
 
+/**
+ * Are we on the Cloudflare (server) target?
+ *
+ * This middleware also runs during the STATIC build's prerender pass, which is
+ * easy to forget — and there it must not redirect anything. Astro builds each
+ * prerender URL from `config.trailingSlash`, and on the gh target
+ * ("ignore" + build.format "directory") every path arrives WITH a trailing
+ * slash. The canonicalizer below then 301'd every route before next() could
+ * render it; Astro's generate.js saw a 3xx and wrote a redirect shim in place
+ * of the page, while still counting it as a built page. Result: 546 "pages"
+ * of ~450-byte shims, build time collapsed from 53s to 3s, and no FM fetch at
+ * all. Guarded here rather than at the call site so any future redirect added
+ * to this file inherits the same protection.
+ *
+ * Read defensively (optional chaining + string compare) the same way
+ * ContactForm.astro and YouTubeFeed.astro do: the test harness bundles this
+ * module through esbuild, where `import.meta.env` does not exist.
+ */
+const HAS_RUNTIME =
+  import.meta.env?.PUBLIC_HAS_RUNTIME === true ||
+  import.meta.env?.PUBLIC_HAS_RUNTIME === "true";
+
 /** First match wins — order specific → general. Seconds. */
 const TTL_RULES: Array<[RegExp, number]> = [
   [/^\/$/, 300], // homepage — promo bar + featured rotate often
@@ -94,7 +116,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // cache read/buffer/store cycle below. trailingSlashRedirectTarget()
   // already exempts "/" and reuses cache-policy's own SKIP list (/api/*,
   // /admin, /404) rather than a second hardcoded exemption list.
-  const redirectTarget = trailingSlashRedirectTarget(url.pathname);
+  const redirectTarget = HAS_RUNTIME ? trailingSlashRedirectTarget(url.pathname) : null;
   if (redirectTarget) {
     const location = `${redirectTarget}${url.search}`;
     return harden(new Response(null, { status: 301, headers: { Location: location } }));
@@ -115,7 +137,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // rejected ("Duplicate rule for path").
   //
   // Keep in sync with public/_redirects, including the "single" listing guard.
-  const legacyPrevious = legacyPreviousArtistTarget(url.pathname);
+  const legacyPrevious = HAS_RUNTIME ? legacyPreviousArtistTarget(url.pathname) : null;
   if (legacyPrevious) {
     const location = `${legacyPrevious}${url.search}`;
     return harden(new Response(null, { status: 301, headers: { Location: location } }));

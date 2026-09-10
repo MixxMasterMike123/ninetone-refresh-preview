@@ -12,7 +12,7 @@ import { getProducts } from "../../../lib/shopify";
 import { renderBio } from "../../../lib/markdown";
 import { url } from "../../../lib/url";
 import { pageJsonLdOrigin } from "../../../lib/site";
-import { breadcrumbs, musicGroup, markdownToPlainText, fmDateToIso } from "../../../lib/schema";
+import { breadcrumbs, musicGroup, markdownToPlainText, descriptionWithBioFallback, fmDateToIso } from "../../../lib/schema";
 import { notFound } from "../../../lib/not-found";
 
 export async function getStaticPaths() {
@@ -43,12 +43,33 @@ const releases = detail?.releases ?? [];
 
 const name = String(artist["Head Artist"] ?? "");
 const tagline = String(artist["Artist Presentation Title"] ?? "");
-const bioHtml = renderBio(String(artist.artistPresentationString ?? ""));
+const bioMarkdown = String(artist.artistPresentationString ?? "");
+const bioHtml = renderBio(bioMarkdown);
+
+// seo-phase-1b-brief.md P1 item 7: the same person can appear on both the
+// Records artist roster and the Management client roster, which would
+// otherwise produce two pages with an identical bare-name <title>. Build a
+// complete, role-disambiguated title here and tell Base not to append its
+// own " | Ninetone Group" suffix on top of it (Base's `appendSiteName` prop
+// — see src/layouts/Base.astro) so no page ends up with two suffixes.
+const pageTitle = `${name} · Artist | Ninetone Records`;
+
+// Item 7 description fallback: when the tagline is under 70 characters (the
+// brief's threshold for a too-short meta description), fall back to the
+// first ~150 characters of the bio, plain text, cut at a word boundary —
+// descriptionWithBioFallback() wraps markdownToPlainText(), which already
+// does the word-boundary-safe truncation.
+const metaDescription = descriptionWithBioFallback(tagline, bioMarkdown);
 const heroImage = artist.artistPicture_big
   ? String(artist.artistPicture_big)
   : artist.artistPicture_small
   ? String(artist.artistPicture_small)
   : undefined;
+// worker-fm-proxy /artist/:slug/big|small are verified fixed sizes
+// (1000×1000 / 500×500) — but which one `heroImage` above resolved to
+// depends on which field this specific FM record has populated, so the
+// intrinsic size must track that choice rather than assume "big".
+const heroImageSize = artist.artistPicture_big ? 1000 : 500;
 const genres = artist.genre ? String(artist.genre).split(/\r|\n/).map((s) => s.trim()).filter(Boolean) : [];
 const aandr = String(artist.internalAandR ?? "");
 const aandrEmail = String(artist["Green_internalAandR::userEmail"] ?? "");
@@ -136,9 +157,10 @@ const jsonLd = [
 ---
 
 <Base
-  title={name}
+  title={pageTitle}
+  appendSiteName={false}
   theme="records"
-  description={tagline || `${name} | Ninetone Records`}
+  description={metaDescription || `${name} | Ninetone Records`}
   ogImage={heroImage}
   ogType="profile"
   jsonLd={jsonLd}
@@ -159,6 +181,8 @@ const jsonLd = [
                 <img
                   src={heroImage}
                   alt={name}
+                  width={heroImageSize}
+                  height={heroImageSize}
                   class="fm-img h-full w-full object-cover"
                   fetchpriority="high"
                   onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"

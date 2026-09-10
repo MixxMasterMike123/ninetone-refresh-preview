@@ -10,6 +10,13 @@ interface Props {
   size?: "feature" | "xwide" | "wide" | "tall" | "default";
   /** Optional background image — covers the whole tile. */
   image?: string;
+  /** Real intrinsic pixel dimensions of `image` (CLS hint only — the image is
+   * `absolute inset-0 h-full w-full object-cover`, so these never affect the
+   * tile's own size, which is driven by `size`'s min-height + grid span).
+   * Omit for a source with no fixed size (e.g. FM news `image_webp`, whose
+   * width varies per upload) rather than invent a number. */
+  imageWidth?: number;
+  imageHeight?: number;
   /** Visual treatment. "ink" = dark, "paper" = warm off-white, "image" = full-bleed image with optional overlay. */
   variant?: "ink" | "paper" | "warm" | "image" | "accent";
   /** Section accent (drives the underline mark + accent color). Default: group. */
@@ -34,6 +41,8 @@ const {
   href,
   size = "default",
   image,
+  imageWidth,
+  imageHeight,
   variant = "paper",
   theme = "group",
   kicker,
@@ -86,6 +95,8 @@ const linkProps = href
     <img
       src={image}
       alt=""
+      width={imageWidth}
+      height={imageHeight}
       class="fm-img absolute inset-0 -z-10 h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
       loading={priority ? undefined : "lazy"}
       fetchpriority={priority ? "high" : undefined}

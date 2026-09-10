@@ -4,7 +4,7 @@ import { getTeam } from "../../lib/ninetone";
 import { renderBio, isAiSpeculative } from "../../lib/markdown";
 import { url } from "../../lib/url";
 import { pageJsonLdOrigin } from "../../lib/site";
-import { breadcrumbs, person } from "../../lib/schema";
+import { breadcrumbs, person, descriptionWithBioFallback } from "../../lib/schema";
 import { notFound } from "../../lib/not-found";
 
 export async function getStaticPaths() {
@@ -32,6 +32,14 @@ const titleDescription = String(member.titleDescription ?? "");
 const rawDescription = String(member.DescriptionString ?? member.Description ?? "");
 const aiBio = isAiSpeculative(rawDescription);
 const descriptionHtml = aiBio ? "" : renderBio(rawDescription);
+
+// Meta description: a job title alone is far under the 70-character floor
+// (seo-phase-1b P1 item 7), so fall back to the opening of the bio. Respects
+// the same aiBio guard the visible bio does — a bio suppressed on the page as
+// AI-speculative must not reappear in a meta tag.
+const metaDescription =
+  descriptionWithBioFallback(titleDescription || title, aiBio ? "" : rawDescription) ||
+  `${name} | Ninetone Group`;
 const photo = member.userPhoto
   ? String(member.userPhoto)
   : member.userPhotoSmall
@@ -60,7 +68,7 @@ const jsonLd = [
 
 <Base
   title={name}
-  description={titleDescription || title || `${name} | Ninetone Group`}
+  description={metaDescription}
   ogImage={photo}
   ogType="profile"
   jsonLd={jsonLd}
@@ -74,15 +82,17 @@ const jsonLd = [
       <div class="grid gap-10 md:grid-cols-12 md:gap-16">
         <aside class="md:col-span-4 lg:col-span-4">
           <div class="md:sticky md:top-24">
-            {/* FM team photos are 200×200 — cap container so we never upscale.
-                Width 240px ≈ 1.2× source, beyond which pixelation becomes visible. */}
+            {/* FM team photos (worker-fm-proxy /team/:slug/big|small) are 200×200
+                intrinsic — verified against live proxy output. Container is 240px
+                (w-60); width/height below reserve layout space at the real
+                intrinsic ratio (1:1), not the rendered CSS size. */}
             <div class="fm-img-frame relative aspect-square w-60 max-w-full overflow-hidden bg-ninetone-paper-warm">
               {photo && (
                 <img
                   src={photo}
                   alt={name}
-                  width="240"
-                  height="240"
+                  width="200"
+                  height="200"
                   class="fm-img h-full w-full object-cover grayscale transition-all duration-700 ease-out hover:grayscale-0"
                   fetchpriority="high"
                   onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"

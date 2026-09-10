@@ -103,6 +103,8 @@ const visibleChips = FILTER_CHIPS.filter((c) => c.slug === "all" || counts[c.slu
               <img
                 src={r.cover}
                 alt={`${r.album} cover art`}
+                width="300"
+                height="300"
                 class="fm-img h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]"
                 loading="lazy"
                 onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"
@@ -206,6 +208,8 @@ const visibleChips = FILTER_CHIPS.filter((c) => c.slug === "all" || counts[c.slu
                         <img
                           src={r.cover}
                           alt={`${r.album} cover art`}
+                          width="300"
+                          height="300"
                           class="fm-img h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
                           loading="lazy"
                           onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"

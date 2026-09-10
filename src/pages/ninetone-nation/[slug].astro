@@ -51,6 +51,9 @@ const heroImage = e.artistPicture_big
   : e.artistPicture_small
   ? String(e.artistPicture_small)
   : undefined;
+// worker-fm-proxy /booking/:slug/big|small are verified fixed sizes
+// (1000×1000 / 500×500) — track whichever field heroImage resolved to.
+const heroImageSize = e.artistPicture_big ? 1000 : 500;
 const tags = (e.tagBooking
   ? String(e.tagBooking).split(/\r|\n|,/).map((s) => s.trim()).filter(Boolean)
   : e.tags
@@ -161,6 +164,8 @@ const jsonLd = [
                 <img
                   src={heroImage}
                   alt={name}
+                  width={heroImageSize}
+                  height={heroImageSize}
                   class="fm-img h-full w-full object-cover"
                   fetchpriority="high"
                   onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"

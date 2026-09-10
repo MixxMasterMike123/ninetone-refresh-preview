@@ -5,6 +5,7 @@ import { renderBio } from "../../lib/markdown";
 import { url } from "../../lib/url";
 import { pageJsonLdOrigin } from "../../lib/site";
 import { breadcrumbs, newsArticle, markdownToPlainText, fmDateToIso } from "../../lib/schema";
+import { shouldAppendSiteName } from "../../lib/display-title";
 import { notFound } from "../../lib/not-found";
 
 export async function getStaticPaths() {
@@ -27,6 +28,15 @@ if (!post) {
 }
 
 const title = String(post.Title ?? "");
+
+// seo-phase-1b-brief.md P1 item 7: FM news headlines are written as
+// editorial copy, not SEO strings, and can run long. Appending
+// " | Ninetone Group" on top of an already-long headline pushes the
+// rendered <title> well past what search results display (~60 chars is the
+// conventional truncation point) — drop the suffix rather than truncate the
+// headline itself, which would change what the crawler sees vs. what a
+// reader sees on the page (the visible <h1> is untouched either way).
+const appendSiteName = shouldAppendSiteName(title);
 const author = String(post["Created By"] ?? "");
 const date = String(post.Date ?? "");
 const category = String(post.category ?? "");
@@ -80,7 +90,7 @@ const jsonLd = isoDate
     ];
 ---
 
-<Base title={title} description={lede} ogImage={image} ogType="article" jsonLd={jsonLd}>
+<Base title={title} appendSiteName={appendSiteName} description={lede} ogImage={image} ogType="article" jsonLd={jsonLd}>
   <article class="bg-ninetone-paper">
     <header class="mx-auto max-w-4xl px-6 pt-16 md:pt-24">
       <p class="mb-6">

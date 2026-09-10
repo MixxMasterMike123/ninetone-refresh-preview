@@ -71,6 +71,8 @@ const sortedTags = Array.from(tagCounts.entries())
                 slug={String(a.SLUG ?? "")}
                 blurb={String(a.artistPresentationShort ?? "")}
                 image={a.artistPicture_small ? String(a.artistPicture_small) : undefined}
+                imageWidth={500}
+                imageHeight={500}
                 tags={tags}
                 highlight={String(a.highLight_music ?? "") === "true"}
                 socials={{

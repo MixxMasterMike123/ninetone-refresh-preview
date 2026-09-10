@@ -23,6 +23,8 @@ const img = product.image ?? product.images[0] ?? null;
       <img
         src={img.src}
         alt={img.alt ?? product.title}
+        width={img.width}
+        height={img.height}
         class="fm-img h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
         loading="lazy"
         onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"

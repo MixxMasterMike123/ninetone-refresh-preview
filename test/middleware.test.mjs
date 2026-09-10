@@ -12,6 +12,10 @@ async function loadMiddleware() {
     format: "esm",
     platform: "node",
     target: "node22",
+    // The middleware gates its redirects on the cf target (see HAS_RUNTIME
+    // there); without this define the trailing-slash and legacy-redirect
+    // tests would silently assert against dead code.
+    define: { "import.meta.env.PUBLIC_HAS_RUNTIME": "true" },
     write: false,
     plugins: [{
       name: "middleware-test-stubs",

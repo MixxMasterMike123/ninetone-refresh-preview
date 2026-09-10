@@ -44,6 +44,18 @@ const titleClass = size === "lg"
   : "font-display text-2xl font-medium leading-tight tracking-tight";
 
 const aspectClass = size === "lg" ? "aspect-[16/9]" : "aspect-[16/10]";
+
+// FM news cover images (worker-fm-proxy /news/:slug/cover → API_WEBPOSTS
+// image_webp) are NOT fixed-size: verified against live proxy output, height
+// is a consistent 488px but width varies per upload (906–1007px across
+// samples checked). No single width/height pair would be real for every
+// article, so we intentionally omit both attributes here and rely on the
+// aspect-ratio frame (already set via aspectClass above) plus `sizes` to hint
+// the browser at layout width instead.
+const sizesAttr =
+  size === "lg" ? "(min-width: 768px) 66vw, 100vw"
+  : size === "md" ? "(min-width: 768px) 50vw, 100vw"
+  : "(min-width: 1024px) 25vw, (min-width: 768px) 33vw, 50vw";
 ---
 
 <article class="group flex flex-col">
@@ -52,6 +64,7 @@ const aspectClass = size === "lg" ? "aspect-[16/9]" : "aspect-[16/10]";
       <img
         src={image}
         alt={title}
+        sizes={sizesAttr}
         class="fm-img h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
         loading="lazy"
         onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"

@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   orgId,
   markdownToPlainText,
+  descriptionWithBioFallback,
   organization,
   website,
   breadcrumbs,
@@ -59,13 +60,60 @@ test("markdownToPlainText: truncates to maxLength with an ellipsis, breaking on 
   assert.ok(text.endsWith("…"));
 });
 
+// seo-phase-1b-brief.md P1 item 7: meta description fallback.
+test("descriptionWithBioFallback: keeps the tagline when it's 70+ characters", () => {
+  const tagline = "A".repeat(70);
+  assert.equal(descriptionWithBioFallback(tagline, "some bio text"), tagline);
+});
+
+test("descriptionWithBioFallback: keeps a tagline longer than 70 characters unchanged", () => {
+  const tagline = "This is a nicely long tagline that easily clears the seventy character floor.";
+  assert.ok(tagline.length > 70);
+  assert.equal(descriptionWithBioFallback(tagline, "irrelevant bio"), tagline);
+});
+
+test("descriptionWithBioFallback: falls back to bio when tagline is under 70 characters", () => {
+  const shortTagline = "Short tagline.";
+  assert.ok(shortTagline.length < 70);
+  const bio = "word ".repeat(60).trim();
+  const result = descriptionWithBioFallback(shortTagline, bio);
+  assert.notEqual(result, shortTagline);
+  assert.ok(result.length <= 151); // 150 + ellipsis char
+  assert.ok(result.startsWith("word word"));
+});
+
+test("descriptionWithBioFallback: bio fallback is cut at a word boundary, not mid-word", () => {
+  const bio = "word ".repeat(60).trim();
+  const result = descriptionWithBioFallback("", bio);
+  // markdownToPlainText's truncation strips a trailing partial token before
+  // appending the ellipsis, so the character before "…" is never mid-word —
+  // it's either a full "word" or the space that followed one.
+  assert.ok(result.endsWith("word…") || result.endsWith(" …"));
+});
+
+test("descriptionWithBioFallback: falls back to bio when tagline is empty", () => {
+  const bio = "A perfectly serviceable bio sentence.";
+  assert.equal(descriptionWithBioFallback("", bio), bio);
+});
+
+test("descriptionWithBioFallback: empty tagline and empty bio yields empty string", () => {
+  assert.equal(descriptionWithBioFallback("", ""), "");
+  assert.equal(descriptionWithBioFallback(null, null), "");
+});
+
 test("organization: has the correct @type, @id, and always-present sameAs entries", () => {
   const org = organization(ORIGIN);
   assert.equal(org["@type"], "Organization");
   assert.equal(org["@id"], "https://ninetone.com/#org");
   assert.equal(org.name, "Ninetone Group");
   assert.equal(org.url, ORIGIN);
-  assert.equal(org.logo, "https://ninetone.com/og-default.png");
+  // Organization.logo is the SQUARE wordmark, not the 1.91:1 social card —
+  // Google's logo guidance expects the logo itself, and og-default.png would
+  // be cropped in a knowledge panel (seo-phase-1b P1 item 10).
+  assert.equal(org.logo["@type"], "ImageObject");
+  assert.equal(org.logo.url, "https://ninetone.com/logo-square.png");
+  assert.equal(org.logo.width, 512);
+  assert.equal(org.logo.height, 512);
   assert.deepEqual(org.sameAs, [
     "https://www.wikidata.org/wiki/Q7038555",
     "https://en.wikipedia.org/wiki/Ninetone_Records",

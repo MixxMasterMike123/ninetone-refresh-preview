@@ -20,6 +20,13 @@ interface Props {
   name: string;
   slug: string;
   image?: string;
+  /** Real intrinsic pixel dimensions of `image`, for width/height attributes
+   * (CLS prevention only — the frame is object-cover, so these never affect
+   * rendered size). Callers pass whichever the FM proxy variant they used
+   * actually is: artist/client/booking "big" = 1000×1000, "small" = 500×500.
+   * Defaults to 500×500 (the small variant every current caller prefers). */
+  imageWidth?: number;
+  imageHeight?: number;
   blurb?: string;
   tags?: string[];
   theme?: SectionTheme;
@@ -38,6 +45,8 @@ const {
   name,
   slug,
   image,
+  imageWidth = 500,
+  imageHeight = 500,
   blurb,
   tags = [],
   theme = "records",
@@ -76,6 +85,8 @@ if (socials?.tiktok) socialEntries.push({ label: "TikTok", href: socials.tiktok,
       <img
         src={image}
         alt={name}
+        width={imageWidth}
+        height={imageHeight}
         class="fm-img h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
         loading="lazy"
         onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"

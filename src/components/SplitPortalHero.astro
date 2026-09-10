@@ -38,9 +38,15 @@ const accent = sectionAccent[theme];
         )}
 
         <div class="relative z-10 flex h-full flex-col justify-between gap-10 p-8 md:p-10">
-          <span class={`kicker transition-colors duration-150 ease-out ${accent.text} group-hover:text-ninetone-paper/80`}>
-            {kicker || "Ninetone"}
-          </span>
+          {idx === 0 ? (
+            <h1 class={`kicker transition-colors duration-150 ease-out ${accent.text} group-hover:text-ninetone-paper/80`}>
+              {kicker || "Ninetone"}
+            </h1>
+          ) : (
+            <span class={`kicker transition-colors duration-150 ease-out ${accent.text} group-hover:text-ninetone-paper/80`} aria-hidden="true">
+              {kicker || "Ninetone"}
+            </span>
+          )}
           <div>
             <h2 class="font-display text-4xl font-medium leading-[0.95] tracking-[-0.04em] text-ninetone-ink transition-colors duration-150 ease-out group-hover:text-ninetone-paper md:text-6xl">
               {side.label}

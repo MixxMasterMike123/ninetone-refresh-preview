@@ -38,6 +38,15 @@ const kickerLabel = `${divisionLabel[theme]} · YouTube`;
 const latest = feed?.latest ?? [];
 const topViewed = feed?.topViewed ?? [];
 const hasTopViewed = topViewed.length > 0;
+
+// YouTube thumbnails are NOT fixed-size: src/lib/youtube.ts falls back
+// through maxres (1280×720) → standard (640×480) → high/hqdefault (480×360)
+// depending on what YouTube has generated for a given video, and the RSS
+// path used for `latest` can't request a specific resolution at all. No
+// single width/height pair would be real for every thumbnail, so we omit
+// both and rely on the aspect-video frame (already set below) plus `sizes`
+// instead — grid is 2-col mobile / 3-col tablet / 5-col desktop.
+const thumbSizes = "(min-width: 1024px) 20vw, (min-width: 768px) 33vw, 50vw";
 const total = latest.length;
 
 // Cloudflare target renders this block per request (60s in-process + edge
@@ -121,6 +130,7 @@ function formatViews(n: number | undefined): string {
                   <img
                     src={v.thumbnail}
                     alt=""
+                    sizes={thumbSizes}
                     class="fm-img h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
                     loading="lazy"
                     onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"
@@ -157,6 +167,7 @@ function formatViews(n: number | undefined): string {
                     <img
                       src={v.thumbnail}
                       alt=""
+                      sizes={thumbSizes}
                       class="fm-img h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
                       loading="lazy"
                       onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"

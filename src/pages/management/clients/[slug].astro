@@ -11,7 +11,7 @@ import { getProducts } from "../../../lib/shopify";
 import { renderBio } from "../../../lib/markdown";
 import { url } from "../../../lib/url";
 import { pageJsonLdOrigin } from "../../../lib/site";
-import { breadcrumbs, person, markdownToPlainText } from "../../../lib/schema";
+import { breadcrumbs, person, markdownToPlainText, descriptionWithBioFallback } from "../../../lib/schema";
 import { notFound } from "../../../lib/not-found";
 
 export async function getStaticPaths() {
@@ -36,12 +36,30 @@ if (!client || !allClients) {
 
 const name = String(client["Head Artist"] ?? "");
 const tagline = String(client.clientPresentationTitle ?? "");
-const bioHtml = renderBio(String(client.clientPresentationString ?? ""));
+const bioMarkdown = String(client.clientPresentationString ?? "");
+const bioHtml = renderBio(bioMarkdown);
+
+// seo-phase-1b-brief.md P1 item 7: the same person can appear on both the
+// Management client roster and the Records artist roster, which would
+// otherwise produce two pages with an identical bare-name <title>. Build a
+// complete, role-disambiguated title here and tell Base not to append its
+// own " | Ninetone Group" suffix on top of it (Base's `appendSiteName` prop
+// — see src/layouts/Base.astro) so no page ends up with two suffixes.
+const pageTitle = `${name} · Client | Ninetone Management`;
+
+// Item 7 description fallback: when the tagline is under 70 characters, fall
+// back to the first ~150 characters of the bio, plain text, cut at a word
+// boundary — descriptionWithBioFallback() wraps markdownToPlainText(), which
+// already does the word-boundary-safe truncation.
+const metaDescription = descriptionWithBioFallback(tagline, bioMarkdown);
 const heroImage = client.artistPicture_big
   ? String(client.artistPicture_big)
   : client.artistPicture_small
   ? String(client.artistPicture_small)
   : undefined;
+// worker-fm-proxy /client/:slug/big|small are verified fixed sizes
+// (1000×1000 / 500×500) — track whichever field heroImage resolved to.
+const heroImageSize = client.artistPicture_big ? 1000 : 500;
 const tags = (client.tags
   ? String(client.tags).split(/\r|\n|,/).map((s) => s.trim()).filter(Boolean)
   : client.genre
@@ -121,9 +139,10 @@ const jsonLd = [
 ---
 
 <Base
-  title={name}
+  title={pageTitle}
+  appendSiteName={false}
   theme="management"
-  description={tagline || `${name} | Ninetone Management`}
+  description={metaDescription || `${name} | Ninetone Management`}
   ogImage={heroImage}
   ogType="profile"
   jsonLd={jsonLd}
@@ -142,6 +161,8 @@ const jsonLd = [
                 <img
                   src={heroImage}
                   alt={name}
+                  width={heroImageSize}
+                  height={heroImageSize}
                   class="fm-img h-full w-full object-cover"
                   fetchpriority="high"
                   onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"

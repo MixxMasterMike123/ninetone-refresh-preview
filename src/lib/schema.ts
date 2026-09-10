@@ -44,6 +44,19 @@ export function toEscapedJsonLd(value: Record<string, unknown> | Record<string, 
  *  publisher node repeated on article-type schemas. */
 export const ORG_NAME = "Ninetone Group";
 
+/**
+ * Square wordmark for Organization.logo (seo-phase-1b-brief.md P1 item 10).
+ *
+ * Distinct from og-default.png, which stays the 1200x630 social card: Google's
+ * Organization logo guidance expects the logo itself, and a 1.91:1 card gets
+ * cropped awkwardly in a knowledge panel. public/logo-square.png is 512x512,
+ * the wordmark centred on the paper canvas.
+ */
+export const ORG_LOGO_SIZE = 512;
+export function logoUrl(origin: string): string {
+  return `${origin}/logo-square.png`;
+}
+
 /** Stable @id for the Organization node — referenced by every other entity's
  *  `publisher`/`memberOf` via this same string, so JSON-LD consumers can
  *  resolve the graph without re-fetching the org node. */
@@ -68,7 +81,9 @@ export function publisherNode(origin: string): Record<string, unknown> {
     name: ORG_NAME,
     logo: {
       "@type": "ImageObject",
-      url: `${origin}/og-default.png`,
+      url: logoUrl(origin),
+      width: ORG_LOGO_SIZE,
+      height: ORG_LOGO_SIZE,
     },
   };
 }
@@ -92,6 +107,31 @@ export function markdownToPlainText(markdown: string | null | undefined, maxLeng
     return `${text.slice(0, maxLength).replace(/\s+\S*$/, "")}…`;
   }
   return text;
+}
+
+/**
+ * Meta-description fallback (seo-phase-1b-brief.md P1 item 7): a short FM
+ * tagline/blurb makes a thin `<meta name="description">` — Google's own
+ * guidance and most SEO tooling flag anything under ~70 characters as too
+ * short to be useful in a search snippet. When the tagline is too short (or
+ * blank), fall back to the entity's bio, rendered to plain text via
+ * markdownToPlainText() (already word-boundary-safe — see that function's
+ * `.replace(/\s+\S*$/, "")` truncation) and capped at ~150 characters, which
+ * is the conventional meta-description length ceiling.
+ *
+ * Pure and reused by every entity detail page's `<Base description=…>` — no
+ * new truncation logic duplicated per page.
+ */
+export function descriptionWithBioFallback(
+  tagline: string | null | undefined,
+  bioMarkdown: string | null | undefined,
+  minTaglineLength = 70,
+  maxBioLength = 150,
+): string {
+  const trimmedTagline = String(tagline ?? "").trim();
+  if (trimmedTagline.length >= minTaglineLength) return trimmedTagline;
+  const bioFallback = markdownToPlainText(bioMarkdown, maxBioLength);
+  return bioFallback || trimmedTagline;
 }
 
 /**
@@ -159,7 +199,12 @@ export function organization(origin: string, opts: OrganizationOptions = {}): Re
     "@id": orgId(origin),
     name: ORG_NAME,
     url: origin,
-    logo: `${origin}/og-default.png`,
+    logo: {
+      "@type": "ImageObject",
+      url: logoUrl(origin),
+      width: ORG_LOGO_SIZE,
+      height: ORG_LOGO_SIZE,
+    },
     sameAs,
     contactPoint: [
       {
