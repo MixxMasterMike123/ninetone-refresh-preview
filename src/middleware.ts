@@ -102,20 +102,19 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   // Legacy previous-artist deep links (seo-phase-1b-brief.md P0 item 2).
   //
-  // These live here rather than in astro.config.mjs's `redirects` because the
-  // Cloudflare adapter writes config redirects into _redirects in
-  // static-hosting shape: @astrojs/underscore-redirects appends
-  // "/index.html" to every dynamic destination (astro.js, the
-  // `config.build.format === "directory"` branch). On this SSR Worker that
-  // suffix 404s — verified on staging, where the clean path returns 200 and
-  // the /index.html form returns 404. The static-asset layer answers before
-  // the Worker, so those rules hijacked the URLs they were meant to rescue,
-  // and declaring corrected copies alongside them is rejected outright
-  // ("Invalid _redirects configuration: Duplicate rule for path").
+  // BACKSTOP, not the live path on cf. Verified on staging: these URLs are
+  // answered by the Cloudflare static-asset layer from public/_redirects —
+  // the response carries public/_headers' fingerprint (max-age=600,
+  // x-robots-tag) rather than this middleware's (x-cache, tiered s-maxage) —
+  // so the code below does not run there. It exists for any request that does
+  // reach the Worker, and it is what the unit tests exercise.
   //
-  // Handling them here keeps one correct destination shape for the cf target;
-  // public/_redirects still carries the same two rules for the gh target,
-  // which has no Worker.
+  // Not in astro.config.mjs's `redirects` because the Cloudflare adapter
+  // writes those into _redirects with an "/index.html" suffix on dynamic
+  // destinations, which 404s on an SSR Worker, and corrected duplicates are
+  // rejected ("Duplicate rule for path").
+  //
+  // Keep in sync with public/_redirects, including the "single" listing guard.
   const legacyPrevious = legacyPreviousArtistTarget(url.pathname);
   if (legacyPrevious) {
     const location = `${legacyPrevious}${url.search}`;

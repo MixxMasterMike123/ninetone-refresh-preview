@@ -77,51 +77,21 @@ export default defineConfig({
       status: 301,
       destination: "/records/artists/previous",
     },
-    // The old site had per-artist deep links under /previous-artists/single/,
-    // which is exactly the shape that survives in the wild (Discogs, forums,
-    // old press). public/_redirects still carries the legacy rules and is
-    // where these came from. Astro's [slug] param is carried through to the
-    // destination by name.
-        // SEO Phase 1b P0 §2 — the *live* legacy site actually serves per-artist
-    // pages at the bare "/previous-artists/<slug>" (no "/single/" segment):
-    // verified "/previous-artists/kuokka" is 200 there while
-    // "/previous-artists/single/kuokka" 404s. So this shorter shape needs its
-    // own rule, not just the /single/ one above.
+    // The per-artist legacy shapes (/previous-artists/{slug} and
+    // /previous-artists/single/{slug}) are deliberately NOT here. The
+    // Cloudflare adapter writes dynamic config redirects into _redirects with
+    // an "/index.html" suffix on the destination
+    // (@astrojs/underscore-redirects), which 404s on an SSR Worker — verified
+    // on staging: the clean path returns 200, the /index.html form 404s. Since
+    // the static-asset layer answers before the Worker, those generated rules
+    // hijacked the very URLs they were meant to rescue, and hand-written
+    // corrections alongside them are rejected with "Duplicate rule for path".
+    // They are hand-written in public/_redirects instead (which is what
+    // actually serves them on cf), mirrored by legacyPreviousArtistTarget()
+    // in src/lib/cache-policy.ts as a Worker-side backstop.
     //
-    // Ordering vs. "/previous-artists/single/[slug]" above: Astro's route
-    // comparator (core/routing/priority.js) sorts by per-segment specificity,
-    // not config declaration order — a literal path segment always outranks
-    // a dynamic one at the same position. At segment 1, "single" (literal)
-    // beats "[slug]" (dynamic), so "/previous-artists/single/kuokka" always
-    // resolves against the "/single/[slug]" rule above and lands on
-    // ".../previous/single/kuokka" — never on this rule, which would
-    // otherwise produce the wrong ".../previous/single/single" double-single
-    // bug. Confirmed by reading the comparator, not assumed.
-    //
-    // _redirects collision check: on the `cf` target this never touches
-    // public/_redirects at all — Astro's `redirects` entries are real
-    // Worker-rendered routes (core/redirects/render.js returns the 301
-    // Response directly), and the same specificity-based router picks the
-    // right one before falling through to anything static-asset-shaped. On
-    // the `gh` static target, Astro appends "/previous-artists/:slug ...
-    // 301" to public/_redirects's existing "/previous-artists/* ... 301"
-    // splat line — two different literal patterns (single dynamic segment
-    // vs. a splat), not the same path string, so this does not reproduce the
-    // "Duplicate rule for path" failure from Phase 1 (that was two rules for
-    // the *identical* path). It's moot either way: GH Pages never reads
-    // _redirects (falls back to the <meta http-equiv="refresh"> page, see
-    // the /previous-artists rule above), and only `wrangler deploy` for `cf`
-    // parses that file, where these routes are Worker-rendered and never
-    // reach it.
-        // The old `_redirects` splat rule (/previous-artists/* -> .../previous/:splat)
-    // has no Astro equivalent: Astro validates that a dynamic redirect's
-    // destination matches a real route, and the paginated route's param is
-    // named [...page], so "/records/artists/previous/[...rest]" is rejected
-    // as InvalidRedirectDestination. Matching the name doesn't help either —
-    // the legacy paths beneath /previous-artists were per-artist detail
-    // pages (covered by the /single/[slug] and [slug] rules above), not
-    // pagination, so a splat would mostly map onto URLs that never existed.
-    // Deliberately omitted rather than forced.
+    // Only static-destination redirects stay in this block: the adapter writes
+    // those without the /index.html suffix, so they work as intended.
     "/blog": {
       status: 301,
       destination: "/news",

@@ -271,10 +271,26 @@ test("legacy previous-artist redirect preserves the query string and ignores non
   );
   assert.equal(res.headers.get("location"), "/records/artists/previous/single/kuokka?utm_source=discogs");
 
-  // The bare listing path and the "single" listing shape are not slugs.
-  for (const path of ["/previous-artists/single", "/records/artists/previous"]) {
-    const rt = createRuntime();
-    const passed = await run(new Request(`https://ninetone.com${path}`), async () => new Response("rendered"), rt);
-    assert.notEqual(passed.status, 301, `${path} must not be redirected by this rule`);
-  }
+  // "/previous-artists/single" is a LISTING shape, not a slug. Left ungained it
+  // would become /records/artists/previous/single/single — a redirect into a
+  // 404, which is worse for crawlers than a plain 404. It goes to the real
+  // listing instead. (public/_redirects carries the same guard as its first
+  // rule, since the asset layer is what actually serves these on cf.)
+  const listing = createRuntime();
+  const listingRes = await run(
+    new Request("https://ninetone.com/previous-artists/single"),
+    async () => new Response("unused"),
+    listing,
+  );
+  assert.equal(listingRes.status, 301);
+  assert.equal(listingRes.headers.get("location"), "/records/artists/previous");
+
+  // A path that is already canonical must pass straight through.
+  const rt = createRuntime();
+  const passed = await run(
+    new Request("https://ninetone.com/records/artists/previous"),
+    async () => new Response("rendered"),
+    rt,
+  );
+  assert.notEqual(passed.status, 301, "canonical path must not be redirected");
 });

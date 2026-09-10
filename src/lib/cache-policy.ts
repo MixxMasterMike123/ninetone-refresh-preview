@@ -114,8 +114,11 @@ export function legacyPreviousArtistTarget(pathname: string): string | null {
   const m = /^\/previous-artists\/(?:single\/)?([^/]+)\/?$/.exec(pathname);
   if (!m) return null;
   const slug = m[1];
-  // "single" alone would mean "/previous-artists/single", which is a listing
-  // shape, not a slug — don't invent a detail URL for it.
-  if (!slug || slug === "single") return null;
+  // "single" alone is "/previous-artists/single" — a listing shape, not a
+  // slug. Without this guard it becomes /records/artists/previous/single/single,
+  // a redirect into a 404. public/_redirects carries the same guard as an
+  // explicit first rule (it matches top-down); keep the two in sync.
+  if (!slug) return null;
+  if (slug === "single") return "/records/artists/previous";
   return `/records/artists/previous/single/${slug}`;
 }
