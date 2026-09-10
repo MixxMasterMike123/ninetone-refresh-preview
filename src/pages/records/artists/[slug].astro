@@ -5,7 +5,9 @@ import MerchCard from "../../../components/MerchCard.astro";
 import NewsCard from "../../../components/NewsCard.astro";
 import RosterStrip from "../../../components/RosterStrip.astro";
 import Discography from "../../../components/Discography.astro";
+import YouTubeFeed from "../../../components/YouTubeFeed.astro";
 import { getArtists, getArtistDetailWithReleases, getNewsForArtist, pickRelatedArtists } from "../../../lib/ninetone";
+import { resolveChannelId, getYouTubeFeed } from "../../../lib/youtube";
 import { getProducts } from "../../../lib/shopify";
 import { renderBio } from "../../../lib/markdown";
 import { url } from "../../../lib/url";
@@ -93,6 +95,16 @@ function recordsTagsOf(a: Record<string, unknown>): string[] {
 const related = pickRelatedArtists(artist, allArtists, recordsTagsOf, 12);
 
 const ytLinks = [ytOne, ytTwo].filter(Boolean);
+
+// YouTube feed: latest 5 + top 5 most-viewed for artists with a usable
+// channel URL. Errors out silently — section just doesn't render if the
+// channel can't be resolved or the fetch fails.
+const ytChannelUrl = String(artist.url_youtube_link ?? "");
+let ytFeed: Awaited<ReturnType<typeof getYouTubeFeed>> | null = null;
+try {
+  const channelId = await resolveChannelId(ytChannelUrl);
+  if (channelId) ytFeed = await getYouTubeFeed(channelId);
+} catch {}
 ---
 
 <Base title={name} theme="records" description={tagline || `${name} | Ninetone Records`}>
@@ -242,6 +254,8 @@ const ytLinks = [ytOne, ytTwo].filter(Boolean);
 
   <!-- Discography -->
   <Discography releases={releases} artistName={name} theme="records" />
+
+  <YouTubeFeed feed={ytFeed} clientName={name} theme="records" />
 
   <!-- Merch -->
   {merch.length > 0 && (
