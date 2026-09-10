@@ -280,7 +280,9 @@ test("newsArticle: dateModified falls back to datePublished when absent", () => 
   assert.equal(article.dateModified, "2026-01-01");
   assert.equal(article["@id"], "https://ninetone.com/news/some-post/#article");
   assert.equal(article.mainEntityOfPage, "https://ninetone.com/news/some-post");
-  assert.deepEqual(article.publisher, { "@id": orgId(ORIGIN) });
+  // publisher is the full node (inline name/logo for Google's article
+  // validator) but still carries the org @id — see publisherNode().
+  assert.equal(article.publisher["@id"], orgId(ORIGIN));
 });
 
 test("newsArticle: explicit dateModified is preserved, not overwritten", () => {
@@ -313,7 +315,7 @@ test("article: builds an Article node keyed on the caller-supplied path, not a h
   assert.equal(a.dateModified, "2026-01-05");
   assert.equal(a.image, "https://x/cover.jpg");
   assert.equal(a.articleBody, "Plain text body.");
-  assert.deepEqual(a.publisher, { "@id": orgId(ORIGIN) });
+  assert.equal(a.publisher["@id"], orgId(ORIGIN));
 });
 
 test("article: tolerates a path missing its leading slash", () => {
@@ -394,4 +396,35 @@ test("fmDateToIso: returns undefined for an unparseable value rather than guessi
   assert.equal(fmDateToIso(""), undefined);
   assert.equal(fmDateToIso(null), undefined);
   assert.equal(fmDateToIso(undefined), undefined);
+});
+
+// --- publisher node + author (Google article validator findings) ------------
+test("newsArticle publisher carries name and logo inline, not just @id", () => {
+  const n = newsArticle(ORIGIN, { slug: "s", headline: "H", datePublished: "2024-01-01" });
+  const pub = n.publisher;
+  assert.equal(pub["@id"], `${ORIGIN}/#org`, "still linked to the org node");
+  assert.equal(pub["@type"], "Organization");
+  assert.equal(pub.name, "Ninetone Group");
+  assert.equal(pub.logo["@type"], "ImageObject");
+  assert.ok(String(pub.logo.url).startsWith("http"), "logo url is absolute");
+});
+
+test("newsArticle emits author when present and omits it when blank", () => {
+  const withAuthor = newsArticle(ORIGIN, {
+    slug: "s", headline: "H", datePublished: "2024-01-01", author: "Anna Andersson",
+  });
+  assert.deepEqual(withAuthor.author, { "@type": "Person", name: "Anna Andersson" });
+
+  for (const blank of [undefined, ""]) {
+    const n = newsArticle(ORIGIN, { slug: "s", headline: "H", datePublished: "2024-01-01", author: blank });
+    assert.ok(!("author" in n), `author omitted for ${JSON.stringify(blank)}`);
+  }
+});
+
+test("article() uses the same inline publisher and optional author", () => {
+  const a = article(ORIGIN, { path: "/guider/g", headline: "G", author: "Team" });
+  assert.equal(a.publisher.name, "Ninetone Group");
+  assert.equal(a.publisher["@id"], `${ORIGIN}/#org`);
+  assert.deepEqual(a.author, { "@type": "Person", name: "Team" });
+  assert.ok(!("author" in article(ORIGIN, { path: "/guider/g", headline: "G" })));
 });

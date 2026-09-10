@@ -40,11 +40,37 @@ export function toEscapedJsonLd(value: Record<string, unknown> | Record<string, 
 // Shared constants
 // ---------------------------------------------------------------------------
 
+/** The organization's name, in one place — used by organization() and by the
+ *  publisher node repeated on article-type schemas. */
+export const ORG_NAME = "Ninetone Group";
+
 /** Stable @id for the Organization node — referenced by every other entity's
  *  `publisher`/`memberOf` via this same string, so JSON-LD consumers can
  *  resolve the graph without re-fetching the org node. */
 export function orgId(origin: string): string {
   return `${origin}/#org`;
+}
+
+/**
+ * Publisher node for article-type schemas.
+ *
+ * A bare `{"@id": …}` reference is valid JSON-LD — the full Organization node
+ * is on the same page, so a graph-aware consumer resolves it — but Google's
+ * article validators read the publisher in isolation and report name/logo as
+ * missing. Repeating @type/name/logo alongside the @id costs a few bytes and
+ * satisfies both readings: the @id still links it to the org node emitted by
+ * organization(), so nothing is duplicated as a *separate* entity.
+ */
+export function publisherNode(origin: string): Record<string, unknown> {
+  return {
+    "@id": orgId(origin),
+    "@type": "Organization",
+    name: ORG_NAME,
+    logo: {
+      "@type": "ImageObject",
+      url: `${origin}/og-default.png`,
+    },
+  };
 }
 
 /** Strip HTML tags after markdown rendering, collapse whitespace, and
@@ -131,7 +157,7 @@ export function organization(origin: string, opts: OrganizationOptions = {}): Re
     "@context": "https://schema.org",
     "@type": "Organization",
     "@id": orgId(origin),
-    name: "Ninetone Group",
+    name: ORG_NAME,
     url: origin,
     logo: `${origin}/og-default.png`,
     sameAs,
@@ -166,7 +192,7 @@ export function website(origin: string): Record<string, unknown> {
     "@context": "https://schema.org",
     "@type": "WebSite",
     "@id": `${origin}/#website`,
-    name: "Ninetone Group",
+    name: ORG_NAME,
     url: origin,
     publisher: { "@id": orgId(origin) },
     potentialAction: {
@@ -365,6 +391,8 @@ export function person(origin: string, name: string, opts: PersonOptions): Recor
 export interface NewsArticleInput {
   slug: string;
   headline: string;
+  /** Byline as shown on the page (FM "Created By"). Omitted when blank. */
+  author?: string;
   /** ISO date string. */
   datePublished: string;
   /** ISO date string. Falls back to datePublished when absent. */
@@ -384,9 +412,10 @@ export function newsArticle(origin: string, post: NewsArticleInput): Record<stri
     headline: post.headline,
     datePublished: post.datePublished,
     dateModified: post.dateModified || post.datePublished,
-    publisher: { "@id": orgId(origin) },
+    publisher: publisherNode(origin),
     mainEntityOfPage: url,
   };
+  if (post.author) node.author = { "@type": "Person", name: post.author };
   if (post.image) node.image = post.image;
   if (post.articleBody) node.articleBody = post.articleBody;
   return node;
@@ -406,6 +435,8 @@ export interface ArticleInput {
   /** Site-relative path the article lives at, e.g. "/guider/some-guide". */
   path: string;
   headline: string;
+  /** Byline as shown on the page. Omitted when blank. */
+  author?: string;
   /** ISO date string. Omit when no real publish date exists. */
   datePublished?: string;
   /** ISO date string. Falls back to datePublished when absent (matches
@@ -425,9 +456,10 @@ export function article(origin: string, input: ArticleInput): Record<string, unk
     "@type": "Article",
     "@id": `${url}/#article`,
     headline: input.headline,
-    publisher: { "@id": orgId(origin) },
+    publisher: publisherNode(origin),
     mainEntityOfPage: url,
   };
+  if (input.author) node.author = { "@type": "Person", name: input.author };
   if (input.datePublished) {
     node.datePublished = input.datePublished;
     node.dateModified = input.dateModified || input.datePublished;
