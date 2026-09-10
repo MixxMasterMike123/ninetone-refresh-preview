@@ -71,3 +71,14 @@ export const STATIC_ROUTES: StaticRoute[] = [
 export function staticRoutePaths(): string[] {
   return STATIC_ROUTES.map((r) => r.path);
 }
+
+/**
+ * Page size for the /records/artists/previous/{n} pagination.
+ *
+ * Single source of truth, defined here rather than in the page: a plain .ts
+ * module can be imported by an .astro page (and by node:test), but not the
+ * other way round. src/pages/records/artists/previous/[...page].astro imports
+ * this for its paginate() call, and src/lib/sitemap.ts imports it to derive
+ * how many pagination pages the sitemap should list.
+ */
+export const PREVIOUS_ARTISTS_PAGE_SIZE = 30;

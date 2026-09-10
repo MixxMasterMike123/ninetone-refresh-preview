@@ -6,10 +6,13 @@ import Pagination from "../../../../components/Pagination.astro";
 import SectionIntro from "../../../../components/SectionIntro.astro";
 import { getArtists, getPreviousArtists, getWebPostSection } from "../../../../lib/ninetone";
 import { displayTitle } from "../../../../lib/display-title";
+import { PREVIOUS_ARTISTS_PAGE_SIZE } from "../../../../lib/routes";
 
-// Exported so the hoisted getStaticPaths and the request-time path below
-// share one definition (only exports are hoisted to module scope in Astro).
-export const PAGE_SIZE = 30;
+// Single source of truth lives in src/lib/routes.ts so the sitemap derives the
+// same page count from the same number. Re-exported because only exports are
+// hoisted to module scope in Astro, and the hoisted getStaticPaths below plus
+// the request-time path both need it.
+export const PAGE_SIZE = PREVIOUS_ARTISTS_PAGE_SIZE;
 
 export async function getStaticPaths({ paginate }: { paginate: any }) {
   const artists = await getPreviousArtists();

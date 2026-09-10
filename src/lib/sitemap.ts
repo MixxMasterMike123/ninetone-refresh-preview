@@ -18,18 +18,7 @@
  */
 
 import type { StaticRoute } from "./routes";
-
-/**
- * Page size for /records/artists/previous/{n} pagination — MUST match
- * `PAGE_SIZE` in src/pages/records/artists/previous/[...page].astro exactly.
- * Duplicated rather than imported: that file is an .astro component (top-
- * level `Astro.*` global reads), not importable from a plain .ts module or
- * from node:test. If that file's PAGE_SIZE ever changes, update this too —
- * previousArtistsPaginationEntries() derives the *page count* from it and
- * the live previous-artists total, so only this one number needs updating
- * by hand, not a hardcoded page count.
- */
-const PREVIOUS_ARTISTS_PAGE_SIZE = 30;
+import { PREVIOUS_ARTISTS_PAGE_SIZE } from "./routes.ts";
 
 export interface SitemapEntry {
   /** Absolute URL — origin + path, no trailing slash added/removed beyond
