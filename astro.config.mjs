@@ -40,7 +40,14 @@ export default defineConfig({
   // Image optimization is unused (plain <img> + FM proxy) — passthrough
   // avoids any IMAGES binding expectations on the Worker.
   adapter: cloudflare ? cloudflare({ imageService: "passthrough" }) : undefined,
-  trailingSlash: "ignore",
+  // gh (static): "ignore" — GH Pages serves directory index files
+  // (/records/index.html for both /records and /records/), so either shape
+  // must keep working with no redirect (there's no server to issue one).
+  // cf (server): "never" — canonical shape is the bare path; src/middleware.ts
+  // 301s any "/path/" to "/path" ahead of the cache lookup (seo-phase-1b-brief
+  // P0 item 5), so a trailing slash is never the URL that gets rendered or
+  // cached. Conditional on TARGET the same way `base` and `output` are above.
+  trailingSlash: TARGET === "cf" ? "never" : "ignore",
   // SEO Phase 1 §8 — legacy path redirects, both 301.
   //
   // Destinations are written as bare logical paths (no `base` prefix) to
@@ -75,19 +82,46 @@ export default defineConfig({
     // old press). public/_redirects still carries the legacy rules and is
     // where these came from. Astro's [slug] param is carried through to the
     // destination by name.
-    "/previous-artists/single/[slug]": {
-      status: 301,
-      destination: "/records/artists/previous/single/[slug]",
-    },
-    // The old `_redirects` splat rule (/previous-artists/* -> .../previous/:splat)
+        // SEO Phase 1b P0 §2 — the *live* legacy site actually serves per-artist
+    // pages at the bare "/previous-artists/<slug>" (no "/single/" segment):
+    // verified "/previous-artists/kuokka" is 200 there while
+    // "/previous-artists/single/kuokka" 404s. So this shorter shape needs its
+    // own rule, not just the /single/ one above.
+    //
+    // Ordering vs. "/previous-artists/single/[slug]" above: Astro's route
+    // comparator (core/routing/priority.js) sorts by per-segment specificity,
+    // not config declaration order — a literal path segment always outranks
+    // a dynamic one at the same position. At segment 1, "single" (literal)
+    // beats "[slug]" (dynamic), so "/previous-artists/single/kuokka" always
+    // resolves against the "/single/[slug]" rule above and lands on
+    // ".../previous/single/kuokka" — never on this rule, which would
+    // otherwise produce the wrong ".../previous/single/single" double-single
+    // bug. Confirmed by reading the comparator, not assumed.
+    //
+    // _redirects collision check: on the `cf` target this never touches
+    // public/_redirects at all — Astro's `redirects` entries are real
+    // Worker-rendered routes (core/redirects/render.js returns the 301
+    // Response directly), and the same specificity-based router picks the
+    // right one before falling through to anything static-asset-shaped. On
+    // the `gh` static target, Astro appends "/previous-artists/:slug ...
+    // 301" to public/_redirects's existing "/previous-artists/* ... 301"
+    // splat line — two different literal patterns (single dynamic segment
+    // vs. a splat), not the same path string, so this does not reproduce the
+    // "Duplicate rule for path" failure from Phase 1 (that was two rules for
+    // the *identical* path). It's moot either way: GH Pages never reads
+    // _redirects (falls back to the <meta http-equiv="refresh"> page, see
+    // the /previous-artists rule above), and only `wrangler deploy` for `cf`
+    // parses that file, where these routes are Worker-rendered and never
+    // reach it.
+        // The old `_redirects` splat rule (/previous-artists/* -> .../previous/:splat)
     // has no Astro equivalent: Astro validates that a dynamic redirect's
     // destination matches a real route, and the paginated route's param is
     // named [...page], so "/records/artists/previous/[...rest]" is rejected
     // as InvalidRedirectDestination. Matching the name doesn't help either —
     // the legacy paths beneath /previous-artists were per-artist detail
-    // pages (covered by the /single/[slug] rule above), not pagination, so a
-    // splat would mostly map onto URLs that never existed. Deliberately
-    // omitted rather than forced.
+    // pages (covered by the /single/[slug] and [slug] rules above), not
+    // pagination, so a splat would mostly map onto URLs that never existed.
+    // Deliberately omitted rather than forced.
     "/blog": {
       status: 301,
       destination: "/news",

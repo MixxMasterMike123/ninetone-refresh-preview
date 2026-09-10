@@ -1,4 +1,4 @@
-import type { APIRoute } from "astro";
+import type { APIContext } from "astro";
 import { renderSitemapIndexXml } from "../lib/sitemap";
 import { pageJsonLdOrigin } from "../lib/site";
 
@@ -23,8 +23,16 @@ import { pageJsonLdOrigin } from "../lib/site";
  * sitemap-pages.xml URL actually resolves under the GH Pages preview
  * sub-path too (see sitemap-pages.xml.ts's doc comment for the full
  * rationale) — a no-op passthrough of siteOrigin() once production-shaped.
+ *
+ * Exported (not just used locally) so src/pages/sitemap.xml.ts — the
+ * `/sitemap.xml` alias conventional crawlers/tools probe for
+ * (seo-phase-1b-brief.md P0 item 4) — can produce byte-identical output
+ * without duplicating this logic. robots.txt's `Sitemap:` line keeps
+ * pointing at /sitemap-index.xml (the one submitted URL); this alias exists
+ * purely for anything that guesses the conventional path instead of reading
+ * robots.txt.
  */
-export const GET: APIRoute = async ({ request }) => {
+export async function renderSitemapIndexResponse({ request }: APIContext): Promise<Response> {
   const origin = pageJsonLdOrigin(request);
   const xml = renderSitemapIndexXml([`${origin}/sitemap-pages.xml`]);
 
@@ -34,4 +42,6 @@ export const GET: APIRoute = async ({ request }) => {
       "Cache-Control": "public, max-age=3600",
     },
   });
-};
+}
+
+export const GET = renderSitemapIndexResponse;

@@ -33,7 +33,12 @@
 
 import { defineMiddleware } from "astro:middleware";
 import { getCfEnv } from "./lib/cf";
-import { edgeCacheKey, shouldBypassCache } from "./lib/cache-policy";
+import {
+  edgeCacheKey,
+  legacyPreviousArtistTarget,
+  shouldBypassCache,
+  trailingSlashRedirectTarget,
+} from "./lib/cache-policy";
 
 // Statically replaced by Vite (astro.config define); guarded for any context
 // where the define isn't applied.
@@ -81,6 +86,41 @@ function harden(res: Response): Response {
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const { request, url, locals } = context;
+
+  // Trailing-slash canonicalization (seo-phase-1b-brief.md P0 item 5) — the
+  // cf target's astro.config.mjs now sets trailingSlash: "never", so
+  // "/path/" is never the shape Astro itself renders. Redirect ahead of the
+  // cache lookup: it must return immediately without ever reaching the
+  // cache read/buffer/store cycle below. trailingSlashRedirectTarget()
+  // already exempts "/" and reuses cache-policy's own SKIP list (/api/*,
+  // /admin, /404) rather than a second hardcoded exemption list.
+  const redirectTarget = trailingSlashRedirectTarget(url.pathname);
+  if (redirectTarget) {
+    const location = `${redirectTarget}${url.search}`;
+    return harden(new Response(null, { status: 301, headers: { Location: location } }));
+  }
+
+  // Legacy previous-artist deep links (seo-phase-1b-brief.md P0 item 2).
+  //
+  // These live here rather than in astro.config.mjs's `redirects` because the
+  // Cloudflare adapter writes config redirects into _redirects in
+  // static-hosting shape: @astrojs/underscore-redirects appends
+  // "/index.html" to every dynamic destination (astro.js, the
+  // `config.build.format === "directory"` branch). On this SSR Worker that
+  // suffix 404s — verified on staging, where the clean path returns 200 and
+  // the /index.html form returns 404. The static-asset layer answers before
+  // the Worker, so those rules hijacked the URLs they were meant to rescue,
+  // and declaring corrected copies alongside them is rejected outright
+  // ("Invalid _redirects configuration: Duplicate rule for path").
+  //
+  // Handling them here keeps one correct destination shape for the cf target;
+  // public/_redirects still carries the same two rules for the gh target,
+  // which has no Worker.
+  const legacyPrevious = legacyPreviousArtistTarget(url.pathname);
+  if (legacyPrevious) {
+    const location = `${legacyPrevious}${url.search}`;
+    return harden(new Response(null, { status: 301, headers: { Location: location } }));
+  }
 
   const cacheApi = (globalThis as { caches?: { default?: Cache } }).caches?.default;
   if (!cacheApi || shouldBypassCache(request, url.pathname, url.search)) {

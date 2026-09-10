@@ -167,6 +167,59 @@ test("never stores private, no-store, cookie-setting, or redirect responses", as
   }
 });
 
+test("redirects a trailing-slash path to the bare path before any cache lookup (seo-phase-1b P0 item 5)", async () => {
+  const runtime = createRuntime();
+  const response = await run(
+    new Request("https://ninetone.com/records/"),
+    async () => { throw new Error("next must not run — redirect happens before rendering"); },
+    runtime,
+  );
+
+  assert.equal(response.status, 301);
+  assert.equal(response.headers.get("location"), "/records");
+  assert.equal(runtime.matched.length, 0, "cacheApi.match must not be called for a redirect");
+  assert.equal(runtime.stored.length, 0);
+  assert.equal(response.headers.get("x-frame-options"), "DENY");
+});
+
+test("preserves the query string on a trailing-slash redirect", async () => {
+  const runtime = createRuntime();
+  const response = await run(
+    new Request("https://ninetone.com/records/?utm_source=x"),
+    async () => { throw new Error("next must not run"); },
+    runtime,
+  );
+
+  assert.equal(response.status, 301);
+  assert.equal(response.headers.get("location"), "/records?utm_source=x");
+});
+
+test("never redirects the root path", async () => {
+  const runtime = createRuntime();
+  let nextCalls = 0;
+  const response = await run(
+    new Request("https://ninetone.com/"),
+    async () => { nextCalls++; return new Response("home"); },
+    runtime,
+  );
+
+  assert.equal(nextCalls, 1);
+  assert.notEqual(response.status, 301);
+});
+
+test("never redirects /api/* even with a trailing slash", async () => {
+  const runtime = createRuntime();
+  let nextCalls = 0;
+  const response = await run(
+    new Request("https://ninetone.com/api/contact/"),
+    async () => { nextCalls++; return new Response("ok"); },
+    runtime,
+  );
+
+  assert.equal(nextCalls, 1);
+  assert.notEqual(response.status, 301);
+});
+
 // NOT UNIT-TESTED, deliberately: the streaming-clone race behind the zero-byte
 // pages and the intermittent 500s (seo-phase-1b P0 items 1 & 3) cannot be
 // reproduced under node:test. undici's clone() buffers eagerly and both the
@@ -189,3 +242,39 @@ test("never stores private, no-store, cookie-setting, or redirect responses", as
 // The regression guard is therefore the post-deploy staging check recorded in
 // docs/seo-phase-1b-pr.md: N parallel requests across the affected detail
 // pages with zero empty bodies and zero exceptions in `wrangler tail`.
+
+test("legacy /previous-artists deep links 301 to the real detail path (seo-phase-1b P0 item 2)", async () => {
+  // Both shapes existed on the live site and survive as inbound links. The
+  // destination must be extensionless — the Cloudflare adapter's generated
+  // _redirects rules append "/index.html", which 404s on the SSR Worker, which
+  // is why this lives in middleware rather than astro.config.mjs's `redirects`.
+  for (const [from, to] of [
+    ["/previous-artists/kuokka", "/records/artists/previous/single/kuokka"],
+    ["/previous-artists/single/kuokka", "/records/artists/previous/single/kuokka"],
+    ["/previous-artists/yohio", "/records/artists/previous/single/yohio"],
+  ]) {
+    const runtime = createRuntime();
+    const res = await run(new Request(`https://ninetone.com${from}`), async () => new Response("unused"), runtime);
+    assert.equal(res.status, 301, `${from} should 301`);
+    assert.equal(res.headers.get("location"), to);
+    assert.equal(runtime.matched.length, 0, "redirect must precede the cache read");
+    assert.ok(!res.headers.get("location").endsWith("/index.html"), "destination must be extensionless");
+  }
+});
+
+test("legacy previous-artist redirect preserves the query string and ignores non-matching paths", async () => {
+  const runtime = createRuntime();
+  const res = await run(
+    new Request("https://ninetone.com/previous-artists/kuokka?utm_source=discogs"),
+    async () => new Response("unused"),
+    runtime,
+  );
+  assert.equal(res.headers.get("location"), "/records/artists/previous/single/kuokka?utm_source=discogs");
+
+  // The bare listing path and the "single" listing shape are not slugs.
+  for (const path of ["/previous-artists/single", "/records/artists/previous"]) {
+    const rt = createRuntime();
+    const passed = await run(new Request(`https://ninetone.com${path}`), async () => new Response("rendered"), rt);
+    assert.notEqual(passed.status, 301, `${path} must not be redirected by this rule`);
+  }
+});
