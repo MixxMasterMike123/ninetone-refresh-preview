@@ -10,6 +10,8 @@ import { resolveChannelId, getYouTubeFeed } from "../../../lib/youtube";
 import { getProducts } from "../../../lib/shopify";
 import { renderBio } from "../../../lib/markdown";
 import { url } from "../../../lib/url";
+import { pageJsonLdOrigin } from "../../../lib/site";
+import { breadcrumbs, person, markdownToPlainText } from "../../../lib/schema";
 
 export async function getStaticPaths() {
   const clients = await getClients();
@@ -98,6 +100,23 @@ try {
   const channelId = await resolveChannelId(ytChannelUrl);
   if (channelId) ytFeed = await getYouTubeFeed(channelId);
 } catch {}
+
+const slug = String(client.SLUG ?? "");
+const origin = pageJsonLdOrigin(Astro.request);
+const jsonLd = [
+  breadcrumbs(origin, [
+    { name: "Management", path: "/management" },
+    { name: "Clients", path: "/management/clients" },
+    { name, path: `/management/clients/${slug}` },
+  ]),
+  person(origin, name, {
+    role: "client",
+    path: `management/clients/${slug}`,
+    image: heroImage,
+    description: tagline || markdownToPlainText(String(client.clientPresentationString ?? ""), 200),
+    socials,
+  }),
+];
 ---
 
 <Base
@@ -106,6 +125,7 @@ try {
   description={tagline || `${name} | Ninetone Management`}
   ogImage={heroImage}
   ogType="profile"
+  jsonLd={jsonLd}
 >
   <section class="bg-ninetone-paper">
     <div class="mx-auto max-w-7xl px-6 pb-12 pt-12 md:pt-16">

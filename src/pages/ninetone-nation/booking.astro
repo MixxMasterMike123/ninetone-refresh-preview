@@ -4,6 +4,8 @@ import ArtistCard from "../../components/ArtistCard.astro";
 import SectionIntro from "../../components/SectionIntro.astro";
 import { getBookingCategories, getWebPostSection } from "../../lib/ninetone";
 import { displayTitle } from "../../lib/display-title";
+import { pageJsonLdOrigin } from "../../lib/site";
+import { collectionPage } from "../../lib/schema";
 
 // Core content — failures render the error page (never edge-cached) instead
 // of a silently-empty booking roster. Transients are absorbed by lib/cache.ts.
@@ -30,9 +32,18 @@ function slugifyTag(s: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 }
+
+const origin = pageJsonLdOrigin(Astro.request);
+const jsonLd = collectionPage(origin, {
+  name: "Booking — Ninetone Nation",
+  path: "/ninetone-nation/booking",
+  items: populatedCategories.flatMap((c) =>
+    c.artists.map((a) => ({ name: a.name, path: `/ninetone-nation/${a.slug}` })),
+  ),
+});
 ---
 
-<Base title="Booking" theme="nation">
+<Base title="Booking" theme="nation" jsonLd={jsonLd}>
   <SectionIntro
     title="Entertainers"
     tagline={displayTitle(webPosts?.title)}

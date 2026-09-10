@@ -5,10 +5,12 @@ import Footer from "../components/Footer.astro";
 import PromoBar from "../components/PromoBar.astro";
 import CommandPalette from "../components/CommandPalette.astro";
 import CookieConsent from "../components/CookieConsent.astro";
+import JsonLd from "../components/JsonLd.astro";
 import type { SectionTheme } from "../lib/sections";
 import { getPromo } from "../lib/ninetone";
 import { url } from "../lib/url";
-import { siteOrigin, isProductionShaped, resolveSitePath } from "../lib/site";
+import { siteOrigin, isProductionShaped, resolveSitePath, jsonLdOrigin } from "../lib/site";
+import { organization, website } from "../lib/schema";
 
 interface Props {
   title: string;
@@ -75,16 +77,21 @@ const canonicalUrl = canonical
 const ogImageUrl = ogImage || `${origin}${basePath("/og-default.png")}`;
 const ogLocale = lang === "sv" ? "sv_SE" : "en_GB";
 
-/**
- * Section 2 (src/components/JsonLd.astro) will own this rendering properly.
- * Inlined here for now to avoid a collision with that in-flight work — a
- * minimal escape of "<" as "<" so a literal "</script>" in string data
- * can't break out of the JSON-LD script tag.
- */
-function jsonLdScript(value: Record<string, unknown> | Record<string, unknown>[]): string {
-  return JSON.stringify(value).replace(/</g, "\\u003c");
-}
-const jsonLdList = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
+// Every page gets Organization + WebSite (brief §2 "Wire:"). Instagram is a
+// static Footer literal (src/components/Footer.astro), not an FM read — safe
+// to pass straight through, no new fetch involved.
+//
+// JSON-LD URLs are plain `${origin}${path}` concatenations inside schema.ts
+// (it has no url()/resolveSitePath() of its own — see jsonLdOrigin()'s
+// comment in src/lib/site.ts) — fold the GH Pages preview sub-path into the
+// origin here, once, so every entity/breadcrumb URL this page's own jsonLd
+// prop supplies is reachable too.
+const jsonLdSafeOrigin = jsonLdOrigin(origin, basePrefix, productionShaped);
+const baseJsonLd = [
+  organization(jsonLdSafeOrigin, { instagram: "https://www.instagram.com/ninetonemanagement/" }),
+  website(jsonLdSafeOrigin),
+];
+const jsonLdList = [...baseJsonLd, ...(jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [])];
 
 // Promo bar is opt-in: nothing shows unless a "Promo" WebPosts category exists.
 // Optional chrome — a failed fetch must not take the page down, but it should
@@ -258,9 +265,7 @@ const TIKTOK_PIXEL_ID = "TIKTOK-PLACEHOLDER"; // TODO: replace with real pixel I
     <meta name="generator" content={Astro.generator} />
     <title>{fullTitle}</title>
 
-    {jsonLdList.map((entry) => (
-      <script type="application/ld+json" is:inline set:html={jsonLdScript(entry)} />
-    ))}
+    <JsonLd data={jsonLdList} />
   </head>
   <body class="min-h-screen bg-ninetone-paper text-ninetone-ink antialiased">
     <PromoBar promo={promo} />

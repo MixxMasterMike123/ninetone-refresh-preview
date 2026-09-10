@@ -5,11 +5,13 @@ import NewsCard from "../../components/NewsCard.astro";
 import MerchCard from "../../components/MerchCard.astro";
 import RosterStrip from "../../components/RosterStrip.astro";
 import YouTubeFeed from "../../components/YouTubeFeed.astro";
-import { getBookingPageSet, getNewsForArtist, pickRelatedArtists } from "../../lib/ninetone";
+import { getBookingPageSet, getBookingCategories, getNewsForArtist, pickRelatedArtists } from "../../lib/ninetone";
 import { resolveChannelId, getYouTubeFeed } from "../../lib/youtube";
 import { getProducts } from "../../lib/shopify";
 import { renderBio } from "../../lib/markdown";
 import { url } from "../../lib/url";
+import { pageJsonLdOrigin } from "../../lib/site";
+import { breadcrumbs, person, markdownToPlainText } from "../../lib/schema";
 
 // Generate a page for every Active talent listed on the booking page.
 // Source of truth = the curated BOOKING_TAG portal set, filtered to
@@ -103,6 +105,37 @@ try {
   const channelId = await resolveChannelId(ytChannelUrl);
   if (channelId) ytFeed = await getYouTubeFeed(channelId);
 } catch {}
+
+const slug = String(e.SLUG ?? "");
+const origin = pageJsonLdOrigin(Astro.request);
+
+// `tags` (above) is derived from e.tagBooking/e.tags/e.genre, but `e` comes
+// from API_Booking (getBookingPageSet/getBookingRoster), which carries none
+// of those fields — the actual booking category lives one level up, on the
+// API_BOOKING_TAG record this talent is portalled under. getBookingCategories()
+// is already fetched (and response-cached — see src/lib/filemaker.ts's
+// `cached()` wrapper) by the booking index; calling it again here reuses
+// that cache rather than issuing a new FM read.
+const bookingCategories = await getBookingCategories();
+const additionalType = bookingCategories
+  .filter((c) => c.artists.some((a) => a.slug === slug))
+  .map((c) => c.tag);
+
+const jsonLd = [
+  breadcrumbs(origin, [
+    { name: "Nation", path: "/ninetone-nation" },
+    { name: "Booking", path: "/ninetone-nation/booking" },
+    { name, path: `/ninetone-nation/${slug}` },
+  ]),
+  person(origin, name, {
+    role: "nation",
+    path: `ninetone-nation/${slug}`,
+    image: heroImage,
+    description: tagline || markdownToPlainText(String(e.bookingPresentationString ?? ""), 200),
+    socials,
+    bookingCategories: additionalType,
+  }),
+];
 ---
 
 <Base
@@ -111,6 +144,7 @@ try {
   description={tagline || `${name} | Ninetone Nation`}
   ogImage={heroImage}
   ogType="profile"
+  jsonLd={jsonLd}
 >
   <section class="bg-ninetone-paper">
     <div class="mx-auto max-w-7xl px-6 pb-12 pt-12 md:pt-16">

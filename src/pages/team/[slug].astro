@@ -3,6 +3,8 @@ import Base from "../../layouts/Base.astro";
 import { getTeam } from "../../lib/ninetone";
 import { renderBio, isAiSpeculative } from "../../lib/markdown";
 import { url } from "../../lib/url";
+import { pageJsonLdOrigin } from "../../lib/site";
+import { breadcrumbs, person } from "../../lib/schema";
 
 export async function getStaticPaths() {
   const team = await getTeam();
@@ -36,6 +38,23 @@ const photo = member.userPhoto
   : undefined;
 const email = String(member.userEmail ?? "");
 const phone = String(member.Phone ?? "");
+
+const slug = String(member.SLUG ?? "");
+const origin = pageJsonLdOrigin(Astro.request);
+const jsonLd = [
+  breadcrumbs(origin, [
+    { name: "Team", path: "/team" },
+    { name, path: `/team/${slug}` },
+  ]),
+  person(origin, name, {
+    role: "team",
+    path: `team/${slug}`,
+    image: photo,
+    description: titleDescription || title || undefined,
+    jobTitle: title || undefined,
+    worksFor: true,
+  }),
+];
 ---
 
 <Base
@@ -43,6 +62,7 @@ const phone = String(member.Phone ?? "");
   description={titleDescription || title || `${name} | Ninetone Group`}
   ogImage={photo}
   ogType="profile"
+  jsonLd={jsonLd}
 >
   <section class="bg-ninetone-paper">
     <div class="mx-auto max-w-7xl px-6 pb-12 pt-12 md:pt-16">

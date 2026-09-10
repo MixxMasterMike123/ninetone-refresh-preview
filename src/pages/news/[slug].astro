@@ -3,6 +3,8 @@ import Base from "../../layouts/Base.astro";
 import { getNews } from "../../lib/ninetone";
 import { renderBio } from "../../lib/markdown";
 import { url } from "../../lib/url";
+import { pageJsonLdOrigin } from "../../lib/site";
+import { breadcrumbs, newsArticle, markdownToPlainText, fmDateToIso } from "../../lib/schema";
 
 export async function getStaticPaths() {
   const posts = await getNews();
@@ -34,9 +36,38 @@ const messageHtml = renderBio(String(post.MessageString ?? post.Message ?? ""));
 const ytLinks = [post.ytLinkA, post.ytLinkB, post.ytLinkC, post.ytLinkD]
   .map((u) => String(u ?? "").trim())
   .filter(Boolean);
+
+const slug = String(post.slug ?? "");
+const origin = pageJsonLdOrigin(Astro.request);
+const isoDate = fmDateToIso(date);
+
+// API_NEWS exposes no modification timestamp field distinct from `Date`
+// (verified against src/lib/ninetone.ts's WebPost type) — dateModified falls
+// back to datePublished inside newsArticle() per the brief, rather than
+// fabricating one.
+const jsonLd = isoDate
+  ? [
+      breadcrumbs(origin, [
+        { name: "News", path: "/news" },
+        { name: title, path: `/news/${slug}` },
+      ]),
+      newsArticle(origin, {
+        slug,
+        headline: title,
+        datePublished: isoDate,
+        image,
+        articleBody: markdownToPlainText(String(post.MessageString ?? post.Message ?? "")),
+      }),
+    ]
+  : [
+      breadcrumbs(origin, [
+        { name: "News", path: "/news" },
+        { name: title, path: `/news/${slug}` },
+      ]),
+    ];
 ---
 
-<Base title={title} description={lede} ogImage={image} ogType="article">
+<Base title={title} description={lede} ogImage={image} ogType="article" jsonLd={jsonLd}>
   <article class="bg-ninetone-paper">
     <header class="mx-auto max-w-4xl px-6 pt-16 md:pt-24">
       <p class="mb-6">

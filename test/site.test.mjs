@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { siteOrigin, isProductionShaped, resolveSitePath } from "../src/lib/site.ts";
+import { siteOrigin, isProductionShaped, resolveSitePath, jsonLdOrigin } from "../src/lib/site.ts";
 
 // This module reads env vars via `process.env` when running outside Vite
 // (plain node:test has no `import.meta.env`), so these tests drive the three
@@ -186,4 +186,31 @@ test("resolveSitePath: strips the base cleanly even when what remains would othe
   // basePrefix consumes the whole string up to a bare "/" boundary; guard
   // against ever returning a path with no leading slash.
   assert.equal(resolveSitePath("/ninetone-refresh-preview", "/ninetone-refresh-preview", true, noopAddBase), "/");
+});
+
+// jsonLdOrigin() is the fix for JSON-LD URLs 404ing under the GH Pages
+// preview sub-path — schema.ts builders do plain `${origin}${path}`
+// concatenation with no access to url()/resolveSitePath(), so the sub-path
+// must be folded into `origin` itself before it reaches them.
+test("jsonLdOrigin: still-preview (gh target) -> folds the sub-path into the origin", () => {
+  assert.equal(
+    jsonLdOrigin("https://mixxmastermike123.github.io", "/ninetone-refresh-preview", false),
+    "https://mixxmastermike123.github.io/ninetone-refresh-preview",
+  );
+});
+
+test("jsonLdOrigin: production-shaped -> origin unchanged even if basePrefix is still configured", () => {
+  assert.equal(
+    jsonLdOrigin("https://ninetone.com", "/ninetone-refresh-preview", true),
+    "https://ninetone.com",
+  );
+});
+
+test("jsonLdOrigin: cf target (empty basePrefix) -> origin unchanged regardless of productionShaped", () => {
+  assert.equal(jsonLdOrigin("https://ninetone-site.micke-ohlen.workers.dev", "", false), "https://ninetone-site.micke-ohlen.workers.dev");
+  assert.equal(jsonLdOrigin("https://ninetone.com", "", true), "https://ninetone.com");
+});
+
+test("jsonLdOrigin: empty origin (siteOrigin() resolved nothing) passes through unchanged rather than emitting a bare sub-path", () => {
+  assert.equal(jsonLdOrigin("", "/ninetone-refresh-preview", false), "");
 });

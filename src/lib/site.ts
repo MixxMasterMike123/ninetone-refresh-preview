@@ -128,3 +128,43 @@ export function resolveSitePath(
   // already includes it on the static target — don't double it).
   return alreadyBased ? path : addBase(path);
 }
+
+/**
+ * The origin JSON-LD builders (src/lib/schema.ts) should concatenate their
+ * own site-relative paths onto — i.e. `siteOrigin()` with the GH Pages
+ * preview sub-path folded in when we're still preview-shaped, so
+ * `${jsonLdOrigin}/records/artists/anjo` resolves to a real, reachable URL
+ * instead of 404ing under `/ninetone-refresh-preview/`.
+ *
+ * schema.ts's builders take a bare `origin` per the brief and do plain
+ * string concatenation with paths they're handed — they have no `Astro.url`
+ * / `url()` to call resolveSitePath() themselves, and staying pure is the
+ * point (unit-tested with plain objects, no Astro render). Folding the base
+ * in here, once, at the same call site that already resolves `origin` via
+ * `siteOrigin(Astro.request)`, keeps every JSON-LD URL correct on both
+ * targets without teaching schema.ts about astro.config.mjs's `base`.
+ *
+ * On the CF target / once production-shaped, `basePrefix` is empty or
+ * `productionShaped` is true, so this is a no-op passthrough of `origin`.
+ */
+export function jsonLdOrigin(origin: string, basePrefix: string, productionShaped: boolean): string {
+  if (!origin) return origin;
+  if (productionShaped || !basePrefix) return origin;
+  return `${origin}${basePrefix}`;
+}
+
+/**
+ * Convenience wrapper for pages: the exact recipe Base.astro itself uses to
+ * get from `Astro.request` to a JSON-LD-safe origin, so every page building
+ * its own breadcrumbs/entity JSON-LD (src/lib/schema.ts) can call one
+ * function instead of re-deriving `siteOrigin()` + `isProductionShaped()` +
+ * `import.meta.env.BASE_URL` at every call site. Reads `import.meta.env`
+ * directly (same as siteOrigin()'s own readEnv()), so — like the rest of
+ * this module — it works from both Astro frontmatter and plain node:test.
+ */
+export function pageJsonLdOrigin(request?: Request | { url: string | URL }): string {
+  const basePrefix = String(
+    (import.meta as unknown as { env?: Record<string, unknown> }).env?.BASE_URL ?? "/",
+  ).replace(/\/$/, "");
+  return jsonLdOrigin(siteOrigin(request), basePrefix, isProductionShaped());
+}

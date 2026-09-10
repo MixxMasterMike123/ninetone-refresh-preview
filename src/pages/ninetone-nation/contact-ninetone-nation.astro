@@ -1,9 +1,13 @@
 ---
 import Base from "../../layouts/Base.astro";
 import ContactForm from "../../components/ContactForm.astro";
+import { pageJsonLdOrigin } from "../../lib/site";
+import { contactPage } from "../../lib/schema";
+
+const jsonLd = contactPage(pageJsonLdOrigin(Astro.request), "/ninetone-nation/contact-ninetone-nation");
 ---
 
-<Base title="Booking request" theme="nation">
+<Base title="Booking request" theme="nation" jsonLd={jsonLd}>
   <ContactForm
     theme="nation"
     division="nation"

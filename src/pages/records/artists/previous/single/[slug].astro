@@ -10,6 +10,8 @@ import { resolveChannelId, getYouTubeFeed } from "../../../../../lib/youtube";
 import { getProducts } from "../../../../../lib/shopify";
 import { renderBio } from "../../../../../lib/markdown";
 import { url } from "../../../../../lib/url";
+import { pageJsonLdOrigin } from "../../../../../lib/site";
+import { breadcrumbs, musicGroup, markdownToPlainText, fmDateToIso } from "../../../../../lib/schema";
 
 export async function getStaticPaths() {
   const artists = await getPreviousArtists();
@@ -83,6 +85,32 @@ try {
   const channelId = await resolveChannelId(ytChannelUrl);
   if (channelId) ytFeed = await getYouTubeFeed(channelId);
 } catch {}
+
+const origin = pageJsonLdOrigin(Astro.request);
+const jsonLd = [
+  breadcrumbs(origin, [
+    { name: "Records", path: "/records" },
+    { name: "Previous artists", path: "/records/artists/previous/1" },
+    { name, path: `/records/artists/previous/single/${slug}` },
+  ]),
+  musicGroup(origin, {
+    slug,
+    // Previous artists live at a different path than the active roster
+    // (/records/artists/previous/single/{slug}, not /records/artists/{slug})
+    // — without this, MusicGroup's url/@id 404 on all previous-artist pages.
+    path: `records/artists/previous/single/${slug}`,
+    name,
+    description: tagline || markdownToPlainText(String(artist.artistPresentationString ?? ""), 200),
+    image: heroImage,
+    socials,
+    albums: releases.map((r) => ({
+      name: r.album,
+      datePublished: fmDateToIso(r.releaseDate),
+      image: r.cover || undefined,
+      url: r.urlRelease || undefined,
+    })),
+  }),
+];
 ---
 
 <Base
@@ -91,6 +119,7 @@ try {
   description={tagline || `${name} | Previous Artists | Ninetone Group`}
   ogImage={heroImage}
   ogType="profile"
+  jsonLd={jsonLd}
 >
   <section class="bg-ninetone-paper">
     <div class="mx-auto max-w-7xl px-6 pb-12 pt-12 md:pt-16">

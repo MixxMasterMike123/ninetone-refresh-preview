@@ -11,6 +11,8 @@ import { resolveChannelId, getYouTubeFeed } from "../../../lib/youtube";
 import { getProducts } from "../../../lib/shopify";
 import { renderBio } from "../../../lib/markdown";
 import { url } from "../../../lib/url";
+import { pageJsonLdOrigin } from "../../../lib/site";
+import { breadcrumbs, musicGroup, markdownToPlainText, fmDateToIso } from "../../../lib/schema";
 
 export async function getStaticPaths() {
   const artists = await getArtists();
@@ -105,6 +107,31 @@ try {
   const channelId = await resolveChannelId(ytChannelUrl);
   if (channelId) ytFeed = await getYouTubeFeed(channelId);
 } catch {}
+
+// Structured data: breadcrumbs + MusicGroup. Releases are already fetched
+// above for the Discography section — reuse them for the `album` list rather
+// than issuing a new FM read.
+const origin = pageJsonLdOrigin(Astro.request);
+const jsonLd = [
+  breadcrumbs(origin, [
+    { name: "Records", path: "/records" },
+    { name: "Artists", path: "/records/artists" },
+    { name, path: `/records/artists/${slug}` },
+  ]),
+  musicGroup(origin, {
+    slug,
+    name,
+    description: tagline || markdownToPlainText(String(artist.artistPresentationString ?? ""), 200),
+    image: heroImage,
+    socials,
+    albums: releases.map((r) => ({
+      name: r.album,
+      datePublished: fmDateToIso(r.releaseDate),
+      image: r.cover || undefined,
+      url: r.urlRelease || undefined,
+    })),
+  }),
+];
 ---
 
 <Base
@@ -113,6 +140,7 @@ try {
   description={tagline || `${name} | Ninetone Records`}
   ogImage={heroImage}
   ogType="profile"
+  jsonLd={jsonLd}
 >
   <!-- Cinematic split hero -->
   <section class="bg-ninetone-paper">
