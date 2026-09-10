@@ -1,6 +1,15 @@
 import type { APIRoute } from "astro";
-import { getArtists, getPreviousArtists, getClients, getTeam, getNews, getBookingCategories } from "../lib/ninetone";
-import { buildLlmsTxt, bookingTalentLines } from "../lib/llms";
+import {
+  getArtists,
+  getPreviousArtists,
+  getClients,
+  getTeam,
+  getNews,
+  getBookingCategories,
+  getWebPosts,
+} from "../lib/ninetone";
+import { buildLlmsTxt, bookingTalentLines, bookingCategoryLines, guideLines } from "../lib/llms";
+import { guidesFromCategory } from "../lib/guides";
 import { pageJsonLdOrigin } from "../lib/site";
 
 /**
@@ -35,18 +44,36 @@ export const GET: APIRoute = async ({ request }) => {
   // src/pages/sitemap-pages.xml.ts's own reasoning for the same fix.
   const origin = pageJsonLdOrigin(request);
 
-  const [artists, previousArtists, clients, team, news, bookingCategories] = await Promise.all([
+  const [artists, previousArtists, clients, team, news, bookingCategories, guiderSections] = await Promise.all([
     getArtists(),
     getPreviousArtists(),
     getClients(),
     getTeam(),
     getNews(),
     getBookingCategories(),
+    getWebPosts("Guider"),
   ]);
 
   const bookingLines = bookingTalentLines(bookingCategories, origin);
+  // Section 6: one line per Nation category page that actually exists
+  // (bookingCategoryLines() applies the same populated-only filter the
+  // category page's own getStaticPaths() uses).
+  const bookingCatLines = bookingCategoryLines(bookingCategories, origin);
+  // Section 7: one line per guide that actually exists (guidesFromCategory()
+  // is the exact same helper the guide pages' own getStaticPaths() uses, so
+  // this list can't drift from the real routes — [] when "Guider" is absent).
+  const guideTxtLines = guideLines(guidesFromCategory(guiderSections[0]), origin);
 
-  const body = buildLlmsTxt(origin, { artists, previousArtists, clients, team, news, bookingLines });
+  const body = buildLlmsTxt(origin, {
+    artists,
+    previousArtists,
+    clients,
+    team,
+    news,
+    bookingLines,
+    bookingCategoryLines: bookingCatLines,
+    guideLines: guideTxtLines,
+  });
 
   return new Response(body, {
     headers: {

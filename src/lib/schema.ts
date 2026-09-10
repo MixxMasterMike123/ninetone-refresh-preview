@@ -393,6 +393,53 @@ export function newsArticle(origin: string, post: NewsArticleInput): Record<stri
 }
 
 // ---------------------------------------------------------------------------
+// Article (generic — guides and other non-news editorial content)
+// ---------------------------------------------------------------------------
+// newsArticle() above is deliberately NewsArticle-typed for /news posts.
+// Guides (src/pages/guider/[slug].astro) are evergreen how-to/reference
+// content, not news, so schema.org's generic Article type is the correct
+// fit rather than reusing NewsArticle — same field shape and same
+// "@id"/mainEntityOfPage pattern, just a different @type and a caller-
+// supplied path (guides live at /guider/{slug}, not /news/{slug}).
+
+export interface ArticleInput {
+  /** Site-relative path the article lives at, e.g. "/guider/some-guide". */
+  path: string;
+  headline: string;
+  /** ISO date string. Omit when no real publish date exists. */
+  datePublished?: string;
+  /** ISO date string. Falls back to datePublished when absent (matches
+   *  newsArticle()'s behavior) — never fabricated when neither is known. */
+  dateModified?: string;
+  image?: string;
+  /** Plain text (already stripped of markdown/HTML) — pass FM markdown
+   *  through markdownToPlainText() first. */
+  articleBody?: string;
+}
+
+export function article(origin: string, input: ArticleInput): Record<string, unknown> {
+  const path = input.path.startsWith("/") ? input.path : `/${input.path}`;
+  const url = `${origin}${path}`;
+  const node: Record<string, unknown> = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "@id": `${url}/#article`,
+    headline: input.headline,
+    publisher: { "@id": orgId(origin) },
+    mainEntityOfPage: url,
+  };
+  if (input.datePublished) {
+    node.datePublished = input.datePublished;
+    node.dateModified = input.dateModified || input.datePublished;
+  } else if (input.dateModified) {
+    node.dateModified = input.dateModified;
+  }
+  if (input.image) node.image = input.image;
+  if (input.articleBody) node.articleBody = input.articleBody;
+  return node;
+}
+
+// ---------------------------------------------------------------------------
 // CollectionPage
 // ---------------------------------------------------------------------------
 

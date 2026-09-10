@@ -5,10 +5,13 @@ import {
   getClients,
   getTeam,
   getAllActiveBookingSlugs,
+  getBookingCategories,
   getNews,
+  getWebPosts,
 } from "../lib/ninetone";
 import { STATIC_ROUTES } from "../lib/routes";
 import { buildSitemapEntries, renderUrlsetXml } from "../lib/sitemap";
+import { guidesFromCategory } from "../lib/guides";
 import { pageJsonLdOrigin } from "../lib/site";
 
 /**
@@ -40,14 +43,21 @@ import { pageJsonLdOrigin } from "../lib/site";
 export const GET: APIRoute = async ({ request }) => {
   const origin = pageJsonLdOrigin(request);
 
-  const [artists, previousArtists, clients, team, bookingSlugs, news] = await Promise.all([
-    getArtists(),
-    getPreviousArtists(),
-    getClients(),
-    getTeam(),
-    getAllActiveBookingSlugs(),
-    getNews(),
-  ]);
+  const [artists, previousArtists, clients, team, bookingSlugs, bookingCategories, news, guiderSections] =
+    await Promise.all([
+      getArtists(),
+      getPreviousArtists(),
+      getClients(),
+      getTeam(),
+      getAllActiveBookingSlugs(),
+      getBookingCategories(),
+      getNews(),
+      getWebPosts("Guider"),
+    ]);
+  // Section 7: guides derived from the same helper the guide pages'
+  // getStaticPaths() uses, so a guide can never appear here without a real
+  // page behind it (or vice versa).
+  const guides = guidesFromCategory(guiderSections[0]);
 
   const entries = buildSitemapEntries(origin, {
     staticRoutes: STATIC_ROUTES,
@@ -65,7 +75,13 @@ export const GET: APIRoute = async ({ request }) => {
     // talent reappears; using the roster helper here would then omit a real
     // page from the sitemap.
     bookingTalent: bookingSlugs.map((slug) => ({ SLUG: slug })),
+    // Section 6 category pages (src/pages/ninetone-nation/kategori/[category].astro)
+    // — bookingCategoryEntries() applies the same "at least one artist"
+    // filter that page's getStaticPaths() uses, so only populated categories
+    // ever appear here.
+    bookingCategories,
     news,
+    guides,
   });
 
   return new Response(renderUrlsetXml(entries), {

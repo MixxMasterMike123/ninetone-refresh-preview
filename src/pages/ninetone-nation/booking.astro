@@ -6,6 +6,8 @@ import { getBookingCategories, getWebPostSection } from "../../lib/ninetone";
 import { displayTitle } from "../../lib/display-title";
 import { pageJsonLdOrigin } from "../../lib/site";
 import { collectionPage } from "../../lib/schema";
+import { slugifyTag } from "../../lib/booking-slug";
+import { url } from "../../lib/url";
 
 // Core content — failures render the error page (never edge-cached) instead
 // of a silently-empty booking roster. Transients are absorbed by lib/cache.ts.
@@ -22,16 +24,6 @@ const introBody =
   webPosts?.blocks?.find((b) => b.message)?.message ?? "";
 
 const totalArtists = populatedCategories.reduce((n, c) => n + c.artists.length, 0);
-
-// Slugify category names for in-page anchors (and stable element ids)
-function slugifyTag(s: string): string {
-  return s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
 
 const origin = pageJsonLdOrigin(Astro.request);
 const jsonLd = collectionPage(origin, {
@@ -92,16 +84,25 @@ const jsonLd = collectionPage(origin, {
             <section id={id} class="scroll-mt-28">
               <header class="mb-10 grid gap-6 md:grid-cols-12 md:gap-16">
                 <div class="md:col-span-7">
-                  <span class="kicker text-ninetone-green-dark">
+                  <a
+                    href={url(`/ninetone-nation/kategori/${slugifyTag(c.tag)}`)}
+                    class="kicker inline-flex items-center gap-2 text-ninetone-green-dark transition-opacity hover:opacity-70"
+                  >
                     {c.tag} · {c.artists.length} {c.artists.length === 1 ? "talent" : "talents"}
-                  </span>
+                    <span aria-hidden>→</span>
+                  </a>
                   <h2 class="mt-4 font-display text-[clamp(2rem,5vw,4rem)] leading-[0.95] tracking-[-0.035em]">
-                    {c.tag === "Föreläsare" ? "Föreläsare." :
-                     c.tag === "Konferencier" ? "Konferenciers." :
-                     c.tag === "Moderator" ? "Moderatorer." :
-                     c.tag === "Underhållare" ? "Underhållare." :
-                     c.tag === "Influencer" ? "Influencers." :
-                     `${c.tag}er.`}
+                    <a
+                      href={url(`/ninetone-nation/kategori/${slugifyTag(c.tag)}`)}
+                      class="transition-opacity hover:opacity-70"
+                    >
+                      {c.tag === "Föreläsare" ? "Föreläsare." :
+                       c.tag === "Konferencier" ? "Konferenciers." :
+                       c.tag === "Moderator" ? "Moderatorer." :
+                       c.tag === "Underhållare" ? "Underhållare." :
+                       c.tag === "Influencer" ? "Influencers." :
+                       `${c.tag}er.`}
+                    </a>
                   </h2>
                 </div>
                 {c.description && (

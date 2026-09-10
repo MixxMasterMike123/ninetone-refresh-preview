@@ -10,6 +10,7 @@ import {
   musicGroup,
   person,
   newsArticle,
+  article,
   collectionPage,
   faqPage,
   contactPage,
@@ -290,6 +291,56 @@ test("newsArticle: explicit dateModified is preserved, not overwritten", () => {
     dateModified: "2026-01-05",
   });
   assert.equal(article.dateModified, "2026-01-05");
+});
+
+// ---------------------------------------------------------------------------
+// article (Section 7 — guides route: generic Article, not NewsArticle)
+// ---------------------------------------------------------------------------
+
+test("article: builds an Article node keyed on the caller-supplied path, not a hardcoded /news/ shape", () => {
+  const a = article(ORIGIN, {
+    path: "/guider/hur-man-bokar",
+    headline: "Hur man bokar",
+    datePublished: "2026-01-05",
+    image: "https://x/cover.jpg",
+    articleBody: "Plain text body.",
+  });
+  assert.equal(a["@type"], "Article");
+  assert.equal(a["@id"], "https://ninetone.com/guider/hur-man-bokar/#article");
+  assert.equal(a.mainEntityOfPage, "https://ninetone.com/guider/hur-man-bokar");
+  assert.equal(a.headline, "Hur man bokar");
+  assert.equal(a.datePublished, "2026-01-05");
+  assert.equal(a.dateModified, "2026-01-05");
+  assert.equal(a.image, "https://x/cover.jpg");
+  assert.equal(a.articleBody, "Plain text body.");
+  assert.deepEqual(a.publisher, { "@id": orgId(ORIGIN) });
+});
+
+test("article: tolerates a path missing its leading slash", () => {
+  const a = article(ORIGIN, { path: "guider/x", headline: "X" });
+  assert.equal(a.mainEntityOfPage, "https://ninetone.com/guider/x");
+});
+
+test("article: explicit dateModified is preserved, not overwritten by datePublished", () => {
+  const a = article(ORIGIN, {
+    path: "/guider/x",
+    headline: "X",
+    datePublished: "2026-01-01",
+    dateModified: "2026-01-10",
+  });
+  assert.equal(a.dateModified, "2026-01-10");
+});
+
+test("article: omits datePublished/dateModified entirely rather than fabricating a date when neither is known", () => {
+  const a = article(ORIGIN, { path: "/guider/x", headline: "X" });
+  assert.equal(a.datePublished, undefined);
+  assert.equal(a.dateModified, undefined);
+});
+
+test("article: omits image/articleBody when not provided", () => {
+  const a = article(ORIGIN, { path: "/guider/x", headline: "X", datePublished: "2026-01-01" });
+  assert.equal(a.image, undefined);
+  assert.equal(a.articleBody, undefined);
 });
 
 test("collectionPage: CollectionPage + ItemList with the right numberOfItems", () => {

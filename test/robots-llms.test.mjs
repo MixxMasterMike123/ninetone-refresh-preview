@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildRobotsTxt } from "../src/pages/robots.txt.ts";
-import { buildLlmsTxt, bookingTalentLines } from "../src/lib/llms.ts";
+import { buildLlmsTxt, bookingTalentLines, bookingCategoryLines, guideLines } from "../src/lib/llms.ts";
 
 const ORIGIN = "https://ninetone.com";
 
@@ -226,4 +226,102 @@ test("bookingTalentLines: skips rows missing slug or name", () => {
   ];
   const lines = bookingTalentLines(categories, ORIGIN);
   assert.equal(lines.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// bookingCategoryLines (Section 6 — Nation category pages)
+// ---------------------------------------------------------------------------
+
+test("bookingCategoryLines: one line per category with at least one artist, slugified per booking-slug.ts", () => {
+  const categories = [
+    { tag: "Artist", artists: [{ slug: "a1" }, { slug: "a2" }] },
+    { tag: "Föreläsare", artists: [{ slug: "s1" }] },
+  ];
+  const lines = bookingCategoryLines(categories, ORIGIN);
+  assert.equal(lines.length, 2);
+  assert.ok(lines[0].includes(`[Artist](${ORIGIN}/ninetone-nation/kategori/artist): 2 bookable`));
+  assert.ok(lines[1].includes(`[Föreläsare](${ORIGIN}/ninetone-nation/kategori/forelasare): 1 bookable`));
+});
+
+test("bookingCategoryLines: skips categories with zero artists (rule 12 — the page doesn't exist, so neither does the line)", () => {
+  const categories = [
+    { tag: "Artist", artists: [{ slug: "a1" }] },
+    { tag: "Moderator", artists: [] },
+  ];
+  const lines = bookingCategoryLines(categories, ORIGIN);
+  assert.equal(lines.length, 1);
+  assert.ok(!lines.some((l) => l.includes("Moderator")));
+});
+
+test("bookingCategoryLines: includes the category description when present", () => {
+  const categories = [{ tag: "Artist", description: "Live music acts.", artists: [{ slug: "a1" }] }];
+  const lines = bookingCategoryLines(categories, ORIGIN);
+  assert.ok(lines[0].includes("Live music acts."));
+});
+
+test("llms.txt: booking category lines (Section 6) appear under ## Ninetone Nation, ahead of individual talent lines", () => {
+  const body = buildLlmsTxt(
+    ORIGIN,
+    stubData({
+      bookingCategoryLines: [`- [Artist](${ORIGIN}/ninetone-nation/kategori/artist): 8 bookable`],
+      bookingLines: [`- [Someone](${ORIGIN}/ninetone-nation/someone): Artist — On tour now.`],
+    }),
+  );
+  const nationSection = body.split("## Ninetone Nation")[1].split("## Company")[0];
+  const categoryIdx = nationSection.indexOf("kategori/artist");
+  const talentIdx = nationSection.indexOf("ninetone-nation/someone");
+  assert.ok(categoryIdx > -1 && talentIdx > -1);
+  assert.ok(categoryIdx < talentIdx);
+});
+
+// ---------------------------------------------------------------------------
+// guideLines (Section 7 — Guides route)
+// ---------------------------------------------------------------------------
+
+test("guideLines: one line per guide with slug + title, tagline stripped to plain text", () => {
+  const lines = guideLines(
+    [{ slug: "hur-man-bokar", title: "Hur man bokar", message: "**Snabb** guide till bokning." }],
+    ORIGIN,
+  );
+  assert.equal(lines.length, 1);
+  assert.ok(lines[0].includes(`[Hur man bokar](${ORIGIN}/guider/hur-man-bokar)`));
+  assert.ok(lines[0].includes("Snabb guide till bokning."));
+  assert.ok(!lines[0].includes("**"));
+});
+
+test("guideLines: skips a guide missing slug or title", () => {
+  const lines = guideLines(
+    [
+      { slug: "", title: "No slug" },
+      { slug: "no-title", title: "" },
+    ],
+    ORIGIN,
+  );
+  assert.equal(lines.length, 0);
+});
+
+test("guideLines: empty input -> [] (Guider category absent, rule 12 — no page, no llms.txt line)", () => {
+  assert.deepEqual(guideLines([], ORIGIN), []);
+});
+
+test("llms.txt: Guider link and guide lines (Section 7) appear under ## Company, after News", () => {
+  const body = buildLlmsTxt(
+    ORIGIN,
+    stubData({
+      guideLines: [`- [Hur man bokar](${ORIGIN}/guider/hur-man-bokar): En kort guide.`],
+    }),
+  );
+  assert.ok(body.includes(`[Guider](${ORIGIN}/guider)`));
+  const companySection = body.split("## Company")[1];
+  const newsIdx = companySection.indexOf(`(${ORIGIN}/news)`);
+  const guiderIdx = companySection.indexOf(`(${ORIGIN}/guider)`);
+  const guideLineIdx = companySection.indexOf("hur-man-bokar");
+  assert.ok(newsIdx > -1 && guiderIdx > -1 && guideLineIdx > -1);
+  assert.ok(newsIdx < guiderIdx);
+  assert.ok(guiderIdx < guideLineIdx);
+});
+
+test("llms.txt: with no guideLines passed, the Guider link still appears but no guide entity lines do", () => {
+  const body = buildLlmsTxt(ORIGIN, stubData());
+  assert.ok(body.includes(`[Guider](${ORIGIN}/guider)`));
 });

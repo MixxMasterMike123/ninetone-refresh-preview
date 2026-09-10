@@ -14,11 +14,28 @@ interface Props {
   size?: "sm" | "md" | "lg";
   /** Article includes one or more embedded YouTube videos (ytLinkA-D). */
   hasVideo?: boolean;
+  /** Route prefix the card links into. Defaults to "/news" (every existing
+   *  caller). Guides (src/pages/guider/index.astro) pass "/guider" so this
+   *  same card/hover-mark pattern can be reused for a second detail-page
+   *  route without a copy-pasted component. */
+  basePath?: string;
 }
 
-const { title, slug, image, excerpt, date, author, category, lang = "en", size = "md", hasVideo = false } = Astro.props;
+const {
+  title,
+  slug,
+  image,
+  excerpt,
+  date,
+  author,
+  category,
+  lang = "en",
+  size = "md",
+  hasVideo = false,
+  basePath = "/news",
+} = Astro.props;
 const readMore = lang === "sv" ? "Läs" : "Read";
-const href = url(`/news/${slug}`);
+const href = url(`${basePath}/${slug}`);
 
 const titleClass = size === "lg"
   ? "font-display text-3xl font-medium leading-[1.1] tracking-tight md:text-5xl"

@@ -19,6 +19,7 @@
 
 import type { StaticRoute } from "./routes";
 import { PREVIOUS_ARTISTS_PAGE_SIZE } from "./routes.ts";
+import { slugifyTag } from "./booking-slug.ts";
 
 export interface SitemapEntry {
   /** Absolute URL — origin + path, no trailing slash added/removed beyond
@@ -96,6 +97,53 @@ export function previousArtistsPaginationEntries(
 }
 
 /**
+ * Nation booking category pages (Section 6:
+ * src/pages/ninetone-nation/kategori/[category].astro) — one entry per
+ * category that actually has at least one active talent, using the exact
+ * same "at least one artist" filter and slugifyTag() the page's own
+ * getStaticPaths() uses, so this list can never include a category that
+ * 404s or omit one that's live (rule 12: empty categories don't exist as
+ * pages at all, so they must not exist in the sitemap either).
+ */
+export interface BookingCategoryLike {
+  tag: string;
+  artists: unknown[];
+}
+
+export function bookingCategoryEntries(
+  origin: string,
+  categories: BookingCategoryLike[],
+): SitemapEntry[] {
+  return categories
+    .filter((c) => c.artists.length > 0)
+    .map((c) => ({
+      loc: joinPath(origin, `/ninetone-nation/kategori/${slugifyTag(c.tag)}`),
+      changefreq: "weekly",
+    }));
+}
+
+/**
+ * Guides route (Section 7: src/pages/guider/index.astro + [slug].astro) —
+ * one entry per guide already derived from the "Guider" WebPosts category by
+ * guidesFromCategory() (src/lib/guides.ts), the exact same helper the guide
+ * pages' own getStaticPaths() uses. When the category is absent or empty,
+ * `guides` is [] and this produces no entries at all (rule 12) — mirrors
+ * bookingCategoryEntries()'s "page doesn't exist -> no sitemap entry" shape.
+ */
+export interface GuideLike {
+  slug: string;
+}
+
+export function guideEntries(origin: string, guides: GuideLike[]): SitemapEntry[] {
+  return guides
+    .filter((g) => g.slug)
+    .map((g) => ({
+      loc: joinPath(origin, `/guider/${g.slug}`),
+      changefreq: "monthly",
+    }));
+}
+
+/**
  * Assemble the full `sitemap-pages.xml` entry list: static routes + every
  * FM-driven detail page, using the exact list helpers/shapes the index
  * pages already fetch with (src/lib/ninetone.ts) — no new FM reads here,
@@ -110,7 +158,11 @@ export function buildSitemapEntries(
     clients: SlugSource[];
     team: SlugSource[];
     bookingTalent: SlugSource[];
+    bookingCategories: BookingCategoryLike[];
     news: SlugSource[];
+    /** Section 7 — guides derived from the "Guider" WebPosts category via
+     *  guidesFromCategory(); [] when the category is absent (rule 12). */
+    guides?: GuideLike[];
   },
 ): SitemapEntry[] {
   return [
@@ -121,7 +173,9 @@ export function buildSitemapEntries(
     ...detailPageEntries(origin, input.clients, "/management/clients", "weekly"),
     ...detailPageEntries(origin, input.team, "/team", "monthly"),
     ...detailPageEntries(origin, input.bookingTalent, "/ninetone-nation", "weekly"),
+    ...bookingCategoryEntries(origin, input.bookingCategories),
     ...detailPageEntries(origin, input.news, "/news", "monthly"),
+    ...guideEntries(origin, input.guides ?? []),
   ];
 }
 

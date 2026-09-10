@@ -22,6 +22,7 @@
 
 import type { Artist, TeamMember, WebPost } from "./ninetone.ts";
 import { markdownToPlainText } from "./schema.ts";
+import { slugifyTag } from "./booking-slug.ts";
 
 /** One factual line: "- [Name](url): detail". */
 function entityLine(name: string, path: string, origin: string, detail?: string): string {
@@ -120,6 +121,29 @@ export function bookingTalentLines(
   return lines;
 }
 
+/**
+ * One line per Nation booking category that has at least one active talent
+ * (Section 6 — src/pages/ninetone-nation/kategori/[category].astro). Same
+ * "at least one artist" filter and slugifyTag() that page's getStaticPaths()
+ * uses, so a category never appears here unless its page actually exists
+ * (rule 12 — empty categories are not generated, so no llms.txt line either).
+ */
+export function bookingCategoryLines(
+  categories: Array<{ tag: string; description?: string; artists: Array<unknown> }>,
+  origin: string,
+): string[] {
+  return categories
+    .filter((c) => c.artists.length > 0)
+    .map((c) =>
+      entityLine(
+        c.tag,
+        `/ninetone-nation/kategori/${slugifyTag(c.tag)}`,
+        origin,
+        factualDetail([`${c.artists.length} bookable`, c.description || undefined]),
+      ),
+    );
+}
+
 export interface LlmsTxtData {
   artists: Artist[];
   previousArtists: Artist[];
@@ -128,6 +152,31 @@ export interface LlmsTxtData {
   news: WebPost[];
   /** Pre-expanded ("- [Name](url): detail") lines — see bookingTalentLines(). */
   bookingLines: string[];
+  /** Pre-expanded category-page lines — see bookingCategoryLines(). */
+  bookingCategoryLines?: string[];
+  /** Pre-expanded guide lines (Section 7) — see guideLines() below. */
+  guideLines?: string[];
+}
+
+/**
+ * One line per guide (Section 7 — src/pages/guider/[slug].astro), built from
+ * the same Guide[] shape guidesFromCategory() (src/lib/guides.ts) produces —
+ * that module only `import type`s from ninetone.ts, so no new value import
+ * chain is introduced here. Takes plain data, no FM read of its own.
+ */
+export interface GuideLike {
+  slug: string;
+  title: string;
+  message?: string;
+}
+
+export function guideLines(guides: GuideLike[], origin: string): string[] {
+  return guides
+    .filter((g) => g.slug && g.title)
+    .map((g) => {
+      const tagline = markdownToPlainText(g.message ?? "", 140);
+      return entityLine(g.title, `/guider/${g.slug}`, origin, tagline || undefined);
+    });
 }
 
 /**
@@ -185,6 +234,7 @@ export function buildLlmsTxt(origin: string, data: LlmsTxtData): string {
     [
       "## Ninetone Nation",
       entityLine("Booking", "/ninetone-nation/booking", origin, "bookable talent by category"),
+      ...(data.bookingCategoryLines ?? []),
       ...data.bookingLines,
       entityLine("Contact Nation", "/ninetone-nation/contact-ninetone-nation", origin),
     ].join("\n"),
@@ -197,6 +247,8 @@ export function buildLlmsTxt(origin: string, data: LlmsTxtData): string {
       ...teamLines,
       entityLine("News", "/news", origin),
       ...newsLines,
+      entityLine("Guider", "/guider", origin),
+      ...(data.guideLines ?? []),
       entityLine("Privacy", "/integritet", origin),
     ].join("\n"),
   );

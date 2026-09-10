@@ -5,6 +5,8 @@ import {
   staticRouteEntries,
   detailPageEntries,
   previousArtistsPaginationEntries,
+  bookingCategoryEntries,
+  guideEntries,
   buildSitemapEntries,
   renderUrlsetXml,
   renderSitemapIndexXml,
@@ -85,14 +87,20 @@ function stubbedLists() {
     clients: [{ SLUG: "client-a" }, { SLUG: "client-b" }, { SLUG: "client-c" }],
     team: [{ SLUG: "team-a" }],
     bookingTalent: [{ SLUG: "talent-a" }, { SLUG: "talent-b" }],
+    bookingCategories: [
+      { tag: "Artist", artists: [{ slug: "talent-a" }, { slug: "talent-b" }] },
+      { tag: "Föreläsare", artists: [{ slug: "talent-a" }] },
+      { tag: "Konferencier", artists: [] }, // empty category -> no sitemap entry
+    ],
     news: [{ slug: "post-a" }],
   };
 }
 
-test("buildSitemapEntries: produces exactly N entries for stubbed lists (static + every detail row + previous-artist pagination pages)", () => {
+test("buildSitemapEntries: produces exactly N entries for stubbed lists (static + every detail row + previous-artist pagination pages + populated category pages)", () => {
   const input = stubbedLists();
   const entries = buildSitemapEntries(ORIGIN, input);
   const expectedPaginationPages = previousArtistsPaginationEntries(ORIGIN, input.previousArtists.length).length;
+  const expectedCategoryPages = input.bookingCategories.filter((c) => c.artists.length > 0).length;
   const expectedCount =
     input.staticRoutes.length +
     input.artists.length +
@@ -101,10 +109,13 @@ test("buildSitemapEntries: produces exactly N entries for stubbed lists (static 
     input.clients.length +
     input.team.length +
     input.bookingTalent.length +
+    expectedCategoryPages +
     input.news.length;
   assert.equal(entries.length, expectedCount);
   // With 65 previous artists at page size 30: ceil(65/30) = 3 pages -> 2 extra (pages 2, 3).
   assert.equal(expectedPaginationPages, 2);
+  // Artist + Föreläsare populated, Konferencier empty -> 2 category pages.
+  assert.equal(expectedCategoryPages, 2);
 });
 
 test("buildSitemapEntries: previous-artist pagination page 1 is NOT duplicated (only the bare static route represents it)", () => {
@@ -149,9 +160,67 @@ test("buildSitemapEntries: with empty FM lists, only the static routes appear", 
     clients: [],
     team: [],
     bookingTalent: [],
+    bookingCategories: [],
     news: [],
   });
   assert.equal(entries.length, STATIC_ROUTES.length);
+});
+
+// ---------------------------------------------------------------------------
+// bookingCategoryEntries (Section 6 — Nation category pages)
+// ---------------------------------------------------------------------------
+
+test("bookingCategoryEntries: one entry per category with at least one artist, slugified", () => {
+  const entries = bookingCategoryEntries(ORIGIN, [
+    { tag: "Artist", artists: [{ slug: "a" }] },
+    { tag: "Föreläsare", artists: [{ slug: "b" }] },
+  ]);
+  assert.deepEqual(
+    entries.map((e) => e.loc),
+    [
+      "https://ninetone.com/ninetone-nation/kategori/artist",
+      "https://ninetone.com/ninetone-nation/kategori/forelasare",
+    ],
+  );
+});
+
+test("bookingCategoryEntries: skips categories with zero artists (rule 12 — no page, no sitemap entry)", () => {
+  const entries = bookingCategoryEntries(ORIGIN, [
+    { tag: "Artist", artists: [{ slug: "a" }] },
+    { tag: "Moderator", artists: [] },
+  ]);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].loc, "https://ninetone.com/ninetone-nation/kategori/artist");
+});
+
+// ---------------------------------------------------------------------------
+// guideEntries (Section 7 — Guides route)
+// ---------------------------------------------------------------------------
+
+test("guideEntries: one entry per guide with a slug", () => {
+  const entries = guideEntries(ORIGIN, [{ slug: "first-guide" }, { slug: "second-guide" }]);
+  assert.deepEqual(
+    entries.map((e) => e.loc),
+    ["https://ninetone.com/guider/first-guide", "https://ninetone.com/guider/second-guide"],
+  );
+  assert.equal(entries[0].changefreq, "monthly");
+});
+
+test("guideEntries: skips a row with no usable slug", () => {
+  const entries = guideEntries(ORIGIN, [{ slug: "" }, { slug: "ok" }]);
+  assert.deepEqual(entries.map((e) => e.loc), ["https://ninetone.com/guider/ok"]);
+});
+
+test("guideEntries: empty input -> [] (Guider category absent, rule 12 — no page, no sitemap entry)", () => {
+  assert.deepEqual(guideEntries(ORIGIN, []), []);
+});
+
+test("buildSitemapEntries: includes guide entries when guides are passed, and defaults to [] when omitted", () => {
+  const withGuides = buildSitemapEntries(ORIGIN, { ...stubbedLists(), guides: [{ slug: "g1" }] });
+  assert.ok(withGuides.map((e) => e.loc).includes("https://ninetone.com/guider/g1"));
+
+  const withoutGuides = buildSitemapEntries(ORIGIN, stubbedLists());
+  assert.ok(!withoutGuides.map((e) => e.loc).some((l) => l.includes("/guider/")));
 });
 
 test("routes.ts: staticRoutePaths() excludes admin/api/search-result", () => {

@@ -63,6 +63,7 @@ export const STATIC_ROUTES: StaticRoute[] = [
   { path: "/ninetone-nation/contact-ninetone-nation", changefreq: "yearly" },
   { path: "/team", changefreq: "monthly" },
   { path: "/news", changefreq: "daily" },
+  { path: "/guider", changefreq: "monthly" },
   { path: "/integritet", changefreq: "yearly" },
 ];
 
