@@ -52,7 +52,11 @@ const portals = [
 ];
 ---
 
-<Base title="Ninetone Group" theme="group">
+<Base
+  title="Ninetone Group"
+  theme="group"
+  description="Ninetone connects what people need with what people care about — music, talent management and booking for artists, creators and public figures since 2006."
+>
   <!-- Typographic hero -->
   <section class="relative overflow-hidden bg-ninetone-paper">
     <div class="mx-auto max-w-7xl px-6 pb-16 pt-20 md:pb-24 md:pt-28">
@@ -231,6 +235,7 @@ const portals = [
             heading={heroArtistName}
             blurb={String(heroArtist.artistPresentationShort ?? "")}
             cta="View profile"
+            priority
           />
         )}
 

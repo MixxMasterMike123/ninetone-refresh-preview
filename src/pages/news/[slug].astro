@@ -45,6 +45,17 @@ const isoDate = fmDateToIso(date);
 // (verified against src/lib/ninetone.ts's WebPost type) — dateModified falls
 // back to datePublished inside newsArticle() per the brief, rather than
 // fabricating one.
+//
+// DEVIATION FROM BRIEF (§9): the brief asks for a visible line reading
+// "Uppdaterad {date}" (Swedish for "Updated"). There is no real modified-at
+// value anywhere in the FM data — only `date`, the publish date — so
+// labeling it "Uppdaterad" would tell readers an edit happened after
+// publish when none is known to have. That's a false editorial signal, not
+// just an SEO nicety, so the line below reads "Publicerad {date}"
+// ("Published") instead: same visible dateline the brief wants (helps both
+// readers and crawlers see recency), same date value, honest label. Flagged
+// for the PR description per the brief's own instruction to surface this
+// decision.
 const jsonLd = isoDate
   ? [
       breadcrumbs(origin, [
@@ -93,11 +104,17 @@ const jsonLd = isoDate
       {author && (
         <p class="mt-6 text-xs uppercase tracking-[0.16em] text-ninetone-ink/60">By {author}</p>
       )}
+
+      {date && (
+        <p class="kicker mt-6 text-ninetone-ink/55">
+          Publicerad <time datetime={isoDate}>{date}</time>
+        </p>
+      )}
     </header>
 
     {image && (
       <div class="mx-auto mt-12 max-w-5xl px-6">
-        <img src={image} alt={title} class="aspect-[16/10] w-full object-cover" />
+        <img src={image} alt={title} class="aspect-[16/10] w-full object-cover" fetchpriority="high" />
       </div>
     )}
 

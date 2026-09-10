@@ -7,7 +7,12 @@ import { contactPage } from "../../lib/schema";
 const jsonLd = contactPage(pageJsonLdOrigin(Astro.request), "/management/contact-management");
 ---
 
-<Base title="Get in touch" theme="management" jsonLd={jsonLd}>
+<Base
+  title="Get in touch"
+  theme="management"
+  jsonLd={jsonLd}
+  description="Building a serious career? Let's talk. Reach Ninetone Management with your channels and where you want to go next."
+>
   <ContactForm
     theme="management"
     division="management"

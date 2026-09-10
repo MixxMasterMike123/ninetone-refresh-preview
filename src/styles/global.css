@@ -203,6 +203,27 @@ nav, header nav a, footer nav a {
   isolation: isolate;
   background-color: var(--color-ninetone-paper-warm);
 }
+@layer base {
+  /* Fallback aspect-ratio so a frame never collapses to 0 height before its
+     image loads (CLS) if a caller forgets to size it. `--fm-img-ratio` is
+     unset everywhere today — nothing currently opts in — so this is purely
+     a safety net for future callers via `style="--fm-img-ratio: 1/1"` or
+     similar; wire-in a specific value is what a caller decides.
+     4/5 mirrors the portrait-first artist/client/talent hero frames (the
+     most common .fm-img-frame usage across the detail-page archetype — see
+     DESIGN.md §3B / the sticky split image column) rather than the
+     square/16:10 cases, which are the minority.
+     Placed in `@layer base` (not left unlayered like the rules above) so it
+     sits below Tailwind's own `utilities` layer in cascade-layer order —
+     every existing caller already sets an explicit Tailwind `aspect-*`
+     utility class (aspect-[4/5], aspect-square, aspect-video, aspect-[3/4],
+     aspect-[16/10]) and those utilities keep winning untouched. Only a
+     caller with NO aspect utility and no inline --fm-img-ratio would ever
+     see this default apply. */
+  .fm-img-frame {
+    aspect-ratio: var(--fm-img-ratio, 4 / 5);
+  }
+}
 .fm-img-frame::before {
   content: "";
   position: absolute;

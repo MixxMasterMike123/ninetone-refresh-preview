@@ -26,7 +26,11 @@ const sortedTags = Array.from(tagCounts.entries())
   .map(([t]) => t);
 ---
 
-<Base title="Artists" theme="records">
+<Base
+  title="Artists"
+  theme="records"
+  description="The Ninetone Records roster — active artists shaping the sound of Sweden right now, from song to universe."
+>
   <SectionIntro
     title="Artists"
     tagline={displayTitle(webPosts?.title)}

@@ -7,7 +7,12 @@ import { contactPage } from "../../lib/schema";
 const jsonLd = contactPage(pageJsonLdOrigin(Astro.request), "/records/contact-records");
 ---
 
-<Base title="Submit a demo" theme="records" jsonLd={jsonLd}>
+<Base
+  title="Submit a demo"
+  theme="records"
+  jsonLd={jsonLd}
+  description="Send the music. We reply with merit — submit your demo to Ninetone Records via Spotify, SoundCloud or direct links."
+>
   <ContactForm
     theme="records"
     division="records"

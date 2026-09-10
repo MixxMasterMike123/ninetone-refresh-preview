@@ -161,6 +161,7 @@ const jsonLd = [
                   src={heroImage}
                   alt={name}
                   class="fm-img h-full w-full object-cover"
+                  fetchpriority="high"
                   onload="this.classList.add('is-loaded'); this.closest('.fm-img-frame')?.classList.add('is-ready')"
                 />
               )}

@@ -24,6 +24,10 @@ interface Props {
   cta?: string;
   /** Open in new tab. */
   external?: boolean;
+  /** Opt-in LCP priority for this tile's image — sets fetchpriority="high"
+   *  and skips lazy-loading. Only the single true above-the-fold hero tile
+   *  on a page should pass this; every other tile stays lazy by default. */
+  priority?: boolean;
 }
 
 const {
@@ -37,6 +41,7 @@ const {
   blurb,
   cta,
   external = false,
+  priority = false,
 } = Astro.props as Props;
 
 const accent = sectionAccent[theme];
@@ -82,7 +87,8 @@ const linkProps = href
       src={image}
       alt=""
       class="fm-img absolute inset-0 -z-10 h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
-      loading="lazy"
+      loading={priority ? undefined : "lazy"}
+      fetchpriority={priority ? "high" : undefined}
       onload="this.classList.add('is-loaded')"
     />
   )}

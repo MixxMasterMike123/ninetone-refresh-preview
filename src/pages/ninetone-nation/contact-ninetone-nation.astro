@@ -7,7 +7,12 @@ import { contactPage } from "../../lib/schema";
 const jsonLd = contactPage(pageJsonLdOrigin(Astro.request), "/ninetone-nation/contact-ninetone-nation");
 ---
 
-<Base title="Booking request" theme="nation" jsonLd={jsonLd}>
+<Base
+  title="Booking request"
+  theme="nation"
+  jsonLd={jsonLd}
+  description="Book your next moment. Tell us the artist, the date, the room and the budget — Ninetone Nation replies within one business day."
+>
   <ContactForm
     theme="nation"
     division="nation"

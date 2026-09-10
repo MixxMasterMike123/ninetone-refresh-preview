@@ -43,7 +43,12 @@ const jsonLd = collectionPage(origin, {
 });
 ---
 
-<Base title="Booking" theme="nation" jsonLd={jsonLd}>
+<Base
+  title="Booking"
+  theme="nation"
+  jsonLd={jsonLd}
+  description="Sweden's leading artists, hosts and speakers, available for your event — browse bookable talent by category."
+>
   <SectionIntro
     title="Entertainers"
     tagline={displayTitle(webPosts?.title)}
