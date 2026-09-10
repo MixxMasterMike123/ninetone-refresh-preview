@@ -82,9 +82,29 @@ const CHANNEL_RESOLVE_TTL_SECONDS = 30 * 24 * 60 * 60;
  * the in-process cache (effectively "once per build") on the static target
  * or when KV is unavailable.
  */
+async function logApiError(endpoint: string, res: Response): Promise<void> {
+  let reason = "unknown";
+  let message = "";
+  try {
+    const body = (await res.json()) as {
+      error?: { errors?: Array<{ reason?: string }>; status?: string; message?: string };
+    };
+    reason = body.error?.errors?.[0]?.reason ?? body.error?.status ?? "unknown";
+    message = (body.error?.message ?? "").slice(0, 120);
+  } catch {
+    // body wasn't JSON — leave reason/message at defaults
+  }
+  console.warn(
+    `[youtube] ${endpoint} HTTP ${res.status} reason=${reason} message=${message}`,
+  );
+}
+
 async function resolveChannelByHandle(url: string): Promise<string | null> {
   const key = apiKey();
-  if (!key) return null;
+  if (!key) {
+    console.warn("[youtube] no YOUTUBE_API_KEY at runtime");
+    return null;
+  }
   const handleMatch = url.match(/\/@([\w.-]+)/);
   const vanityMatch = url.match(/\/c\/([\w.-]+)/);
   const query = handleMatch?.[1] ?? vanityMatch?.[1];
@@ -105,10 +125,14 @@ async function resolveChannelByHandle(url: string): Promise<string | null> {
     apiUrl.searchParams.set("key", key);
     try {
       const res = await fetch(apiUrl);
-      if (!res.ok) return null;
+      if (!res.ok) {
+        await logApiError("search.list (channel resolve)", res);
+        return null;
+      }
       const json = (await res.json()) as { items?: Array<{ id: { channelId: string } }> };
       return json.items?.[0]?.id?.channelId ?? null;
-    } catch {
+    } catch (err) {
+      console.warn("[youtube] search.list (channel resolve) threw:", (err as Error)?.message);
       return null;
     }
   });
@@ -183,7 +207,10 @@ const TOP_VIEWED_TTL_SECONDS = 12 * 60 * 60;
 
 async function fetchTopViewed(channelId: string): Promise<YouTubeVideo[]> {
   const key = apiKey();
-  if (!key) return [];
+  if (!key) {
+    console.warn("[youtube] no YOUTUBE_API_KEY at runtime");
+    return [];
+  }
 
   const cfEnv = await getCfEnv();
   return kvCached<YouTubeVideo[]>(
@@ -208,12 +235,16 @@ async function fetchTopViewedUncached(channelId: string, key: string): Promise<Y
   let candidateIds: string[];
   try {
     const res = await fetch(searchUrl);
-    if (!res.ok) return [];
+    if (!res.ok) {
+      await logApiError("search.list (top viewed)", res);
+      return [];
+    }
     const json = (await res.json()) as {
       items?: Array<{ id: { videoId: string } }>;
     };
     candidateIds = (json.items ?? []).map((i) => i.id.videoId).filter(Boolean);
-  } catch {
+  } catch (err) {
+    console.warn("[youtube] search.list (top viewed) threw:", (err as Error)?.message);
     return [];
   }
   if (candidateIds.length === 0) return [];
@@ -228,7 +259,10 @@ async function fetchTopViewedUncached(channelId: string, key: string): Promise<Y
 
   try {
     const res = await fetch(videosUrl);
-    if (!res.ok) return [];
+    if (!res.ok) {
+      await logApiError("videos.list (top viewed)", res);
+      return [];
+    }
     const json = (await res.json()) as {
       items?: Array<{
         id: string;
@@ -254,7 +288,8 @@ async function fetchTopViewedUncached(channelId: string, key: string): Promise<Y
         url: `https://www.youtube.com/watch?v=${v.id}`,
       }))
       .sort((a, b) => (b.views ?? 0) - (a.views ?? 0));
-  } catch {
+  } catch (err) {
+    console.warn("[youtube] videos.list (top viewed) threw:", (err as Error)?.message);
     return [];
   }
 }
