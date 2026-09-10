@@ -9,6 +9,7 @@ import { pageJsonLdOrigin } from "../../../lib/site";
 import { collectionPage, faqPage } from "../../../lib/schema";
 import { sectionAccent } from "../../../lib/sections";
 import { renderBio } from "../../../lib/markdown";
+import { notFound } from "../../../lib/not-found";
 
 // Empty categories are not generated at all — no page, no sitemap entry, no
 // llms.txt line (rule 12 / DESIGN.md). Mirrors the `populatedCategories`
@@ -34,7 +35,7 @@ if (!category) {
   category = categories.find(
     (c) => c.artists.length > 0 && slugifyTag(c.tag) === Astro.params.category,
   );
-  if (!category) return Astro.rewrite("/404");
+  if (!category) return notFound(() => Astro.rewrite("/404"));
 }
 
 const accent = sectionAccent.nation;

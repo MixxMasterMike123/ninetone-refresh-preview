@@ -5,6 +5,7 @@ import { renderBio } from "../../lib/markdown";
 import { url } from "../../lib/url";
 import { pageJsonLdOrigin } from "../../lib/site";
 import { breadcrumbs, newsArticle, markdownToPlainText, fmDateToIso } from "../../lib/schema";
+import { notFound } from "../../lib/not-found";
 
 export async function getStaticPaths() {
   const posts = await getNews();
@@ -22,7 +23,7 @@ let post = (Astro.props as { post?: Record<string, unknown> }).post;
 if (!post) {
   const posts = await getNews();
   post = posts.find((p) => String(p.slug ?? "") === Astro.params.slug);
-  if (!post) return Astro.rewrite("/404");
+  if (!post) return notFound(() => Astro.rewrite("/404"));
 }
 
 const title = String(post.Title ?? "");

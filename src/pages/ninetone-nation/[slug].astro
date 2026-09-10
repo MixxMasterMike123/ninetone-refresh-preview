@@ -12,6 +12,7 @@ import { renderBio } from "../../lib/markdown";
 import { url } from "../../lib/url";
 import { pageJsonLdOrigin } from "../../lib/site";
 import { breadcrumbs, person, markdownToPlainText } from "../../lib/schema";
+import { notFound } from "../../lib/not-found";
 
 // Generate a page for every Active talent listed on the booking page.
 // Source of truth = the curated BOOKING_TAG portal set, filtered to
@@ -39,7 +40,7 @@ if (!e || !allRoster) {
   const slug = String(Astro.params.slug ?? "");
   e = slugs.includes(slug) ? records.get(slug) : undefined;
   allRoster = roster;
-  if (!e) return Astro.rewrite("/404");
+  if (!e) return notFound(() => Astro.rewrite("/404"));
 }
 
 const name = String(e["Head Artist"] ?? "");

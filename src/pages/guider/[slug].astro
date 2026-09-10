@@ -6,6 +6,7 @@ import { renderBio } from "../../lib/markdown";
 import { url } from "../../lib/url";
 import { pageJsonLdOrigin } from "../../lib/site";
 import { breadcrumbs, article, faqPage, markdownToPlainText, fmDateToIso } from "../../lib/schema";
+import { notFound } from "../../lib/not-found";
 
 // Mirrors src/pages/news/[slug].astro's dual-resolution pattern exactly:
 // static build (gh) resolves every path via getStaticPaths; the live server
@@ -27,7 +28,7 @@ let guide = (Astro.props as { guide?: ReturnType<typeof guidesFromCategory>[numb
 if (!guide) {
   const sections = await getWebPosts("Guider");
   guide = findGuideBySlug(sections[0], String(Astro.params.slug ?? ""));
-  if (!guide) return Astro.rewrite("/404");
+  if (!guide) return notFound(() => Astro.rewrite("/404"));
 }
 
 const title = guide.title;

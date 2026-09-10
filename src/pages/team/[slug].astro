@@ -5,6 +5,7 @@ import { renderBio, isAiSpeculative } from "../../lib/markdown";
 import { url } from "../../lib/url";
 import { pageJsonLdOrigin } from "../../lib/site";
 import { breadcrumbs, person } from "../../lib/schema";
+import { notFound } from "../../lib/not-found";
 
 export async function getStaticPaths() {
   const team = await getTeam();
@@ -22,7 +23,7 @@ let member = (Astro.props as { member?: Record<string, unknown> }).member;
 if (!member) {
   const team = await getTeam();
   member = team.find((m) => String(m.SLUG ?? "") === Astro.params.slug);
-  if (!member) return Astro.rewrite("/404");
+  if (!member) return notFound(() => Astro.rewrite("/404"));
 }
 
 const name = String(member.userNameCalc ?? "");

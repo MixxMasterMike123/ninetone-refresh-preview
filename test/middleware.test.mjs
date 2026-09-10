@@ -133,6 +133,25 @@ test("tracking query params hit the same cache key as the bare path", async () =
   assert.equal(runtimeTracked.matched[0], runtimeBare.matched[0]);
 });
 
+test("/404 is never cached — avoids the nested-rewrite stream race (seo-phase-1b P0 item 1)", async () => {
+  // Every detail route's `Astro.rewrite("/404")` re-enters this exact
+  // middleware for the rewritten pathname before the outer request finishes.
+  // If that inner pass ran the normal read/clone/store cycle, it would tee
+  // the same response stream the outer pass then reads again — a stream can
+  // only be consumed once, so the outer read intermittently came back empty
+  // (the "0 bytes" failures in the brief). This must never call cacheApi.put.
+  const runtime = createRuntime();
+  const response = await run(
+    new Request("https://ninetone.com/404"),
+    async () => new Response("<html>not found</html>", { status: 404 }),
+    runtime,
+  );
+  assert.equal(runtime.matched.length, 0);
+  assert.equal(runtime.stored.length, 0);
+  assert.equal(response.status, 404);
+  assert.equal(await response.text(), "<html>not found</html>");
+});
+
 test("never stores private, no-store, cookie-setting, or redirect responses", async () => {
   for (const response of [
     new Response("private", { headers: { "cache-control": "private, max-age=60" } }),
@@ -147,3 +166,26 @@ test("never stores private, no-store, cookie-setting, or redirect responses", as
     assert.equal(result.headers.get("strict-transport-security"), "max-age=31536000");
   }
 });
+
+// NOT UNIT-TESTED, deliberately: the streaming-clone race behind the zero-byte
+// pages and the intermittent 500s (seo-phase-1b P0 items 1 & 3) cannot be
+// reproduced under node:test. undici's clone() buffers eagerly and both the
+// clone() and the buffered branch expose a ReadableStream, so every assertion
+// available here passes identically with and without the fix — verified by
+// reverting src/middleware.ts and re-running. A test that cannot fail is worse
+// than none: it would advertise coverage this defect does not have.
+//
+// The real evidence is the captured runtime exception, reproduced live via
+// `wrangler tail` on a deployed Worker (3/3 requests to a heavy detail page):
+//   ResponseSentError: The response has already been sent to the browser and
+//   cannot be altered.
+//     at Object.write (chunks/console_*.mjs)
+//     at BufferedRenderer.flush
+//     at iterate
+// logged as "[edge-cache] put failed:" — i.e. cacheApi.put()'s branch of
+// res.clone() was still being written while the visitor's branch had already
+// completed, which aborts the render and yields a zero-byte 200.
+//
+// The regression guard is therefore the post-deploy staging check recorded in
+// docs/seo-phase-1b-pr.md: N parallel requests across the affected detail
+// pages with zero empty bodies and zero exceptions in `wrangler tail`.

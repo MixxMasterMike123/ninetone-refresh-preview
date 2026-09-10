@@ -12,6 +12,7 @@ import { renderBio } from "../../../../../lib/markdown";
 import { url } from "../../../../../lib/url";
 import { pageJsonLdOrigin } from "../../../../../lib/site";
 import { breadcrumbs, musicGroup, markdownToPlainText, fmDateToIso } from "../../../../../lib/schema";
+import { notFound } from "../../../../../lib/not-found";
 
 export async function getStaticPaths() {
   const artists = await getPreviousArtists();
@@ -29,7 +30,7 @@ let artist = (Astro.props as { artist?: Record<string, unknown> }).artist;
 if (!artist) {
   const artists = await getPreviousArtists();
   artist = artists.find((a) => String(a.SLUG ?? "") === Astro.params.slug);
-  if (!artist) return Astro.rewrite("/404");
+  if (!artist) return notFound(() => Astro.rewrite("/404"));
 }
 const slug = String(artist.SLUG ?? "");
 

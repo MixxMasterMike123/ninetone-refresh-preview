@@ -136,7 +136,28 @@ export const onRequest = defineMiddleware(async (context, next) => {
   res.headers.set("x-cache", "miss");
   res.headers.set("x-cache-ttl", String(ttl));
 
-  const store = cacheApi.put(cacheKey, res.clone());
+  // Buffer the body before caching rather than res.clone().
+  //
+  // Astro streams its HTML. clone() tees that single stream into two branches
+  // which must be consumed at roughly the same rate: one goes to the visitor,
+  // the other to cacheApi.put(). When the visitor's branch finishes first the
+  // renderer is still writing into the cache branch, and the runtime throws
+  //   ResponseSentError: The response has already been sent to the browser
+  //   and cannot be altered.
+  // from BufferedRenderer.flush — which aborts the render mid-stream and
+  // hands the visitor a ZERO-BYTE 200. Captured via `wrangler tail`:
+  // 3/3 requests to a heavy detail page threw exactly this
+  // (docs/seo-phase-1b-brief.md P0 items 1 and 3 are the same defect).
+  //
+  // Reading the body to completion first costs one buffer of the page, and
+  // these are HTML documents, not large assets. Both the visitor's response
+  // and the cached copy are then built from the same settled bytes, so
+  // neither can race the other.
+  const body = await res.arrayBuffer();
+  const forVisitor = new Response(body, res);
+  const forCache = new Response(body, res);
+
+  const store = cacheApi.put(cacheKey, forCache);
   // Never let the cache write block the visitor's response; fall back to
   // inline await if the execution context isn't exposed for some reason.
   const cfContext = (locals as { cfContext?: { waitUntil(p: Promise<unknown>): void } }).cfContext;
@@ -146,5 +167,5 @@ export const onRequest = defineMiddleware(async (context, next) => {
     await store.catch((err) => console.error("[edge-cache] put failed:", err));
   }
 
-  return harden(res);
+  return harden(forVisitor);
 });

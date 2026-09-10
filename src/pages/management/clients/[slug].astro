@@ -12,6 +12,7 @@ import { renderBio } from "../../../lib/markdown";
 import { url } from "../../../lib/url";
 import { pageJsonLdOrigin } from "../../../lib/site";
 import { breadcrumbs, person, markdownToPlainText } from "../../../lib/schema";
+import { notFound } from "../../../lib/not-found";
 
 export async function getStaticPaths() {
   const clients = await getClients();
@@ -30,7 +31,7 @@ let { client, allClients } = Astro.props as {
 if (!client || !allClients) {
   allClients = await getClients();
   client = allClients.find((c) => String(c.SLUG ?? "") === Astro.params.slug);
-  if (!client) return Astro.rewrite("/404");
+  if (!client) return notFound(() => Astro.rewrite("/404"));
 }
 
 const name = String(client["Head Artist"] ?? "");
