@@ -85,7 +85,13 @@ try {
 } catch {}
 ---
 
-<Base title={name} theme="records" description={tagline || `${name} | Previous Artists | Ninetone Group`}>
+<Base
+  title={name}
+  theme="records"
+  description={tagline || `${name} | Previous Artists | Ninetone Group`}
+  ogImage={heroImage}
+  ogType="profile"
+>
   <section class="bg-ninetone-paper">
     <div class="mx-auto max-w-7xl px-6 pb-12 pt-12 md:pt-16">
       <p class="mb-8">

@@ -107,7 +107,13 @@ try {
 } catch {}
 ---
 
-<Base title={name} theme="records" description={tagline || `${name} | Ninetone Records`}>
+<Base
+  title={name}
+  theme="records"
+  description={tagline || `${name} | Ninetone Records`}
+  ogImage={heroImage}
+  ogType="profile"
+>
   <!-- Cinematic split hero -->
   <section class="bg-ninetone-paper">
     <div class="mx-auto max-w-7xl px-6 pb-12 pt-12 md:pt-16">

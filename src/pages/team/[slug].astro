@@ -38,7 +38,12 @@ const email = String(member.userEmail ?? "");
 const phone = String(member.Phone ?? "");
 ---
 
-<Base title={name}>
+<Base
+  title={name}
+  description={titleDescription || title || `${name} | Ninetone Group`}
+  ogImage={photo}
+  ogType="profile"
+>
   <section class="bg-ninetone-paper">
     <div class="mx-auto max-w-7xl px-6 pb-12 pt-12 md:pt-16">
       <p class="mb-8">

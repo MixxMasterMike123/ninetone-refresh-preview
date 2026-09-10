@@ -8,12 +8,25 @@ import CookieConsent from "../components/CookieConsent.astro";
 import type { SectionTheme } from "../lib/sections";
 import { getPromo } from "../lib/ninetone";
 import { url } from "../lib/url";
+import { siteOrigin, isProductionShaped, resolveSitePath } from "../lib/site";
 
 interface Props {
   title: string;
   description?: string;
   theme?: SectionTheme;
   lang?: "en" | "sv";
+  /** Absolute URL or site-relative path (e.g. "/records/artists"). Defaults
+   * to the current page's path. Always emitted as an absolute production-
+   * shaped URL via siteOrigin() — never the GH Pages sub-path one. */
+  canonical?: string;
+  /** Absolute image URL (FM proxy URLs are already absolute). Defaults to
+   * the site-wide /og-default.png. */
+  ogImage?: string;
+  ogType?: "website" | "article" | "profile";
+  /** Page-level noindex override. ORed with the site-wide PUBLIC_NOINDEX flag
+   * — either one being true is enough to noindex the page. */
+  noindex?: boolean;
+  jsonLd?: Record<string, unknown> | Record<string, unknown>[];
 }
 
 const {
@@ -21,9 +34,57 @@ const {
   description = "Ninetone Group — Music Production, Talent Management & Booking",
   theme = "group",
   lang = "en",
+  canonical,
+  ogImage,
+  ogType = "website",
+  noindex: noindexProp = false,
+  jsonLd,
 } = Astro.props;
 
 const fullTitle = title === "Ninetone Group" ? title : `${title} | Ninetone Group`;
+
+// Canonical + OG URL: the origin always comes from siteOrigin() — the
+// production-shaped host, never hardcoded.
+//
+// The GH Pages sub-path base is a preview-only artifact (astro.config.mjs's
+// `base: "/ninetone-refresh-preview"` on the gh target). It's meaningful ONLY
+// when we're still serving from mixxmastermike123.github.io — the moment
+// PUBLIC_SITE_ORIGIN is set (production domain), that sub-path has no
+// meaning there and must be stripped, never re-added, regardless of whether
+// astro.config.mjs's `base` itself has been flipped to "/" yet (that's a
+// separate, later launch-day step). See brief §1: "Strip the sub-path base
+// from canonical on the static target only if url() already adds it;
+// canonical must be the absolute production-shaped URL... when
+// PUBLIC_SITE_ORIGIN is set."
+//
+// Astro.url.pathname is the actual served path — on the static (gh) target
+// it already includes the sub-path base (Astro resolves that before handing
+// us the URL); on the CF (server) target `base` is "/", so there's nothing
+// to strip either way.
+const origin = siteOrigin(Astro.request);
+const productionShaped = isProductionShaped();
+const basePrefix = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+const basePath = (path: string) => resolveSitePath(path, basePrefix, productionShaped, url);
+
+const canonicalUrl = canonical
+  ? /^https?:\/\//i.test(canonical)
+    ? canonical
+    : `${origin}${basePath(canonical.startsWith("/") ? canonical : `/${canonical}`)}`
+  : `${origin}${basePath(Astro.url.pathname || "/")}`;
+
+const ogImageUrl = ogImage || `${origin}${basePath("/og-default.png")}`;
+const ogLocale = lang === "sv" ? "sv_SE" : "en_GB";
+
+/**
+ * Section 2 (src/components/JsonLd.astro) will own this rendering properly.
+ * Inlined here for now to avoid a collision with that in-flight work — a
+ * minimal escape of "<" as "<" so a literal "</script>" in string data
+ * can't break out of the JSON-LD script tag.
+ */
+function jsonLdScript(value: Record<string, unknown> | Record<string, unknown>[]): string {
+  return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+const jsonLdList = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
 
 // Promo bar is opt-in: nothing shows unless a "Promo" WebPosts category exists.
 // Optional chrome — a failed fetch must not take the page down, but it should
@@ -36,7 +97,10 @@ const promo = await getPromo().catch((err) => {
 // Site-wide noindex while the preview is gated. Flip PUBLIC_NOINDEX=false (or
 // unset) at launch. Belt-and-braces with public/robots.txt and the X-Robots-Tag
 // header in public/_headers — any one of them is enough to stop indexing.
-const noindex = String(import.meta.env.PUBLIC_NOINDEX ?? "true") !== "false";
+// Page-level `noindex` prop ORs in on top — a page can opt itself out of
+// indexing even once the site-wide flag goes false, but never the reverse.
+const envNoindex = String(import.meta.env.PUBLIC_NOINDEX ?? "true") !== "false";
+const noindex = envNoindex || noindexProp;
 
 // Trackers only fire when the site is actually live (noindex off). Keeps the
 // preview environment from polluting analytics. Tracker IDs are placeholders
@@ -161,7 +225,30 @@ const TIKTOK_PIXEL_ID = "TIKTOK-PLACEHOLDER"; // TODO: replace with real pixel I
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
     {noindex && <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex" />}
-    <link rel="icon" type="image/png" href={url("/images/favicon.png")} />
+    <link rel="canonical" href={canonicalUrl} />
+
+    <!-- Open Graph -->
+    <meta property="og:site_name" content="Ninetone Group" />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={ogImageUrl} />
+    <meta property="og:type" content={ogType} />
+    <meta property="og:locale" content={ogLocale} />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={fullTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImageUrl} />
+
+    <meta name="theme-color" content="#f5f3ee" />
+
+    <!-- Favicons -->
+    <link rel="icon" type="image/svg+xml" href={url("/favicon.svg")} />
+    <link rel="icon" type="image/x-icon" sizes="32x32" href={url("/favicon.ico")} />
+    <link rel="apple-touch-icon" sizes="180x180" href={url("/apple-touch-icon.png")} />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -170,6 +257,10 @@ const TIKTOK_PIXEL_ID = "TIKTOK-PLACEHOLDER"; // TODO: replace with real pixel I
     />
     <meta name="generator" content={Astro.generator} />
     <title>{fullTitle}</title>
+
+    {jsonLdList.map((entry) => (
+      <script type="application/ld+json" is:inline set:html={jsonLdScript(entry)} />
+    ))}
   </head>
   <body class="min-h-screen bg-ninetone-paper text-ninetone-ink antialiased">
     <PromoBar promo={promo} />
