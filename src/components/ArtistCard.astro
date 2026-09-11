@@ -51,24 +51,30 @@ const {
   blurb,
   tags = [],
   theme = "records",
-  ctaLabel: ctaLabelProp = "View",
+  ctaLabel: ctaLabelProp,
   href: hrefOverride,
   socials,
   kicker,
   highlight = false,
 } = Astro.props;
 
-// t() bound to this request (docs/i18n-phase-2-brief.md section 4). Every
-// current caller passes ctaLabel a hardcoded literal chrome string ("View"
-// default, "Book" on Nation booking pages) — never FM data — so it's
-// resolved through t() HERE rather than requiring every caller to. This is
-// exactly the GAP 2 case src/lib/t.ts documents: src/pages/ninetone-nation/
-// booking.astro renders one ArtistCard per active booking talent (up to 100,
-// getBookingCategories()'s FM query limit) and every one passes the SAME
-// literal "Book" — sharedT()'s memoization means that whole grid costs ONE
-// translate() call for the CTA label, not one per card.
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4). Only the
+// DEFAULT is translated here — never `ctaLabelProp` itself — matching the
+// convention RosterStrip.astro documents for exactly the same situation.
+//
+// Translating the prop was a real defect, caught in review and reproduced
+// with a sentinel override: both callers (ninetone-nation/booking.astro and
+// kategori/[category].astro) already resolve `await t("Book")` themselves
+// and pass the RESULT down, so this component was running t("Book") ->
+// "Boka" -> t("Boka"). Those are different sha256 keys, so the second hop is
+// its own KV lookup, its own budget slot and its own override entry — and
+// crucially "Boka" exists as a literal nowhere in the source, so
+// scripts/i18n-list.mjs can never discover it and the warm script
+// (Implementation note C) can never warm it. That made the CTA a guaranteed
+// permanent cache miss on every render, and it fed an override's OUTPUT back
+// into a second translation.
 const t = sharedT(Astro.locals);
-const ctaLabel = await t(ctaLabelProp);
+const ctaLabel = ctaLabelProp ?? (await t("View"));
 
 const ruleClasses = highlight
   ? `absolute left-0 top-0 h-1.5 w-16 ${sectionAccent[theme].bg} transition-[width] duration-300 ease-out group-hover:w-full`

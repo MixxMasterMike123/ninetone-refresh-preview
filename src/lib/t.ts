@@ -116,7 +116,14 @@ export function sharedT(locals: LocalsForT, opts?: { protect?: string[] }): TFun
   return (source: string): Promise<string> => {
     const cached = memo.get(source);
     if (cached) return cached;
-    const job = baseT(source);
+    // .catch here rather than relying on translate() never throwing: the memo
+    // stores the promise BEFORE it settles, so a single rejection would be
+    // replayed to every later caller in the render with no retry — and since
+    // this now runs on every page, that failure would be silent and total.
+    // Falling back to the source string makes the module's contract ("never
+    // block, never blank a page") explicit at the memo layer instead of an
+    // inherited property of translate.ts that a future edit could regress.
+    const job = baseT(source).catch(() => source);
     memo.set(source, job);
     return job;
   };

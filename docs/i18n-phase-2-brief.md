@@ -111,3 +111,45 @@ up to 100 ArtistCards all asking for `"Book"`. `sharedT` puts ONE budget on
 `Astro.locals` and memoizes by source string per render. Later sections
 should call `sharedT(Astro.locals)`, never `createT()` directly.
 
+**D. Warm-script discovery must be build-instrumented, not source-parsed.**
+Note C above makes `scripts/i18n-list.mjs` the warm script's discovery
+mechanism. Section 4's review showed that is not sufficient on its own:
+`i18n-list.mjs` resolves only plain literals passed directly to `t()`, and
+roughly 26 of the site's highest-traffic strings are passed from array or
+object literals that get mapped over, so they never appear in its table —
+including the ENTIRE homepage portal grid, the ENTIRE metrics panel, and the
+ENTIRE header nav, which render on all 546 pages. The strings the warm
+script would most benefit from warming are exactly the ones it cannot see.
+
+Known blind spots (verified against the 304-string output): `Header.astro`'s
+`navItemsSource` (Hem/Records/Nation/Nyheter) and `t(cta.sv)`
+(Kontakta oss, Idéer, Demos, Bokning via `sections.ts`); `index.astro`'s
+`portalsSource` taglines and all eight `metricsSource` labels/notes;
+`ArtistCard`'s "View" default; `Discography`'s Albums/EPs/Singles;
+`YouTubeFeed`'s freshness ternary; `search-result.astro`'s "Previous
+artists"; and the three metric labels on both contact pages.
+
+So the warm script MUST discover chrome by INSTRUMENTING A BUILD rather than
+parsing source: set an env flag that makes `sharedT` (src/lib/t.ts) append
+every `source` string it is called with to a JSONL file, run `npm run build`
+(the gh target renders all 546 pages and calls every `t()` on every page),
+then warm the union of what that captures. This needs no parser, captures
+all 304 statically-visible strings PLUS every blind spot above, and stays
+correct as new call sites are added — a source scanner silently rots the
+moment someone introduces another mapped literal.
+
+Keep `scripts/i18n-list.mjs` as-is regardless: it is the human-facing review
+table decision 5 asks for (Patrik reads it to write overrides), and it is
+honest about the call sites it cannot resolve. It is a review artifact, not
+the warm script's input.
+
+**E. Never translate a prop a caller already translated.**
+`RosterStrip.astro` documents the convention and `ArtistCard.astro` broke it:
+both its callers resolve `await t("Book")` and pass the result down, so the
+component ran `t("Book")` -> "Boka" -> `t("Boka")`. Different sha256 keys, so
+the second hop is its own KV entry, its own budget slot and its own override
+— and "Boka" appears as a literal nowhere in the source, so no discovery
+mechanism can ever warm it. A component translates ONLY the strings it fully
+owns (its own defaults); anything a caller supplies arrives already
+resolved.
+
