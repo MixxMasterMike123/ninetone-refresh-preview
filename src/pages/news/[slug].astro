@@ -54,7 +54,13 @@ const appendSiteName = shouldAppendSiteName(title);
 const author = String(post["Created By"] ?? "");
 const date = String(post.Date ?? "");
 const category = String(post.category ?? "");
-const lede = String(post.shortMessage ?? "");
+// FM CONTENT (decision 8). The standfirst under the <h1>, and the last
+// untranslated field on a news article — the headline and body were wired,
+// this was not, so every English article carried exactly one Swedish
+// paragraph. It was ~50 routes in the sweep at 1 block each, which is what
+// gave it away: a uniform count across many pages means one shared element,
+// not many separate defects.
+const lede = await fm(String(post.shortMessage ?? ""));
 const image = post.image_webp ? String(post.image_webp) : undefined;
 const messageHtml = renderBio(await fm(String(post.MessageString ?? post.Message ?? ""), "markdown"));
 
