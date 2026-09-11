@@ -170,10 +170,62 @@ export interface HreflangLink {
 export function hreflangLinks(currentPath: string, origin: string): HreflangLink[] {
   const { path } = stripLocale(currentPath);
   const svHref = `${origin}${localizedPath(path, "sv")}`;
+
+  // A Swedish-only page gets NO English alternate (SEO audit P1). Claiming
+  // one pointed at a URL that returns Swedish HTML with a Swedish canonical —
+  // an hreflang target must be canonical in its own language. A single-locale
+  // page correctly advertises only itself plus x-default.
+  if (!hasEnglishVersion(path)) {
+    return [
+      { hreflang: "sv", href: svHref },
+      { hreflang: "x-default", href: svHref },
+    ];
+  }
+
   const enHref = `${origin}${localizedPath(path, "en")}`;
   return [
     { hreflang: "sv", href: svHref },
     { hreflang: "en", href: enHref },
     { hreflang: "x-default", href: svHref },
   ];
+}
+
+// ---------------------------------------------------------------------------
+// Locale availability (SEO audit 2026-09-11, P1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Paths that exist ONLY in Swedish, as path prefixes.
+ *
+ * `integritet` is the privacy policy and `guider/*` are the guides: both pin
+ * `lang="sv"` on <Base>, which wins over `locals.lang`, so `/en/integritet`
+ * returns Swedish HTML with a Swedish canonical. Translating a privacy
+ * policy's rights and retention language is a product decision nobody has
+ * taken, so the content exception itself is deliberate — what was wrong was
+ * advertising an English version of it anyway.
+ *
+ * Before this, the sitemap emitted an `/en/` <loc> for every Swedish-only
+ * page and Base emitted an `hreflang="en"` alternate for it, so a
+ * non-canonical URL sat in the sitemap claiming to be the English alternate
+ * of a page that canonicalizes to Swedish. Google's localized-versions
+ * guidance expects an hreflang target to be canonical in its own language;
+ * this was neither.
+ *
+ * ONE rule, consumed by every surface that can disagree: the hreflang builder
+ * (Base.astro), the sitemap's locale expansion (src/lib/sitemap.ts), and the
+ * header language switch. Add a prefix here and all three stay consistent.
+ */
+const SWEDISH_ONLY_PREFIXES = ["/integritet", "/guider"] as const;
+
+/**
+ * Does this path have a genuine English version?
+ *
+ * Takes a locale-free path (the output of `stripLocale`), so a caller holding
+ * a possibly-prefixed current path should strip first.
+ */
+export function hasEnglishVersion(path: string): boolean {
+  const bare = stripLocale(path).path;
+  return !SWEDISH_ONLY_PREFIXES.some(
+    (prefix) => bare === prefix || bare.startsWith(`${prefix}/`),
+  );
 }

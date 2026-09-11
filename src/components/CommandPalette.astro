@@ -26,10 +26,29 @@ const startTypingLabel = await t("Börja skriva för att söka.");
 const navigateLabel = await t("Navigate");
 const openLabel = await t("Open");
 const poweredByLabel = await t("Powered by Fuse.js");
+
+// Client-script strings, resolved SERVER-side and handed over as data
+// attributes (translations audit P2). The palette's script runs in the
+// browser, where there is no Astro.locals and no t() — so these were
+// hardcoded English and every Swedish visitor saw English group headers and
+// empty-state copy on a component mounted from the base layout, i.e. on
+// every page. Same data-attribute bridge SectionIntro/ContactForm already
+// use. Swedish is kept as the source string, matching the rest of the file.
+const sectionLabels = JSON.stringify({
+  records: await t("Records"),
+  previous: await t("Tidigare"),
+  management: await t("Management"),
+  nation: await t("Nation"),
+  team: await t("Team"),
+  news: await t("Nyheter"),
+});
+const noResultsLabel = await t("Inga träffar för");
 ---
 
 <div
   id="cmdk"
+  data-i18n-sections={sectionLabels}
+  data-i18n-no-results={noResultsLabel}
   class="pointer-events-none fixed inset-0 z-50 flex items-start justify-center pt-[18vh] opacity-0 transition-opacity duration-150"
   aria-hidden="true"
 >
@@ -109,14 +128,23 @@ const poweredByLabel = await t("Powered by Fuse.js");
     image?: string;
   };
 
-  const SECTION_LABELS: Record<SearchSection, string> = {
-    records: "Records",
-    previous: "Previous",
-    management: "Management",
-    nation: "Nation",
-    team: "Team",
-    news: "News",
-  };
+  // Server-resolved (see the data attributes on #cmdk). The inline object is
+  // the fallback if the attribute is missing or malformed — the palette must
+  // still label its groups rather than render blanks.
+  const SECTION_LABELS: Record<SearchSection, string> = (() => {
+    const fallback: Record<SearchSection, string> = {
+      records: "Records",
+      previous: "Previous",
+      management: "Management",
+      nation: "Nation",
+      team: "Team",
+      news: "News",
+    };
+    try {
+      const raw = document.getElementById("cmdk")?.getAttribute("data-i18n-sections");
+      return raw ? { ...fallback, ...JSON.parse(raw) } : fallback;
+    } catch { return fallback; }
+  })();
 
   const SECTION_ORDER: SearchSection[] = ["records", "management", "nation", "previous", "team", "news"];
 
@@ -168,9 +196,35 @@ const poweredByLabel = await t("Powered by Fuse.js");
   function safeInternalUrl(value: string): string {
     try {
       const parsed = new URL(value, window.location.origin);
-      return parsed.origin === window.location.origin ? parsed.pathname + parsed.search + parsed.hash : "#";
+      const internal = parsed.origin === window.location.origin ? parsed.pathname + parsed.search + parsed.hash : "#";
+      return localizeInternal(internal);
     } catch { return "#"; }
   }
+
+  // LOCALE-PRESERVING (translations audit P1). /search-index.json is one
+  // shared, locale-neutral document — its hrefs are bare Swedish paths. Both
+  // search surfaces wrote those straight into result anchors, so an English
+  // visitor who picked a result was silently dropped back to Swedish. This is
+  // the same defect class as the nav links, but it bypassed the urlFor()
+  // sweep entirely because these links are built in the browser.
+  //
+  // The locale is read from the page the visitor is ALREADY on rather than
+  // threaded through as data: it is the one signal guaranteed correct here,
+  // it needs no change to the shared index (which stays a single cacheable
+  // document rather than one per locale), and it degrades to Swedish exactly
+  // as before if the path shape ever changes.
+  function currentLocalePrefix(): string {
+    return /^\/en(\/|$)/.test(window.location.pathname) ? "/en" : "";
+  }
+
+  function localizeInternal(path: string): string {
+    if (!path || path === "#" || path.startsWith("#")) return path;
+    const prefix = currentLocalePrefix();
+    if (!prefix) return path;
+    // Never double-prefix, and never touch a path that is already localized.
+    return /^\/en(\/|$)/.test(path) ? path : prefix + path;
+  }
+
 
   function safeImageUrl(value: string): string {
     try {
@@ -206,7 +260,7 @@ const poweredByLabel = await t("Powered by Fuse.js");
       resultsEl.innerHTML = "";
       emptyState.classList.remove("hidden");
       emptyState.textContent = input.value
-        ? `No results for "${input.value}"`
+        ? `${root.getAttribute("data-i18n-no-results") || "No results for"} "${input.value}"`
         : (input.placeholder || "Start typing to search.");
       return;
     }

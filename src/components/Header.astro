@@ -2,7 +2,7 @@
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent, sectionCta } from "../lib/sections";
 import { url as basePathOnly, urlFor } from "../lib/url";
-import { switchHref } from "../lib/i18n";
+import { hasEnglishVersion, switchHref } from "../lib/i18n";
 import type { Lang } from "../lib/translate";
 import { sharedT } from "../lib/t";
 
@@ -124,6 +124,13 @@ const isActive = (matches: string[]) =>
 // basePathOnly() applies the gh sub-path base and nothing else, which is
 // exactly what a fully-formed cross-locale path needs.
 const otherHref = basePathOnly(switchHref(pathname, lang));
+
+// Swedish-only pages offer no switch (SEO audit P1 / translations audit P2).
+// /integritet and /guider/* pin lang="sv", so the "EN" control would send a
+// visitor to a URL that renders Swedish anyway — a promise the page cannot
+// keep. Same hasEnglishVersion() rule the hreflang builder and the sitemap
+// use, so what the page advertises and what it offers cannot disagree.
+const showLanguageSwitch = hasEnglishVersion(pathname);
 const otherLangCode = lang === "sv" ? "en" : "sv";
 
 ---
@@ -192,7 +199,7 @@ const otherLangCode = lang === "sv" ? "en" : "sv";
         <span aria-hidden>→</span>
       </a>
 
-      {hasRuntime && (
+      {hasRuntime && showLanguageSwitch && (
         <a
           href={otherHref}
           hreflang={otherLangCode}
@@ -273,7 +280,7 @@ const otherLangCode = lang === "sv" ? "en" : "sv";
         {ctaLabel}
         <span aria-hidden>→</span>
       </a>
-      {hasRuntime && (
+      {hasRuntime && showLanguageSwitch && (
         <a
           href={otherHref}
           hreflang={otherLangCode}

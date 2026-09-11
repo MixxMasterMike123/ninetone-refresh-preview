@@ -1,7 +1,7 @@
 ---
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent } from "../lib/sections";
-import { url, urlFor } from "../lib/url";
+import { url as basePathOnly, urlFor } from "../lib/url";
 import { sharedT } from "../lib/t";
 
 // Locale-bound link builder (i18n Phase 2): every internal href on an
@@ -81,7 +81,17 @@ const accent = sectionAccent[theme];
 // keep showing the honest mailto fallback instead of a form that can't send.
 const hasRuntime = import.meta.env.PUBLIC_HAS_RUNTIME === true || import.meta.env.PUBLIC_HAS_RUNTIME === "true";
 
-const action = url("/api/contact");
+// API ACTION IS LOCALE-NEUTRAL — basePathOnly(), never the locale-bound url().
+//
+// src/middleware.ts deliberately 404s ^/en/api(/|$) so a locale-prefixed URL
+// can never reach the contact/publish handlers; the real endpoint exists only
+// at /api/contact. The locale-bound helper this component uses for visitor
+// links turned the action into "/en/api/contact" on every English render, so
+// both the native form POST and the client-side fetch(form.action) hit that
+// deliberate 404 — every English contact submission failed before reaching
+// the handler. Same class of regression as the language switch: a path that
+// is already complete must not have the current locale re-applied.
+const action = basePathOnly("/api/contact");
 
 // t() bound to this request (docs/i18n-phase-2-brief.md section 4). Only
 // this component's OWN chrome (honeypot label, legal copy, static-build

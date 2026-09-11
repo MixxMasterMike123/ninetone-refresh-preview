@@ -156,7 +156,16 @@ const heroArtistBlurb = await fm(String(heroArtist?.artistPresentationShort ?? "
 const heroClientBlurb = await fm(String(heroClient?.clientPresentationShort || heroClient?.artistPresentationShort || ""));
 const featuredNewsHeading = await fm(String(featuredNewsItem?.Title ?? ""), "title");
 
-const viewProfileCta = await t("View profile"); // reused for both heroArtist + heroClient tiles — memoized to one call.
+const viewProfileCta = await t("View profile");
+
+// Meta description through t() (SEO audit P2). It was a fixed English string
+// for BOTH locales, so the Swedish homepage — lang="sv" — described itself in
+// English in <meta name="description">, og:description and twitter:description.
+// English is kept as the source string (it is what is authored here today, and
+// overrides key on the source hash), so /en is unchanged and /sv gets Swedish.
+const metaDescription = await t(
+  "Ninetone connects what people need with what people care about — music, talent management and booking for artists, creators and public figures since 2006.",
+); // reused for both heroArtist + heroClient tiles — memoized to one call.
 const latestStoryKicker = await t("Latest story");
 const readCta = await t("Read");
 const bookingKicker = await t("Booking");
@@ -235,7 +244,7 @@ const closingBody = await t(
 <Base
   title="Ninetone Group"
   theme="group"
-  description="Ninetone connects what people need with what people care about — music, talent management and booking for artists, creators and public figures since 2006."
+  description={metaDescription}
 >
   <!-- Typographic hero -->
   <section class="relative overflow-hidden bg-ninetone-paper">

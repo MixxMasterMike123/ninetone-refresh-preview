@@ -317,10 +317,42 @@ test("localizeSitemapEntries: preserves changefreq/lastmod on both locale entrie
   }
 });
 
-test("buildLocalizedSitemapEntries: end-to-end with stubbed lists doubles the entry count when includeEnglish=true", () => {
+test("buildLocalizedSitemapEntries: doubles every entry that HAS an English version, and only those", () => {
+  // Previously this asserted a flat 2x. That was the defect the SEO audit
+  // found: Swedish-only routes (/integritet, /guider/*) were doubled too, so
+  // the sitemap advertised /en/integritet as an English alternate of a page
+  // that returns Swedish HTML canonicalizing to /integritet.
   const localeFree = buildSitemapEntries(ORIGIN, stubbedLists());
   const localized = buildLocalizedSitemapEntries(ORIGIN, stubbedLists(), true);
-  assert.equal(localized.length, localeFree.length * 2);
+
+  const svOnly = localeFree.filter((e) => {
+    const path = e.loc.slice(ORIGIN.length) || "/";
+    return path === "/integritet" || path === "/guider" || path.startsWith("/guider/");
+  }).length;
+
+  assert.equal(localized.length, (localeFree.length - svOnly) * 2 + svOnly);
+  assert.ok(svOnly > 0, "the stub list must contain a Swedish-only route or this asserts nothing");
+});
+
+test("buildLocalizedSitemapEntries: no /en/ loc or English alternate for a Swedish-only route", () => {
+  const localized = localizeSitemapEntries(ORIGIN, [{ loc: `${ORIGIN}/integritet` }], true);
+
+  assert.equal(localized.length, 1, "a Swedish-only route gets exactly one entry");
+  assert.equal(localized[0].loc, `${ORIGIN}/integritet`);
+  assert.deepEqual(
+    localized[0].alternates.map((a) => a.hreflang).sort(),
+    ["sv", "x-default"],
+    "it must not claim an English alternate",
+  );
+});
+
+test("buildLocalizedSitemapEntries: a normal route still gets both locales and the full alternate set", () => {
+  const localized = localizeSitemapEntries(ORIGIN, [{ loc: `${ORIGIN}/records` }], true);
+
+  assert.deepEqual(localized.map((e) => e.loc), [`${ORIGIN}/records`, `${ORIGIN}/en/records`]);
+  for (const entry of localized) {
+    assert.deepEqual(entry.alternates.map((a) => a.hreflang).sort(), ["en", "sv", "x-default"]);
+  }
 });
 
 test("buildLocalizedSitemapEntries: includeEnglish=false keeps the same entry count as the locale-free list", () => {

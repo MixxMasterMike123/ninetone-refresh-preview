@@ -520,11 +520,22 @@ function voiceFieldJobs({ artists, clients, bookingCategories, webPostsBySection
   // Note the direction: the Team section's FM copy is authored in ENGLISH, so
   // it is the SWEDISH render that needs translating. Both targets are warmed
   // regardless (decision 4 is bidirectional), so no special-casing here.
+  // TIER MUST MATCH WHAT THE PAGE READS. src/lib/t.ts's fmText() — which is
+  // what every WebPosts render path uses — always requests the `fast` tier,
+  // and the tier is part of the cache key. Warming these on `quality` wrote
+  // keys no page will ever look up: verified live on the /team heading, where
+  // the quality key held a correct Swedish translation while the page kept
+  // rendering English from a permanent `fast`-tier miss. This is exactly the
+  // warm-vs-request drift Implementation note A exists to prevent, so these
+  // are warmed on BOTH tiers: `fast` is what fmText() reads today, `quality`
+  // keeps the higher-quality copy available if a voice surface ever reads it.
   for (const section of webPostsBySection.values()) {
-    jobs.push(job(section.title, "quality", "title"));
-    for (const block of section.blocks) {
-      jobs.push(job(block.subject, "quality", "title"));
-      jobs.push(job(block.message, "quality", "markdown"));
+    for (const tier of ["fast", "quality"]) {
+      jobs.push(job(section.title, tier, "title"));
+      for (const block of section.blocks) {
+        jobs.push(job(block.subject, tier, "title"));
+        jobs.push(job(block.message, tier, "markdown"));
+      }
     }
   }
 

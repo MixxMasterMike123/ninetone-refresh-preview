@@ -789,6 +789,80 @@ function guessSourceLang(text: string): Lang {
  * scheduled, so a single expensive render can't fan out an unbounded number
  * of concurrent Anthropic calls.
  */
+/**
+ * Isolate-level read-through cache for resolved translations (performance
+ * audit 2026-09-11, repair item 3).
+ *
+ * THE PROBLEM: every `t()`/`fmText()` call awaits a Cloudflare KV `get` before
+ * the render can continue, and Astro frontmatter issues them one after
+ * another. The audit's controlled benchmark — 50 distinct strings against a
+ * mock KV with a 10 ms hit — measured 578 ms sequential versus 11.8 ms
+ * batched: the render pays roughly the SUM of every distinct lookup. The
+ * homepage alone has ~68 of them, and `sharedT`'s memo only dedupes within a
+ * single request, so the next page-cache miss re-reads all of them again.
+ *
+ * WHY THIS HELPS: a Worker isolate serves many requests. Translations are
+ * permanently cached and content-addressed (decision 7) — a given key's value
+ * can never change without the source changing, which changes the key. So a
+ * value read once is valid for the isolate's lifetime, and every later render
+ * in that isolate skips the network entirely.
+ *
+ * IN-FLIGHT DEDUPLICATION: the map stores the PROMISE, not the value, so two
+ * concurrent renders asking for the same key issue one KV read rather than
+ * two. A rejected read is evicted so a transient failure cannot be pinned.
+ *
+ * BOUNDED: plain FIFO eviction at a fixed ceiling, the same approach and
+ * reasoning as src/lib/cache.ts's `MAX_ENTRIES` — request-derived keys must
+ * not grow a long-lived isolate's memory without limit.
+ *
+ * NOT a correctness layer: a miss here still falls through to KV, and a miss
+ * there still returns source text and schedules the model call.
+ */
+const ISOLATE_CACHE_MAX = 2000;
+
+/**
+ * Keyed by the KV BINDING OBJECT, not globally.
+ *
+ * A single global map would let a value read through one KV instance be
+ * served to a caller holding a different one. In production there is only
+ * ever the one CACHE_STATE binding, so this changes nothing there — but it is
+ * the difference between "correct because the environment happens to have one
+ * binding" and "correct by construction", and it is exactly what the test
+ * suite exposed: tests that inject their own stub KV were being served values
+ * another test had cached under the same key.
+ *
+ * WeakMap so an isolate that somehow holds several bindings does not pin
+ * their caches after the binding itself is gone.
+ */
+const isolateCaches = new WeakMap<object, Map<string, Promise<string | null>>>();
+
+function isolateCachedRead(kv: KvLike, key: string): Promise<string | null> {
+  let isolateCache = isolateCaches.get(kv as unknown as object);
+  if (!isolateCache) {
+    isolateCache = new Map<string, Promise<string | null>>();
+    isolateCaches.set(kv as unknown as object, isolateCache);
+  }
+
+  const existing = isolateCache.get(key);
+  if (existing) return existing;
+
+  const cacheRef = isolateCache;
+  const job = kv.get(key).catch((err) => {
+    // Evict so a transient KV failure is retried rather than pinned for the
+    // isolate's lifetime; the caller still treats null as a miss.
+    cacheRef.delete(key);
+    console.error(`[translate] KV read failed for ${key} — treating as a miss:`, err);
+    return null;
+  });
+
+  isolateCache.set(key, job);
+  if (isolateCache.size > ISOLATE_CACHE_MAX) {
+    const oldest = isolateCache.keys().next().value as string | undefined;
+    if (oldest && oldest !== key) isolateCache.delete(oldest);
+  }
+  return job;
+}
+
 export async function translate(options: TranslateOptions): Promise<TranslateResult> {
   const { text, target, tier, kind = "plain", protect = [], waitUntil, budget } = options;
 
@@ -810,15 +884,14 @@ export async function translate(options: TranslateOptions): Promise<TranslateRes
   const kv = options.kv !== undefined ? options.kv : (await getCfEnv())?.CACHE_STATE ?? null;
 
   if (kv) {
-    try {
-      const raw = await kv.get(key);
-      if (raw !== null) {
-        return { text: raw, cached: true, lang: target };
-      }
-    } catch (err) {
-      // Same posture as kvCached (src/lib/cache.ts): a read failure
-      // degrades to "treat as a miss", never throws out to the caller.
-      console.error(`[translate] KV read failed for ${key} — treating as a miss:`, err);
+    // Read through the isolate cache (see its doc comment): a hit costs no
+    // network round-trip at all, which is what removes the serialized-KV
+    // dependency depth the performance audit measured. Errors are handled
+    // inside isolateCachedRead(), which resolves null on failure — same
+    // "a read failure is just a miss" posture as kvCached.
+    const raw = await isolateCachedRead(kv, key);
+    if (raw !== null) {
+      return { text: raw, cached: true, lang: target };
     }
   }
 

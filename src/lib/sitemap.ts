@@ -32,7 +32,7 @@
 import type { StaticRoute } from "./routes";
 import { PREVIOUS_ARTISTS_PAGE_SIZE } from "./routes.ts";
 import { slugifyTag } from "./booking-slug.ts";
-import { localizedPath } from "./i18n.ts";
+import { hasEnglishVersion, localizedPath } from "./i18n.ts";
 import type { Lang } from "./translate.ts";
 
 export interface SitemapEntry {
@@ -248,6 +248,26 @@ export function localizeSitemapEntries(
   for (const entry of entries) {
     const path = entry.loc.startsWith(origin) ? entry.loc.slice(origin.length) || "/" : entry.loc;
     const svHref = joinPath(origin, localizedPath(path, "sv"));
+
+    // Swedish-only pages get ONE entry and no English alternate (SEO audit
+    // P1). Doubling every entry unconditionally put /en/integritet and
+    // /en/guider/* in the sitemap as loc values and as hreflang alternates,
+    // even though those URLs return Swedish HTML canonicalizing to the bare
+    // Swedish path — a non-canonical URL advertised as an English version.
+    // hasEnglishVersion() is the same rule Base.astro's hreflang builder and
+    // the language switch use, so the three cannot drift apart.
+    if (!hasEnglishVersion(path)) {
+      out.push({
+        ...entry,
+        loc: svHref,
+        alternates: [
+          { hreflang: "sv", href: svHref },
+          { hreflang: "x-default", href: svHref },
+        ],
+      });
+      continue;
+    }
+
     const enHref = joinPath(origin, localizedPath(path, "en"));
     const alternates: HreflangAlternate[] = [
       { hreflang: "sv", href: svHref },

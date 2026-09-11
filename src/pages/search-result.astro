@@ -43,7 +43,15 @@ const sectionLabels = Object.fromEntries(
 
 ---
 
-<Base title={pageTitle}>
+<Base
+  title={pageTitle}
+  {/* Internal search is a crawl-efficiency sink: an unbounded query space
+      with no standalone value. It is excluded from the sitemap, but omission
+      alone does not prevent discovery, and today it is protected only by the
+      temporary staging-wide noindex — so it would become indexable the moment
+      that is lifted at launch. Page-level and permanent (SEO audit P2). */}
+  noindex
+>
   <section class="bg-ninetone-paper">
     <div class="mx-auto max-w-7xl px-6 pb-12 pt-16 md:pt-24">
       <span class="kicker text-ninetone-ink/55">{searchKicker}</span>
@@ -150,8 +158,26 @@ const sectionLabels = Object.fromEntries(
   function safeInternalUrl(value: string): string {
     try {
       const parsed = new URL(value, window.location.origin);
-      return parsed.origin === window.location.origin ? parsed.pathname + parsed.search + parsed.hash : "#";
+      const internal = parsed.origin === window.location.origin ? parsed.pathname + parsed.search + parsed.hash : "#";
+      return localizeInternal(internal);
     } catch { return "#"; }
+  }
+
+  // LOCALE-PRESERVING (translations audit P1) — see the fuller note in
+  // CommandPalette.astro. /search-index.json is a single locale-neutral
+  // document whose hrefs are bare Swedish paths; without this an English
+  // visitor clicking a search result lands on the Swedish page. Derived from
+  // the current URL rather than threaded as data, so the shared index stays
+  // one cacheable document instead of one per locale.
+  function currentLocalePrefix(): string {
+    return /^\/en(\/|$)/.test(window.location.pathname) ? "/en" : "";
+  }
+
+  function localizeInternal(path: string): string {
+    if (!path || path === "#" || path.startsWith("#")) return path;
+    const prefix = currentLocalePrefix();
+    if (!prefix) return path;
+    return /^\/en(\/|$)/.test(path) ? path : prefix + path;
   }
 
   function safeImageUrl(value: string): string {

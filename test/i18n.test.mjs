@@ -248,3 +248,31 @@ test("switch href composition: locale-bound url() would break the switch, plain 
     }
   }
 });
+
+// --- locale availability (SEO audit 2026-09-11, P1) --------------------------
+
+test("hasEnglishVersion: Swedish-only prefixes, and only exact segment matches", async () => {
+  const { hasEnglishVersion } = await import("../src/lib/i18n.ts");
+  for (const p of ["/integritet", "/guider", "/guider/nagon-guide", "/en/integritet"]) {
+    assert.equal(hasEnglishVersion(p), false, `${p} must be Swedish-only`);
+  }
+  for (const p of ["/", "/records", "/news", "/integritetsnamn", "/guiderna"]) {
+    assert.equal(hasEnglishVersion(p), true, `${p} must have an English version`);
+  }
+});
+
+test("hreflangLinks omits the English alternate for a Swedish-only page", async () => {
+  // The defect: /en/integritet returns Swedish HTML canonicalizing to
+  // /integritet, yet the page advertised it as its own hreflang="en"
+  // alternate — an hreflang target must be canonical in its own language.
+  const links = hreflangLinks("/integritet", "https://ninetone.com");
+  assert.deepEqual(links, [
+    { hreflang: "sv", href: "https://ninetone.com/integritet" },
+    { hreflang: "x-default", href: "https://ninetone.com/integritet" },
+  ]);
+});
+
+test("hreflangLinks still emits the full cluster for a normal bilingual page", () => {
+  const links = hreflangLinks("/records", "https://ninetone.com");
+  assert.deepEqual(links.map((l) => l.hreflang).sort(), ["en", "sv", "x-default"]);
+});
