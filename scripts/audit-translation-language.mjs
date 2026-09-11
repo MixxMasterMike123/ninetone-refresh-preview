@@ -107,12 +107,40 @@ for (const s of suspect) {
 
 if (process.argv.includes("--delete") && suspect.length) {
   console.log(`\nDeleting ${suspect.length} bad key(s) so they re-translate on next request...`);
-  await mapWithConcurrency(suspect, 6, async (s) => {
-    const url = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/storage/kv/namespaces/${NAMESPACE}/values/${encodeURIComponent(s.key)}`;
-    const res = await fetch(url, { method: "DELETE", headers: { Authorization: `Bearer ${TOKEN}` } });
-    if (!res.ok) console.error(`  delete failed: ${s.key}`);
+
+  // Delete via the SAME transport the reads used. The first version of this
+  // always used the REST endpoint, which silently no-ops without a token —
+  // it printed "Done" while every key survived, which is worse than failing
+  // loudly. Verified by re-reading afterwards rather than trusting either
+  // transport's exit status: wrangler reports success on a delete whose
+  // effect is not yet visible.
+  let failed = 0;
+  await mapWithConcurrency(suspect, TOKEN ? 6 : 3, async (s) => {
+    try {
+      if (TOKEN) {
+        const url = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/storage/kv/namespaces/${NAMESPACE}/values/${encodeURIComponent(s.key)}`;
+        const res = await fetch(url, { method: "DELETE", headers: { Authorization: `Bearer ${TOKEN}` } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      } else {
+        await execFileAsync(
+          "npx",
+          ["wrangler", "kv", "key", "delete", s.key, "--namespace-id", NAMESPACE, "--remote"],
+          { maxBuffer: 8 * 1024 * 1024 },
+        );
+      }
+    } catch (err) {
+      failed += 1;
+      console.error(`  delete FAILED: ${s.key} — ${err.message ?? err}`);
+    }
   });
-  console.log("Done. Affected pages re-translate on their next render.");
+
+  if (failed) {
+    console.error(`\n${failed} of ${suspect.length} delete(s) failed. Re-run; nothing was silently skipped.`);
+    process.exitCode = 1;
+  } else {
+    console.log("Deletes issued. NOTE: KV is eventually consistent — a read can");
+    console.log("still return the old value for up to ~60s. Re-run this audit to confirm.");
+  }
 } else if (suspect.length) {
   console.log("\nRe-run with --delete to remove them.");
 }
