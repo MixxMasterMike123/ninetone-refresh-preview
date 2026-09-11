@@ -1,6 +1,7 @@
 ---
 import type { Artist } from "../lib/ninetone";
 import { url, urlFor } from "../lib/url";
+import { fmText } from "../lib/t";
 
 // Locale-bound link builder (i18n Phase 2): every internal href on an
 // English page must keep the /en prefix, or one click drops the visitor
@@ -36,6 +37,30 @@ for (const a of artists) {
 // Swedish collation: Å, Ä, Ö sort as distinct letters after Z (not folded
 // into A/O). Use localeCompare("sv") rather than relying on code-point
 // order, which coincidentally matches here but isn't the contract.
+// FM CONTENT (decision 8). This component renders the SAME blurb field the
+// cards above it do, in a second A-Ö view — and it was never wired, so
+// /en/records/artists/previous still showed ~100 Swedish blocks even after
+// every card on the page translated correctly. The three callers disagreed
+// about whose job this was: artists.astro and clients.astro pass a
+// pre-translated list, but previous/[...page].astro passes `allPrevious`,
+// a different and untranslated array.
+//
+// Resolved HERE rather than asking each caller to remember, so a future
+// caller cannot reintroduce the gap. Pre-built as a lookup keyed by slug
+// because the render below happens inside .map(), which cannot await.
+// Translating an already-translated string is a no-op that costs one memo
+// hit (sharedT/fmText dedupe per request), so the pre-translating callers
+// are not penalised.
+const fm = fmText(Astro.locals);
+const blurbBySlug = new Map<string, string>(
+  await Promise.all(
+    artists.map(async (a): Promise<[string, string]> => [
+      String(a.SLUG ?? ""),
+      await fm(String(a.artistPresentationShort ?? "")),
+    ]),
+  ),
+);
+
 const sortedLetters = Array.from(byLetter.keys()).sort((a, b) =>
   a === "#" ? -1 : b === "#" ? 1 : a.localeCompare(b, "sv"),
 );
@@ -52,7 +77,7 @@ const sortedLetters = Array.from(byLetter.keys()).sort((a, b) =>
         {byLetter.get(letter)!.map((a) => {
           const name = String(a["Head Artist"] ?? "");
           const slug = String(a.SLUG ?? "");
-          const blurb = String(a.artistPresentationShort ?? "");
+          const blurb = blurbBySlug.get(slug) ?? String(a.artistPresentationShort ?? "");
           const tags = a.genre ? String(a.genre).split(/\r|\n/).filter(Boolean).slice(0, 3) : [];
           return (
             <li class="group">
