@@ -127,9 +127,27 @@ export default defineConfig({
       },
     },
   },
+  // Phase 2 i18n (docs/i18n-phase-2-brief.md, decision 1) — Swedish is the
+  // root locale, English lives under /en/. Swedish is Ninetone's home
+  // market and the language most FM content already exists in; English is
+  // the secondary/export-facing locale, not the other way around. That's
+  // the opposite of Astro's usual English-default convention, hence
+  // spelling it out here rather than leaving `defaultLocale: "sv"` to look
+  // like a typo.
+  //
+  // `redirectToDefaultLocale: false` AND no browser-Accept-Language
+  // redirect is added anywhere else, on purpose and permanently — decision
+  // 1 is emphatic that this never happens. An automatic redirect would
+  // mean a Swedish visitor who explicitly typed/clicked an "/en/..." URL
+  // (shared link, search result, bookmark) gets bounced back to Swedish
+  // against their clearly-stated intent, and there is no reliable browser
+  // signal that distinguishes "prefers Swedish" from "is in Sweden but
+  // wants the English copy for a client abroad". The only way to change
+  // language is the explicit switch in the header, which points at the
+  // exact alternate URL via alternatePath() (src/lib/i18n.ts).
   i18n: {
-    defaultLocale: "en",
-    locales: ["en", "sv"],
+    defaultLocale: "sv",
+    locales: ["sv", "en"],
     routing: {
       prefixDefaultLocale: false,
       redirectToDefaultLocale: false,

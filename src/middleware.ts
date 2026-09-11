@@ -39,6 +39,8 @@ import {
   shouldBypassCache,
   trailingSlashRedirectTarget,
 } from "./lib/cache-policy";
+import { localizedPath, stripLocale } from "./lib/i18n";
+import type { Lang } from "./lib/translate";
 
 // Statically replaced by Vite (astro.config define); guarded for any context
 // where the define isn't applied.
@@ -137,19 +139,143 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // rejected ("Duplicate rule for path").
   //
   // Keep in sync with public/_redirects, including the "single" listing guard.
-  const legacyPrevious = HAS_RUNTIME ? legacyPreviousArtistTarget(url.pathname) : null;
-  if (legacyPrevious) {
-    const location = `${legacyPrevious}${url.search}`;
+  //
+  // LOCALE-AWARE (i18n Phase 2): the lookup runs on the locale-STRIPPED path
+  // and the locale is re-applied to the destination, so an English visitor
+  // stays in English across the redirect.
+  //
+  // legacyPreviousArtistTarget's pattern is anchored at "/previous-artists",
+  // so before this change "/en/previous-artists/kuokka" simply didn't match —
+  // and the outcome was worse than the locale-losing redirect it looked like
+  // it was avoiding. The request fell through to the rewrite below and became
+  // next("/previous-artists/kuokka"), which is NOT a route in this app (that
+  // path exists only as a redirect rule in public/_redirects, served by the
+  // asset layer ahead of the Worker). So it route-missed into the 404 — an
+  // English visitor following an old Discogs link got a hard 404 where a
+  // Swedish visitor following the same link got a working 301, and the 404
+  // was then cached for an hour under the /en/ key.
+  const legacyLocale = HAS_RUNTIME ? stripLocale(url.pathname) : null;
+  const legacyPrevious = legacyLocale ? legacyPreviousArtistTarget(legacyLocale.path) : null;
+  if (legacyPrevious && legacyLocale) {
+    const location = `${localizedPath(legacyPrevious, legacyLocale.lang)}${url.search}`;
     return harden(new Response(null, { status: 301, headers: { Location: location } }));
   }
 
+  // Locale detection + rewrite (docs/i18n-phase-2-brief.md decision 2).
+  //
+  // gh/static guard: on the static GH Pages preview there is no request-time
+  // rewrite mechanism at all (see below — next(payload) needs the live route
+  // manifest astro:middleware's test/dev/cf pipeline provides), and decision
+  // 2 is explicit that /en/ is a CF-only feature there anyway ("Static GH
+  // Pages preview stays single-language Swedish"). HAS_RUNTIME is the same
+  // flag the redirect backstops above already gate on, so an /en/-prefixed
+  // path on the gh target falls straight through to next() untouched and
+  // 404s exactly like any other route Astro didn't build — never gains
+  // locale behaviour that could interact with the prerender pass.
+  //
+  // MUST run after the redirect backstops above (trailing-slash and legacy
+  // previous-artist both operate on the raw, possibly-/en-prefixed pathname
+  // as an opaque string and are correct either way — "/en/records/" still
+  // 301s to "/en/records", "/en/previous-artists/x" simply never matches the
+  // legacy regex, which is correct: those old deep links never had an
+  // English variant) and MUST run before the cache short-circuit below,
+  // because the cache key is partly derived from url.pathname and that
+  // derivation needs to know the locale before it runs (see rawPathname).
+  let lang: Lang = "sv";
+  // The RAW, pre-rewrite pathname — captured now, before next(rewritten) is
+  // ever called below. This is what the cache key is built from, NOT
+  // `stripped`. If the cache key were computed from the post-rewrite path
+  // instead, "/en/records" and "/records" would both resolve to the cache
+  // key for "/records" and collide onto ONE shared cache slot: whichever
+  // locale rendered first would serve both, and the other locale's visitors
+  // would randomly get the wrong-language page for the page's entire TTL
+  // (up to 24h for team/legal pages) until the slot's next miss happened to
+  // be the correct locale again. Keeping the /en segment IN the cache-key
+  // pathname is what makes the two locales address different cache entries
+  // even though they render the same underlying route.
+  const rawPathname = url.pathname;
+  let renderTarget: string | null = null;
+  if (HAS_RUNTIME) {
+    // /en/api/* is a 404, NOT a rewrite (brief, decision 2 / Build item):
+    // the real API routes exist ONLY at /api/*. Rewriting
+    // "/en/api/contact" → "/api/contact" would silently let a
+    // locale-prefixed URL reach the contact/publish handlers — verified
+    // empirically against a live `astro dev` server that without this
+    // guard, next("/api/contact") reaches the real handler (the request
+    // gets a real 400 validation response, i.e. the handler ran). Checked
+    // ahead of the general strip-and-rewrite below, on the raw pathname,
+    // so it takes priority over the general case.
+    if (/^\/en\/api(\/|$)/.test(rawPathname)) {
+      return harden(new Response(null, { status: 404 }));
+    }
+
+    // A SECOND "/en" segment is a real path segment, not another locale
+    // prefix — "/en/en/records" is not "English, twice", it is a page named
+    // "en" inside the English locale, and no such page exists.
+    //
+    // Without this guard stripLocale peels exactly one level, so
+    // "/en/en/records" rewrote to "/en/records" — itself not a route (the
+    // route table only holds bare paths) — and route-missed into the custom
+    // 404. The right OUTCOME by accident, but reached without intent and,
+    // worse, cached: every member of the infinite "/en/en/en/..." family
+    // minted its own edge-cache entry for an hour. Answering directly here
+    // makes the 404 deliberate and keeps the cache key space finite.
+    if (/^\/en\/en(\/|$)/.test(rawPathname)) {
+      return harden(new Response(null, { status: 404 }));
+    }
+
+    const stripped = stripLocale(rawPathname);
+    lang = stripped.lang;
+    if (lang === "en") renderTarget = stripped.path;
+  }
+  // Set locals.lang only if this is the FIRST pass through this middleware
+  // for the request. Astro.rewrite("/404") (src/lib/not-found.ts, used by
+  // every detail route on a failed lookup) re-invokes this entire
+  // middleware a second, nested time for the "/404" pathname — and
+  // state.locals (astro/dist/core/fetch/fetch-state.js) is ONE shared
+  // object across outer and inner passes, never recreated by the rewrite
+  // machinery. Without this guard, the inner pass would see rawPathname
+  // "/404" (no /en prefix — Astro.rewrite("/404") always targets the bare
+  // path), derive lang "sv", and stomp the outer pass's "en" back to "sv"
+  // while the real request is still an /en/... 404. The 404 page would then
+  // render with the wrong <html lang> and (once section 4 wires up t())
+  // Swedish chrome copy for an English visitor. Setting it once, on first
+  // touch, means the inner pass inherits whatever the outer pass correctly
+  // determined instead of re-deriving it from a pathname that has already
+  // been rewritten out from under it.
+  const localsRef = locals as { lang?: Lang };
+  if (localsRef.lang === undefined) localsRef.lang = lang;
+
   const cacheApi = (globalThis as { caches?: { default?: Cache } }).caches?.default;
-  if (!cacheApi || shouldBypassCache(request, url.pathname, url.search)) {
-    return harden(await next());
+  // shouldBypassCache asks a SEMANTIC-ROUTE question ("is this an /api,
+  // /admin or /404 route?"), exactly like ttlFor below — so it takes the
+  // STRIPPED path, not the raw one. Only the cache KEY is a locale question.
+  //
+  // Passing rawPathname here was a real defect, caught in review and
+  // reproduced directly against cache-policy: its SKIP patterns are anchored
+  // (/^\/admin(\/|$)/ etc.), so a leading "/en" defeats every one of them
+  // while the rewrite below still sends the request to the real route:
+  //
+  //   /admin/publish    → BYPASS (correct)
+  //   /en/admin/publish → CACHED (wrong — the skip silently evaporated)
+  //   /404              → BYPASS (correct)
+  //   /en/404           → CACHED (wrong)
+  //
+  // src/pages/admin/publish.astro sets no Cache-Control of its own, so the
+  // rendered Publish console passed the response-side bypass checks further
+  // down and would have been stored at the edge for an hour under
+  // s-maxage=3600, reachable by anyone who guessed the URL. The page is only
+  // a password form (the real secret is checked in /api/publish), so this was
+  // not credential disclosure — but SKIP is the mechanism every future
+  // private route will rely on, and a locale prefix must never be able to
+  // strip it. /en/404 additionally un-did the documented no-cache invariant
+  // that cache-policy.ts's header comment exists to explain.
+  if (!cacheApi || shouldBypassCache(request, renderTarget ?? rawPathname, url.search)) {
+    return harden(await next(renderTarget ?? undefined));
   }
 
   const env = await getCfEnv();
-  if (!env) return harden(await next()); // Node runtime (static build / plain dev)
+  if (!env) return harden(await next(renderTarget ?? undefined)); // Node runtime (static build / plain dev)
 
   // Publish-button epoch. KV read is edge-cached 60s, so a Publish takes
   // effect within ~a minute per colo — and costs ~nothing per request.
@@ -160,9 +286,23 @@ export const onRequest = defineMiddleware(async (context, next) => {
     // KV unavailable → still cache, just without instant purge.
   }
 
-  const ttl = ttlFor(url.pathname);
-  // Include the request origin so Host-dependent SSR output cannot cross hosts.
-  const cacheKey = new Request(edgeCacheKey(url.origin, url.pathname, version, BUILD_ID));
+  // ttlFor's table is written in terms of the semantic (locale-free) route —
+  // "/records" changes at the same rate whether it's rendered in Swedish or
+  // English, so the TTL lookup uses the STRIPPED path (renderTarget when
+  // present, else the raw path is already bare). Using rawPathname here
+  // instead would silently miss every rule for an /en/ request (none of
+  // TTL_RULES' patterns match a leading "/en" segment) and fall everything
+  // on /en/* through to DEFAULT_TTL — wrong tier, not a correctness bug like
+  // the cache-key collision below, but still worth getting right the first
+  // time rather than leaving English visitors on a different freshness
+  // contract than Swedish ones for no reason.
+  const ttl = ttlFor(renderTarget ?? rawPathname);
+  // Cache KEY, by contrast, is built from rawPathname (still carrying /en
+  // when present) — see the comment above rawPathname's declaration for why
+  // collapsing this to the rewritten path would let the two locales share
+  // one cache slot. Include the request origin so Host-dependent SSR output
+  // cannot cross hosts either.
+  const cacheKey = new Request(edgeCacheKey(url.origin, rawPathname, version, BUILD_ID));
 
   const hit = await cacheApi.match(cacheKey);
   if (hit) {
@@ -173,7 +313,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   // Clone immediately: platform-generated redirects can expose immutable
   // Headers, while the cache decision needs to annotate every response.
-  const rendered = await next();
+  //
+  // renderTarget carries the STRIPPED path ("/en/records" → "/records") so
+  // Astro renders the real route; undefined means "no rewrite" (sv request,
+  // or HAS_RUNTIME false), which next() treats identically to next() with no
+  // arguments per Astro's MiddlewareNext signature.
+  const rendered = await next(renderTarget ?? undefined);
   const res = new Response(rendered.body, rendered);
 
   // Only cache successful full responses — a transient error page must never

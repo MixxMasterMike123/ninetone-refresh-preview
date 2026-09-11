@@ -298,3 +298,339 @@ test("legacy previous-artist redirect preserves the query string and ignores non
   );
   assert.notEqual(passed.status, 301, "canonical path must not be redirected");
 });
+
+// ---------------------------------------------------------------------------
+// Locale detection + rewrite (docs/i18n-phase-2-brief.md decision 2).
+//
+// next(payload)'s REAL rewrite semantics (re-resolving the route manifest
+// via Astro's tryRewrite) cannot be exercised under this esbuild-bundled
+// harness: sequence.js's payload branch requires a `fetchStateSymbol` on the
+// context that only Astro's own request pipeline attaches ("FetchState not
+// found on APIContext" is thrown otherwise) — confirmed by hand against a
+// real `astro dev` server (DEPLOY_TARGET=cf) rather than guessed: hitting
+// /en/integritet against a temporary probe middleware returned the actual
+// 117KB integritet page body with locals.lang carried through, and
+// /en/this-route-does-not-exist 404'd via next(payload) exactly as a normal
+// unmatched route would. What IS tested here, at this level, is the
+// contract src/middleware.ts owns regardless of what next() does with it:
+// which pathname string it hands to next(), what it sets locals.lang to,
+// and — the correctness-critical part — that the cache key it builds stays
+// distinct per locale. The stub `next` below stands in for Astro's real
+// rewrite/render by simply recording what it was called with and returning
+// a marker response, the same "next is a black box we assert the call
+// arguments of" approach the redirect tests above already use.
+// ---------------------------------------------------------------------------
+
+test("/en/records rewrites to /records with locals.lang set to en", async () => {
+  const runtime = createRuntime();
+  const calls = [];
+  const context = {
+    request: new Request("https://ninetone.com/en/records"),
+    url: new URL("https://ninetone.com/en/records"),
+    locals: { cfContext: { waitUntil: (p) => runtime.waits.push(p) } },
+  };
+  const next = async (payload) => {
+    calls.push(payload);
+    return new Response("records page");
+  };
+  const response = await middlewareModule.onRequest(context, next);
+  await Promise.all(runtime.waits);
+
+  assert.deepEqual(calls, ["/records"], "next() must be called with the stripped path");
+  assert.equal(context.locals.lang, "en");
+  assert.equal(await response.text(), "records page");
+});
+
+test("/records (no prefix) sets locals.lang to sv and does not rewrite", async () => {
+  const runtime = createRuntime();
+  const calls = [];
+  const context = {
+    request: new Request("https://ninetone.com/records"),
+    url: new URL("https://ninetone.com/records"),
+    locals: { cfContext: { waitUntil: (p) => runtime.waits.push(p) } },
+  };
+  const next = async (payload) => {
+    calls.push(payload);
+    return new Response("records page");
+  };
+  await middlewareModule.onRequest(context, next);
+
+  assert.deepEqual(calls, [undefined], "next() must be called with no rewrite payload for sv");
+  assert.equal(context.locals.lang, "sv");
+});
+
+test("/en/ (trailing slash) 301s to the canonical /en before locale detection ever runs", async () => {
+  // Trailing-slash canonicalization (existing behaviour, unchanged by this
+  // section) runs BEFORE locale detection in src/middleware.ts, and
+  // trailingSlashRedirectTarget() has no locale awareness — it just strips
+  // the trailing slash off any non-exempt path. "/en/" therefore never
+  // reaches the locale-rewrite logic at all; it 301s to "/en" first, and
+  // the browser's follow-up request to the canonical "/en" is what actually
+  // triggers the rewrite (covered by the next test). Asserting this here
+  // pins the ordering so a future change can't accidentally make "/en/"
+  // rewrite directly and skip canonicalization.
+  const runtime = createRuntime();
+  let nextCalled = false;
+  const context = {
+    request: new Request("https://ninetone.com/en/"),
+    url: new URL("https://ninetone.com/en/"),
+    locals: { cfContext: { waitUntil: (p) => runtime.waits.push(p) } },
+  };
+  const next = async () => { nextCalled = true; return new Response("must not run"); };
+  const response = await middlewareModule.onRequest(context, next);
+
+  assert.equal(nextCalled, false, "next() must not run — the trailing-slash redirect wins first");
+  assert.equal(response.status, 301);
+  assert.equal(response.headers.get("location"), "/en");
+});
+
+test("/en (canonical, no trailing slash) rewrites to / with lang en", async () => {
+  const runtime = createRuntime();
+  const calls = [];
+  const context = {
+    request: new Request("https://ninetone.com/en"),
+    url: new URL("https://ninetone.com/en"),
+    locals: { cfContext: { waitUntil: (p) => runtime.waits.push(p) } },
+  };
+  const next = async (payload) => {
+    calls.push(payload);
+    return new Response("home page");
+  };
+  await middlewareModule.onRequest(context, next);
+
+  assert.deepEqual(calls, ["/"], "next() must rewrite /en to the bare root");
+  assert.equal(context.locals.lang, "en");
+});
+
+test("/en/api/contact is a 404, not a rewrite — real API routes live at /api/* only", async () => {
+  const runtime = createRuntime();
+  let nextCalled = false;
+  const context = {
+    request: new Request("https://ninetone.com/en/api/contact", { method: "POST" }),
+    url: new URL("https://ninetone.com/en/api/contact"),
+    locals: { cfContext: { waitUntil: (p) => runtime.waits.push(p) } },
+  };
+  const next = async () => { nextCalled = true; return new Response("must not run"); };
+  const response = await middlewareModule.onRequest(context, next);
+
+  assert.equal(nextCalled, false, "next() must never be called for /en/api/*");
+  assert.equal(response.status, 404);
+  assert.equal(response.headers.get("x-frame-options"), "DENY", "the 404 still goes through harden()");
+});
+
+test("/en/api (no trailing segment) is also a 404, not a rewrite", async () => {
+  const runtime = createRuntime();
+  let nextCalled = false;
+  const context = {
+    request: new Request("https://ninetone.com/en/api"),
+    url: new URL("https://ninetone.com/en/api"),
+    locals: { cfContext: { waitUntil: (p) => runtime.waits.push(p) } },
+  };
+  const next = async () => { nextCalled = true; return new Response("must not run"); };
+  const response = await middlewareModule.onRequest(context, next);
+
+  assert.equal(nextCalled, false);
+  assert.equal(response.status, 404);
+});
+
+test("a path merely starting with 'en' (not a real /en segment) is not treated as English", async () => {
+  const runtime = createRuntime();
+  const calls = [];
+  const context = {
+    request: new Request("https://ninetone.com/enterprise"),
+    url: new URL("https://ninetone.com/enterprise"),
+    locals: { cfContext: { waitUntil: (p) => runtime.waits.push(p) } },
+  };
+  const next = async (payload) => { calls.push(payload); return new Response("enterprise page"); };
+  await middlewareModule.onRequest(context, next);
+
+  assert.deepEqual(calls, [undefined], "/enterprise must not be rewritten as if it were /en/terprise");
+  assert.equal(context.locals.lang, "sv");
+});
+
+test("nested Astro.rewrite('/404') does not stomp an outer en locale back to sv", async () => {
+  // Astro.rewrite("/404") (src/lib/not-found.ts) re-invokes this entire
+  // middleware a second, nested time with url.pathname already rewritten to
+  // the bare "/404" — and Astro's FetchState.locals is ONE shared object
+  // across outer and inner passes (astro/dist/core/fetch/fetch-state.js),
+  // never recreated by the rewrite machinery. If the inner pass re-derived
+  // lang from "/404" (no /en prefix -> "sv") and unconditionally wrote it,
+  // it would overwrite the outer pass's correct "en" while the visitor's
+  // request was still /en/records/artists/some-bad-slug. Simulated here by
+  // calling onRequest twice against the SAME locals object, exactly as the
+  // shared FetchState does.
+  const runtime = createRuntime();
+  const locals = { cfContext: { waitUntil: (p) => runtime.waits.push(p) } };
+
+  const outerContext = {
+    request: new Request("https://ninetone.com/en/records/artists/does-not-exist"),
+    url: new URL("https://ninetone.com/en/records/artists/does-not-exist"),
+    locals,
+  };
+  const outerNext = async () => {
+    // The detail route's lookup fails and it calls Astro.rewrite("/404"),
+    // which re-enters this middleware for "/404" against the SAME locals.
+    const innerContext = {
+      request: new Request("https://ninetone.com/404"),
+      url: new URL("https://ninetone.com/404"),
+      locals,
+    };
+    const innerNext = async () => new Response("<html>404</html>", { status: 404 });
+    return middlewareModule.onRequest(innerContext, innerNext);
+  };
+
+  const response = await middlewareModule.onRequest(outerContext, outerNext);
+  await Promise.all(runtime.waits);
+
+  assert.equal(locals.lang, "en", "the outer pass's en locale must survive the nested /404 rewrite");
+  assert.equal(response.status, 404);
+});
+
+test("cache keys are locale-distinct: /en/records and /records do not collide (would FAIL without the fix)", async () => {
+  // This is the critical correctness item from the brief: if the cache key
+  // were built from the REWRITTEN pathname (both requests resolve to
+  // "/records" once /en is stripped), the two locales would collide onto
+  // one shared cache slot and visitors would randomly get served the wrong
+  // language for up to the route's full TTL. The cache key must be built
+  // from the pathname AS RECEIVED (still carrying /en when present).
+  const runtimeSv = createRuntime();
+  await run(
+    new Request("https://ninetone.com/records"),
+    async () => new Response("swedish records page"),
+    runtimeSv,
+  );
+
+  const runtimeEn = createRuntime();
+  await run(
+    new Request("https://ninetone.com/en/records"),
+    async (payload) => new Response(`rewritten to ${payload}`),
+    runtimeEn,
+  );
+
+  assert.equal(runtimeSv.matched.length, 1);
+  assert.equal(runtimeEn.matched.length, 1);
+  assert.notEqual(
+    runtimeSv.matched[0],
+    runtimeEn.matched[0],
+    "sv and en cache-lookup keys must differ for the same underlying route",
+  );
+  // Both must actually have been stored too — i.e. this isn't just a lookup
+  // artifact, each locale gets its own cache entry on a miss.
+  assert.equal(runtimeSv.stored.length, 1);
+  assert.equal(runtimeEn.stored.length, 1);
+  assert.notEqual(runtimeSv.stored[0].key, runtimeEn.stored[0].key);
+});
+
+test("the en cache key still carries the correct TTL tier despite the /en prefix", async () => {
+  // ttlFor's table is written for the semantic (locale-free) route. This
+  // guards the OTHER failure mode of using the raw pathname everywhere: if
+  // ttlFor were also given the raw "/en/records" pathname, none of
+  // TTL_RULES' patterns match a leading "/en" segment and it would silently
+  // fall through to DEFAULT_TTL (3600s) instead of the 21600s section-landing
+  // tier — same content, different (wrong) freshness contract for English
+  // visitors only.
+  const runtime = createRuntime();
+  const response = await run(
+    new Request("https://ninetone.com/en/records"),
+    async (payload) => new Response(`rewritten to ${payload}`),
+    runtime,
+  );
+  assert.equal(response.headers.get("x-cache-ttl"), "21600");
+});
+
+// --- i18n Phase 2, section-2 review fixes -----------------------------------
+// Three defects caught in review, each reproduced before being fixed. Every
+// test below fails if its fix is reverted (mutation-verified).
+
+test("/en/admin/* keeps the SKIP-list cache bypass — a locale prefix must not defeat it", async () => {
+  // cache-policy's SKIP patterns are anchored (/^\/admin(\/|$)/), so passing
+  // the RAW "/en/admin/publish" made shouldBypassCache return false and the
+  // Publish console was stored at the edge for an hour. The bypass is a
+  // semantic-route question, so it takes the STRIPPED path.
+  const runtime = createRuntime();
+  const context = {
+    request: new Request("https://ninetone.com/en/admin/publish"),
+    url: new URL("https://ninetone.com/en/admin/publish"),
+    locals: { cfContext: { waitUntil: (p) => runtime.waits.push(p) } },
+  };
+  const next = async () => new Response("<html>publish console</html>", {
+    status: 200,
+    headers: { "content-type": "text/html" },
+  });
+  const response = await middlewareModule.onRequest(context, next);
+
+  assert.equal(runtime.matched.length, 0, "an /admin route must never be looked up in the edge cache");
+  assert.equal(runtime.stored.length, 0, "an /admin route must never be STORED in the edge cache");
+  assert.equal(response.headers.get("x-cache"), null, "bypassed responses carry no x-cache annotation");
+});
+
+test("/en/404 keeps the SKIP-list cache bypass, same as bare /404", async () => {
+  const runtime = createRuntime();
+  const context = {
+    request: new Request("https://ninetone.com/en/404"),
+    url: new URL("https://ninetone.com/en/404"),
+    locals: { cfContext: { waitUntil: (p) => runtime.waits.push(p) } },
+  };
+  const next = async () => new Response("<html>not found</html>", {
+    status: 200,
+    headers: { "content-type": "text/html" },
+  });
+  await middlewareModule.onRequest(context, next);
+
+  assert.equal(runtime.stored.length, 0, "/404 is deliberately never edge-cached — see cache-policy.ts");
+});
+
+test("/en/en/* is a deliberate 404, not a single-level strip into a route miss", async () => {
+  // A second "/en" is a real path segment, not another locale prefix.
+  // Stripping one level rewrote to "/en/records" (not a route) and
+  // route-missed into a 404 that was then CACHED — one entry per member of
+  // the infinite /en/en/en/... family.
+  const runtime = createRuntime();
+  let nextCalled = false;
+  const context = {
+    request: new Request("https://ninetone.com/en/en/records"),
+    url: new URL("https://ninetone.com/en/en/records"),
+    locals: { cfContext: { waitUntil: (p) => runtime.waits.push(p) } },
+  };
+  const next = async () => { nextCalled = true; return new Response("must not run"); };
+  const response = await middlewareModule.onRequest(context, next);
+
+  assert.equal(nextCalled, false, "next() must never be called for /en/en/*");
+  assert.equal(response.status, 404);
+  assert.equal(runtime.stored.length, 0, "the /en/en/... family must not mint cache entries");
+});
+
+test("legacy previous-artist deep links keep the visitor's locale across the 301", async () => {
+  // "/en/previous-artists/kuokka" used to miss the anchored legacy pattern
+  // entirely, fall through to the rewrite, and route-miss into a hard 404 —
+  // while the Swedish visitor following the same Discogs link got a working
+  // 301. Now the lookup runs on the stripped path and the locale is
+  // re-applied to the destination.
+  const runtime = createRuntime();
+  const context = {
+    request: new Request("https://ninetone.com/en/previous-artists/kuokka"),
+    url: new URL("https://ninetone.com/en/previous-artists/kuokka"),
+    locals: { cfContext: { waitUntil: (p) => runtime.waits.push(p) } },
+  };
+  const response = await middlewareModule.onRequest(context, async () => new Response("must not render"));
+
+  assert.equal(response.status, 301);
+  assert.equal(
+    response.headers.get("Location"),
+    "/en/records/artists/previous/single/kuokka",
+    "an English visitor must land on the English detail page, not the Swedish one",
+  );
+});
+
+test("the Swedish legacy redirect is unchanged by the locale-aware lookup", async () => {
+  const runtime = createRuntime();
+  const context = {
+    request: new Request("https://ninetone.com/previous-artists/kuokka"),
+    url: new URL("https://ninetone.com/previous-artists/kuokka"),
+    locals: { cfContext: { waitUntil: (p) => runtime.waits.push(p) } },
+  };
+  const response = await middlewareModule.onRequest(context, async () => new Response("must not render"));
+
+  assert.equal(response.status, 301);
+  assert.equal(response.headers.get("Location"), "/records/artists/previous/single/kuokka");
+});
