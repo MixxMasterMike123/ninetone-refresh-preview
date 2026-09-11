@@ -8,7 +8,7 @@ import { pageJsonLdOrigin } from "../../lib/site";
 import { collectionPage } from "../../lib/schema";
 import { slugifyTag } from "../../lib/booking-slug";
 import { url, urlFor } from "../../lib/url";
-import { sharedT } from "../../lib/t";
+import { fmText, sharedT } from "../../lib/t";
 
 // Locale-bound link builder (i18n Phase 2): every internal href on an
 // English page must keep the /en prefix, or one click drops the visitor
@@ -23,7 +23,20 @@ const categories = await getBookingCategories();
 // Only render categories that have at least one talent — empty
 // categories add noise without adding value. The data still
 // exists in FM; this is purely a render filter.
-const populatedCategories = categories.filter((c) => c.artists.length > 0);
+const populatedCategoriesRaw = categories.filter((c) => c.artists.length > 0);
+
+// FM CONTENT (decision 8): each talent's blurb is FM prose. Pre-translated
+// here because fm() is async and the cards render inside nested .map()s,
+// which cannot await.
+const fm = fmText(Astro.locals);
+const populatedCategories = await Promise.all(
+  populatedCategoriesRaw.map(async (c) => ({
+    ...c,
+    artists: await Promise.all(
+      c.artists.map(async (a) => ({ ...a, blurb: await fm(String(a.blurb ?? "")) })),
+    ),
+  })),
+);
 
 // Section intro copy: pull from WebPosts (same as before).
 const webPosts = await getWebPostSection("Ninetone Nation");

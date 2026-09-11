@@ -10,7 +10,13 @@ import { displayTitle, paginatedTitle } from "../../../../lib/display-title";
 import { PREVIOUS_ARTISTS_PAGE_SIZE } from "../../../../lib/routes";
 import { notFound } from "../../../../lib/not-found";
 import { sectionAccent } from "../../../../lib/sections";
-import { sharedT } from "../../../../lib/t";
+import { fmText, sharedT } from "../../../../lib/t";
+// FM CONTENT (decision 8): the card blurbs are FM prose, warmed by
+// scripts/translate-warm.mjs and previously rendered raw — so these listings
+// stayed Swedish on /en/. Resolved here in frontmatter because fm() is async
+// and the cards render inside .map().
+const fm = fmText(Astro.locals);
+
 
 // Single source of truth lives in src/lib/routes.ts so the sitemap derives the
 // same page count from the same number. Re-exported because only exports are
@@ -48,6 +54,20 @@ if (!page) {
     total: all.length,
   };
 }
+
+// Pre-translate this page's blurbs: fm() is async and the cards render
+// inside a template .map(), which cannot await. Done after `page` is
+// resolved (it arrives either as a prop from getStaticPaths or is built
+// above), so both paths get translated cards.
+page = {
+  ...page,
+  data: await Promise.all(
+    page.data.map(async (a) => ({
+      ...a,
+      artistPresentationShort: await fm(String(a.artistPresentationShort ?? "")),
+    })),
+  ),
+};
 
 // Reuse Records section intro. Both fetches cached, so effectively free.
 const active = await getArtists();

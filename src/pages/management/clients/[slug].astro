@@ -111,6 +111,17 @@ let latestNews: Awaited<ReturnType<typeof getNewsForArtist>> = [];
 try { latestNews = await getNewsForArtist(name, 4); } catch (err) {
   console.error(`[client] news strip failed:`, err);
 }
+// FM CONTENT (decision 8): the "In the news" cards render FM headlines and
+// excerpts. NewsCard translates only its own chrome labels, so without this
+// the block stayed Swedish on /en/ while the bio above it was English.
+// Pre-resolved here — fm() is async and these render in a .map().
+latestNews = await Promise.all(
+  latestNews.map(async (p) => ({
+    ...p,
+    Title: await fm(String(p.Title ?? "")),
+    shortMessage: await fm(String(p.shortMessage ?? p.Message ?? "")),
+  })),
+);
 
 // "In good company" — same-tag clients ranked by overlap, padded with random
 // others if there aren't enough matches.

@@ -2,7 +2,7 @@
 import { renderBio } from "../lib/markdown";
 import type { WebPostCategory } from "../lib/ninetone";
 import { displayTitle } from "../lib/display-title";
-import { sharedT } from "../lib/t";
+import { fmText, sharedT } from "../lib/t";
 
 interface Props {
   data: WebPostCategory | null;
@@ -27,19 +27,28 @@ function stripOuterTag(s: string): string {
   return s.replace(/^\s*<([a-z0-9]+)[^>]*>([\s\S]*?)<\/\1>\s*$/i, "$2").trim();
 }
 
+// FM CONTENT (decision 8). scripts/translate-warm.mjs explicitly warms
+// `block.subject` and `block.message`, so those translations are sitting in
+// KV — they were simply never read here. The previous comment claimed they
+// were "translated elsewhere via translate()", which was not true of any
+// call site: nothing translated them at all, so every WebPosts section
+// rendered Swedish on /en/.
+//
+// Subject as a title, message as MARKDOWN before renderBio (decision 8's
+// ordering, so links and line breaks survive), both on the `fast` tier to
+// match the keys the warm script wrote.
+const fm = fmText(Astro.locals);
 const blocks = hasContent
-  ? data!.blocks.map((b) => ({
-      subject: displayTitle(stripOuterTag(b.subject)),
-      messageHtml: renderBio(b.message),
-    }))
+  ? await Promise.all(
+      data!.blocks.map(async (b) => ({
+        subject: displayTitle(stripOuterTag(await fm(b.subject, "title"))),
+        messageHtml: renderBio(await fm(b.message, "markdown")),
+      })),
+    )
   : [];
 
-const pageTitle = hasContent ? displayTitle(heading ?? data!.title) : "";
+const pageTitle = hasContent ? displayTitle(await fm(heading ?? data!.title, "title")) : "";
 
-// t() bound to this request (docs/i18n-phase-2-brief.md section 4). Only
-// this component's own "About" kicker is chrome — `pageTitle`/`b.subject`/
-// `b.messageHtml` are FM-derived content, translated elsewhere via
-// translate(), not this component's job.
 const t = sharedT(Astro.locals);
 const aboutKicker = await t("About");
 ---

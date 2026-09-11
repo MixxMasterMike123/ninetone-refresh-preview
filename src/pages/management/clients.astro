@@ -6,11 +6,26 @@ import RosterFilters from "../../components/RosterFilters.astro";
 import RosterIndex from "../../components/RosterIndex.astro";
 import { getClients, getWebPostSection } from "../../lib/ninetone";
 import { displayTitle } from "../../lib/display-title";
-import { sharedT } from "../../lib/t";
+import { fmText, sharedT } from "../../lib/t";
+// FM CONTENT (decision 8): the card blurbs are FM prose, warmed by
+// scripts/translate-warm.mjs and previously rendered raw — so these listings
+// stayed Swedish on /en/. Resolved here in frontmatter because fm() is async
+// and the cards render inside .map().
+const fm = fmText(Astro.locals);
+
 
 // Core content — failures render the error page (never edge-cached) instead
 // of a silently-empty client roster. Transients are absorbed by lib/cache.ts.
-const clients = await getClients();
+const clientsRaw = await getClients();
+// Pre-translate the blurbs here — see the note in records/artists.astro.
+const clients = await Promise.all(
+  clientsRaw.map(async (c) => ({
+    ...c,
+    clientPresentationString: await fm(
+      String(c.clientPresentationString ?? c.artistPresentationShort ?? ""),
+    ),
+  })),
+);
 const introBody = String((clients[0] as Record<string, unknown> | undefined)?.readMoreClients ?? "");
 const webPosts = await getWebPostSection("Ninetone Management");
 
@@ -79,7 +94,7 @@ const description = await t(
                 theme="management"
                 name={name}
                 slug={String(c.SLUG ?? "")}
-                blurb={String(c.clientPresentationString ?? c.artistPresentationShort ?? "")}
+                blurb={String(c.clientPresentationString ?? "")}
                 image={c.artistPicture_small ? String(c.artistPicture_small) : undefined}
                 imageWidth={500}
                 imageHeight={500}

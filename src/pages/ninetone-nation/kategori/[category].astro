@@ -10,7 +10,7 @@ import { collectionPage, faqPage } from "../../../lib/schema";
 import { sectionAccent } from "../../../lib/sections";
 import { renderBio } from "../../../lib/markdown";
 import { notFound } from "../../../lib/not-found";
-import { sharedT } from "../../../lib/t";
+import { fmText, sharedT } from "../../../lib/t";
 
 // Locale-bound link builder (i18n Phase 2): every internal href on an
 // English page must keep the /en prefix, or one click drops the visitor
@@ -91,7 +91,16 @@ const frequentlyAskedHeading = await t("Frequently asked.");
 const bookableThroughSuffix = await t(
   "bookable through Ninetone Nation — browse the full roster and get in touch to book your event.",
 );
-const description = category.description || `${category.tag} ${bookableThroughSuffix}`;
+// FM CONTENT (decision 8): scripts/translate-warm.mjs warms
+// `cat.description` on the quality tier (it is division voice copy), and it
+// was never read — so category intros stayed Swedish on /en/.
+const fm = fmText(Astro.locals);
+const categoryDescription = await fm(String(category.description ?? ""));
+// Talent blurbs on the cards below — same reason as booking.astro.
+const categoryArtists = await Promise.all(
+  category.artists.map(async (a) => ({ ...a, blurb: await fm(String(a.blurb ?? "")) })),
+);
+const description = categoryDescription || `${category.tag} ${bookableThroughSuffix}`;
 
 ---
 
@@ -116,9 +125,9 @@ const description = category.description || `${category.tag} ${bookableThroughSu
             {category.tag}
           </h1>
 
-          {category.description && (
+          {categoryDescription && (
             <p class="mt-6 max-w-2xl font-display text-2xl italic leading-snug tracking-tight text-ninetone-ink/75 md:text-3xl">
-              {category.description}
+              {categoryDescription}
             </p>
           )}
         </div>
@@ -144,7 +153,7 @@ const description = category.description || `${category.tag} ${bookableThroughSu
   <section class="bg-ninetone-paper pb-24">
     <div class="mx-auto max-w-7xl px-6">
       <div class="grid grid-cols-2 gap-x-6 gap-y-12 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-        {category.artists.map((a) => (
+        {categoryArtists.map((a) => (
           <ArtistCard
             theme="nation"
             name={a.name}

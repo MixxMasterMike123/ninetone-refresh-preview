@@ -125,6 +125,17 @@ const spotifyArtistId = spotifyArtistMatch ? spotifyArtistMatch[1] : null;
 let latestNews: Awaited<ReturnType<typeof getNewsForArtist>> = [];
 try {
   latestNews = await getNewsForArtist(name, 4);
+// FM CONTENT (decision 8): the "In the news" cards render FM headlines and
+// excerpts. NewsCard translates only its own chrome labels, so without this
+// the block stayed Swedish on /en/ even though the page's bio above it was
+// English. Pre-resolved here — fm() is async and these render in a .map().
+latestNews = await Promise.all(
+  latestNews.map(async (p) => ({
+    ...p,
+    Title: await fm(String(p.Title ?? "")),
+    shortMessage: await fm(String(p.shortMessage ?? p.Message ?? "")),
+  })),
+);
 } catch (err) {
   console.error(`[artist:${slug}] news strip failed:`, err);
 }

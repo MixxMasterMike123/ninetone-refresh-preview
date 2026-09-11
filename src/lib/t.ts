@@ -387,8 +387,19 @@ export function fmText(
   const memo = table;
 
   return async (source, kind = "plain") => {
-    const text = typeof source === "string" ? source : "";
-    if (!text.trim()) return text;
+    // TRIM before hashing. scripts/translate-warm.mjs's job() trims every
+    // source string it collects, so the warm cache is keyed on TRIMMED text.
+    // FM fields routinely carry a stray leading/trailing newline, and a
+    // single byte of whitespace produces a completely different sha256 — the
+    // page would look up a key the warm run never wrote and miss forever.
+    //
+    // Found via a Nation bio: raw 2378 chars -> key e677db56..., trimmed 2377
+    // -> key 547e20fb..., and only the trimmed one existed in KV. 1 of 9
+    // Nation bios was affected, which is why some detail pages translated and
+    // others silently did not. Trimming is also just correct on its own —
+    // leading whitespace is not content worth translating or caching.
+    const text = typeof source === "string" ? source.trim() : "";
+    if (!text) return text;
 
     const memoKey = `fm:${kind}:${text}`;
     const hit = memo.get(memoKey);

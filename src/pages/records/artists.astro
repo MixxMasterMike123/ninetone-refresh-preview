@@ -7,11 +7,25 @@ import RosterFilters from "../../components/RosterFilters.astro";
 import RosterIndex from "../../components/RosterIndex.astro";
 import { getArtists, getWebPostSection } from "../../lib/ninetone";
 import { displayTitle } from "../../lib/display-title";
-import { sharedT } from "../../lib/t";
+import { fmText, sharedT } from "../../lib/t";
+// FM CONTENT (decision 8): the card blurbs are FM prose, warmed by
+// scripts/translate-warm.mjs and previously rendered raw — so these listings
+// stayed Swedish on /en/. Resolved here in frontmatter because fm() is async
+// and the cards render inside .map().
+const fm = fmText(Astro.locals);
+
 
 // Core content — failures render the error page (never edge-cached) instead
 // of a silently-empty roster. Transients are absorbed by lib/cache.ts.
-const artists = await getArtists();
+const artistsRaw = await getArtists();
+// Pre-translate the blurbs here: fm() is async and the cards render inside a
+// template .map(), which cannot await (Astro compiler error).
+const artists = await Promise.all(
+  artistsRaw.map(async (a) => ({
+    ...a,
+    artistPresentationShort: await fm(String(a.artistPresentationShort ?? "")),
+  })),
+);
 const introBody = String((artists[0] as Record<string, unknown> | undefined)?.readMore ?? "");
 const webPosts = await getWebPostSection("Ninetone Records");
 
