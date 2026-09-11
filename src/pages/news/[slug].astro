@@ -7,7 +7,7 @@ import { pageJsonLdOrigin } from "../../lib/site";
 import { breadcrumbs, newsArticle, markdownToPlainText, fmDateToIso } from "../../lib/schema";
 import { shouldAppendSiteName } from "../../lib/display-title";
 import { notFound } from "../../lib/not-found";
-import { sharedT } from "../../lib/t";
+import { fmText, sharedT } from "../../lib/t";
 import { formatDate, type Lang } from "../../lib/dates";
 
 export async function getStaticPaths() {
@@ -29,7 +29,13 @@ if (!post) {
   if (!post) return notFound(() => Astro.rewrite("/404"));
 }
 
-const title = String(post.Title ?? "");
+const fm = fmText(Astro.locals);
+// FM CONTENT (decision 8): the headline as a title, the body as MARKDOWN so
+// renderBio still receives markdown — the system prompt keeps syntax, links
+// and line breaks byte-for-byte and rewrites only the prose. `fast` tier to
+// match what scripts/translate-warm.mjs warmed; a different tier is a
+// different cache key and would miss every warmed entry.
+const title = await fm(String(post.Title ?? ""), "title");
 
 // seo-phase-1b-brief.md P1 item 7: FM news headlines are written as
 // editorial copy, not SEO strings, and can run long. Appending
@@ -44,7 +50,7 @@ const date = String(post.Date ?? "");
 const category = String(post.category ?? "");
 const lede = String(post.shortMessage ?? "");
 const image = post.image_webp ? String(post.image_webp) : undefined;
-const messageHtml = renderBio(String(post.MessageString ?? post.Message ?? ""));
+const messageHtml = renderBio(await fm(String(post.MessageString ?? post.Message ?? ""), "markdown"));
 
 const ytLinks = [post.ytLinkA, post.ytLinkB, post.ytLinkC, post.ytLinkD]
   .map((u) => String(u ?? "").trim())

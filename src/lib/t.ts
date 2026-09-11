@@ -47,7 +47,14 @@
  * `opts.protect` parameters, so no change to translate.ts was needed.
  */
 
-import { createT, RequestBudget, type Lang, type TFunction } from "./translate.ts";
+import {
+  createT,
+  RequestBudget,
+  translate,
+  waitUntilFromLocals,
+  type Lang,
+  type TFunction,
+} from "./translate.ts";
 
 // `createRequire` itself has zero runtime side effect until invoked — it
 // just returns a function. Safe as a top-level import on both deploy
@@ -321,6 +328,85 @@ export function sharedT(
     // inherited property of translate.ts that a future edit could regress.
     const job = baseT(source).catch(() => source);
     memo.set(source, job);
+    return job;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// FM CONTENT (decision 8 + the Definition of done's bio requirement)
+// ---------------------------------------------------------------------------
+
+/**
+ * Translate a piece of FM-sourced CONTENT — a news title, an excerpt, a bio,
+ * a tagline — as opposed to UI chrome.
+ *
+ * WHY THIS IS SEPARATE FROM sharedT()/t():
+ *
+ *   - Tier. Chrome is the voice of the site and goes `quality`. Entity prose
+ *     is high-volume and goes `fast`, matching how scripts/translate-warm.mjs
+ *     warmed it. The tier is part of the cache key, so a mismatch here means
+ *     a guaranteed permanent miss against an already-warmed entry — the exact
+ *     class of bug Implementation note E describes for double-translation.
+ *   - Kind. A bio is markdown and must survive translation byte-for-byte
+ *     except the prose (decision 8); a title is a title. Chrome is always
+ *     plain.
+ *   - Protected names. An artist/client/talent name must never be
+ *     "translated" into nonsense, so the entity in scope is passed through
+ *     `protect` on top of the fixed list (decision 7).
+ *
+ * WHY IT REUSES sharedT's BUDGET AND MEMO: a news index renders ~20 cards,
+ * each with a title and an excerpt, on top of the page's own chrome. Those
+ * all have to answer to ONE per-request ceiling (note C), or a single render
+ * could fan out unboundedly. Passing the same `locals` object through
+ * `createT`'s `budget` option is what keeps one budget for the whole render.
+ *
+ * Degrades exactly like chrome: a cache miss returns the SOURCE text and
+ * schedules the translation via waitUntil (decision 6). A Swedish news title
+ * on an English page for one render is the intended failure mode — never a
+ * blank card, never a blocked response.
+ */
+export function fmText(
+  locals: LocalsForT,
+  opts?: { protect?: string[]; lang?: Lang },
+): (source: string | null | undefined, kind?: "plain" | "markdown" | "title") => Promise<string> {
+  const l = locals as LocalsForT;
+  if (!l.__i18nBudget) l.__i18nBudget = new RequestBudget();
+  const budget = l.__i18nBudget;
+
+  const target = opts?.lang ?? l.lang ?? "sv";
+  const waitUntil = waitUntilFromLocals(l);
+
+  // Memoize per (source, kind) on the same per-request table sharedT uses, so
+  // a title and a bio with identical text don't collide and a repeated field
+  // across cards costs one call.
+  let table = memoTables.get(l);
+  if (!table) {
+    table = new Map();
+    memoTables.set(l, table);
+  }
+  const memo = table;
+
+  return async (source, kind = "plain") => {
+    const text = typeof source === "string" ? source : "";
+    if (!text.trim()) return text;
+
+    const memoKey = `fm:${kind}:${text}`;
+    const hit = memo.get(memoKey);
+    if (hit) return hit;
+
+    const job = translate({
+      text,
+      target,
+      tier: "fast",
+      kind,
+      protect: opts?.protect,
+      waitUntil,
+      budget,
+    })
+      .then((r) => r.text)
+      .catch(() => text);
+
+    memo.set(memoKey, job);
     return job;
   };
 }

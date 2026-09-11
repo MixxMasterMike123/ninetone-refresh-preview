@@ -13,7 +13,7 @@ import { url } from "../../../../../lib/url";
 import { pageJsonLdOrigin } from "../../../../../lib/site";
 import { breadcrumbs, musicGroup, markdownToPlainText, fmDateToIso, descriptionWithBioFallback } from "../../../../../lib/schema";
 import { notFound } from "../../../../../lib/not-found";
-import { sharedT } from "../../../../../lib/t";
+import { fmText, sharedT } from "../../../../../lib/t";
 
 export async function getStaticPaths() {
   const artists = await getPreviousArtists();
@@ -41,8 +41,13 @@ const detail = await getArtistDetailWithReleases(slug);
 const releases = detail?.releases ?? [];
 
 const name = String(artist["Head Artist"] ?? "");
-const tagline = String(artist["Artist Presentation Title"] ?? "");
-const bioHtml = renderBio(String(artist.artistPresentationString ?? ""));
+// FM CONTENT (decision 8 / Definition of done). The entity's own name goes
+// into `protect` so it is never "translated" into nonsense, and prose is
+// translated on the `fast` tier — the same tier scripts/translate-warm.mjs
+// used, so these read the already-warmed entries rather than paying again.
+const fm = fmText(Astro.locals, { protect: [name] });
+const tagline = await fm(String(artist["Artist Presentation Title"] ?? ""));
+const bioHtml = renderBio(await fm(String(artist.artistPresentationString ?? ""), "markdown"));
 
 // Same rule as the active-artist and client pages (seo-phase-1b P1 item 7):
 // a tagline under 70 characters is too thin to serve as a meta description, so

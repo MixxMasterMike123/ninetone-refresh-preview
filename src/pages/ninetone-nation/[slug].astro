@@ -13,7 +13,7 @@ import { url } from "../../lib/url";
 import { pageJsonLdOrigin } from "../../lib/site";
 import { breadcrumbs, person, markdownToPlainText } from "../../lib/schema";
 import { notFound } from "../../lib/not-found";
-import { sharedT } from "../../lib/t";
+import { fmText, sharedT } from "../../lib/t";
 
 // Generate a page for every Active talent listed on the booking page.
 // Source of truth = the curated BOOKING_TAG portal set, filtered to
@@ -45,8 +45,13 @@ if (!e || !allRoster) {
 }
 
 const name = String(e["Head Artist"] ?? "");
-const tagline = String(e.bookingPresentationTitle ?? "");
-const bioHtml = renderBio(String(e.bookingPresentationString ?? ""));
+// FM CONTENT (decision 8 / Definition of done). The entity's own name goes
+// into `protect` so it is never "translated" into nonsense, and prose is
+// translated on the `fast` tier — the same tier scripts/translate-warm.mjs
+// used, so these read the already-warmed entries rather than paying again.
+const fm = fmText(Astro.locals, { protect: [name] });
+const tagline = await fm(String(e.bookingPresentationTitle ?? ""));
+const bioHtml = renderBio(await fm(String(e.bookingPresentationString ?? ""), "markdown"));
 const heroImage = e.artistPicture_big
   ? String(e.artistPicture_big)
   : e.artistPicture_small

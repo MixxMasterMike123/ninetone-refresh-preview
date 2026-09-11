@@ -2,7 +2,7 @@
 import Base from "../../layouts/Base.astro";
 import NewsCard from "../../components/NewsCard.astro";
 import { getNews } from "../../lib/ninetone";
-import { sharedT } from "../../lib/t";
+import { fmText, sharedT } from "../../lib/t";
 
 const hasNewsVideo = (p: Record<string, unknown>): boolean =>
   ["ytLinkA", "ytLinkB", "ytLinkC", "ytLinkD"].some((k) => {
@@ -12,7 +12,31 @@ const hasNewsVideo = (p: Record<string, unknown>): boolean =>
 
 // Core content — failures render the error page (never edge-cached) instead
 // of a silently-empty feed. Transients are absorbed by lib/cache.ts.
-const posts = await getNews();
+const postsRaw = await getNews();
+
+// FM CONTENT (decision 8 / Definition of done). getNews() returns Swedish
+// prose; on /en/ the titles and excerpts have to be English too, or the page
+// is English chrome wrapped around Swedish articles — which is what shipped
+// before this was wired up.
+//
+// Translated ONCE here in frontmatter rather than at each of the six
+// <NewsCard> call sites below: t()/fmText() are async, and resolving them in
+// the template would mean awaiting inside .map(), which Astro cannot do.
+// fmText() memoizes per request, so the lead post appearing in more than one
+// slot costs one call, and every card answers to the page's single budget.
+//
+// "title" kind for headlines, "plain" for excerpts. Both go through the
+// `fast` tier, matching how scripts/translate-warm.mjs warmed them — the tier
+// is part of the cache key, so using `quality` here would miss every warmed
+// entry and re-translate the whole feed at a visitor's expense.
+const fm = fmText(Astro.locals);
+const posts = await Promise.all(
+  postsRaw.map(async (p) => ({
+    ...p,
+    Title: await fm(String(p.Title ?? ""), "title"),
+    shortMessage: await fm(String(p.shortMessage ?? p.Message ?? "")),
+  })),
+);
 
 const [lead, ...rest] = posts;
 const featured = rest.slice(0, 2);
@@ -58,7 +82,7 @@ const archiveKicker = await t("Archive");
           title={String(lead.Title ?? "")}
           slug={String(lead.slug ?? "")}
           image={lead.image_webp ? String(lead.image_webp) : undefined}
-          excerpt={String(lead.shortMessage ?? lead.Message ?? "")}
+          excerpt={String(lead.shortMessage ?? "")}
           date={String(lead.Date ?? "")}
           author={String(lead["Created By"] ?? "")}
           category={String(lead.category ?? "")}
@@ -76,7 +100,7 @@ const archiveKicker = await t("Archive");
               title={String(p.Title ?? "")}
               slug={String(p.slug ?? "")}
               image={p.image_webp ? String(p.image_webp) : undefined}
-              excerpt={String(p.shortMessage ?? p.Message ?? "")}
+              excerpt={String(p.shortMessage ?? "")}
               date={String(p.Date ?? "")}
               author={String(p["Created By"] ?? "")}
               category={String(p.category ?? "")}
@@ -99,7 +123,7 @@ const archiveKicker = await t("Archive");
               title={String(p.Title ?? "")}
               slug={String(p.slug ?? "")}
               image={p.image_webp ? String(p.image_webp) : undefined}
-              excerpt={String(p.shortMessage ?? p.Message ?? "")}
+              excerpt={String(p.shortMessage ?? "")}
               date={String(p.Date ?? "")}
               category={String(p.category ?? "")}
               hasVideo={hasNewsVideo(p)}

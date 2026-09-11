@@ -13,7 +13,7 @@ import { url } from "../../../lib/url";
 import { pageJsonLdOrigin } from "../../../lib/site";
 import { breadcrumbs, person, markdownToPlainText, descriptionWithBioFallback } from "../../../lib/schema";
 import { notFound } from "../../../lib/not-found";
-import { sharedT } from "../../../lib/t";
+import { fmText, sharedT } from "../../../lib/t";
 
 export async function getStaticPaths() {
   const clients = await getClients();
@@ -36,8 +36,13 @@ if (!client || !allClients) {
 }
 
 const name = String(client["Head Artist"] ?? "");
-const tagline = String(client.clientPresentationTitle ?? "");
-const bioMarkdown = String(client.clientPresentationString ?? "");
+// FM CONTENT (decision 8 / Definition of done). The entity's own name goes
+// into `protect` so it is never "translated" into nonsense, and prose is
+// translated on the `fast` tier — the same tier scripts/translate-warm.mjs
+// used, so these read the already-warmed entries rather than paying again.
+const fm = fmText(Astro.locals, { protect: [name] });
+const tagline = await fm(String(client.clientPresentationTitle ?? ""));
+const bioMarkdown = await fm(String(client.clientPresentationString ?? ""), "markdown");
 const bioHtml = renderBio(bioMarkdown);
 
 // seo-phase-1b-brief.md P1 item 7: the same person can appear on both the

@@ -14,7 +14,7 @@ import { url } from "../../../lib/url";
 import { pageJsonLdOrigin } from "../../../lib/site";
 import { breadcrumbs, musicGroup, markdownToPlainText, descriptionWithBioFallback, fmDateToIso } from "../../../lib/schema";
 import { notFound } from "../../../lib/not-found";
-import { sharedT } from "../../../lib/t";
+import { fmText, sharedT } from "../../../lib/t";
 
 export async function getStaticPaths() {
   const artists = await getArtists();
@@ -50,8 +50,21 @@ const detail = await getArtistDetailWithReleases(slug);
 const releases = detail?.releases ?? [];
 
 const name = String(artist["Head Artist"] ?? "");
-const tagline = String(artist["Artist Presentation Title"] ?? "");
-const bioMarkdown = String(artist.artistPresentationString ?? "");
+
+// FM CONTENT (decision 8 + the Definition of done: "the same artist page at
+// both URLs shows the bio in each language with markdown intact and the
+// artist name untouched").
+//
+// The artist's name goes into `protect` on top of the fixed do-not-translate
+// list (decision 7) — a band called "Styrelsen" or "The S Kid" must come back
+// spelled exactly that way, not helpfully rendered as "The Board". The name
+// itself is never translated; it is rendered from the raw FM value below.
+//
+// The bio is translated as MARKDOWN and only then handed to renderBio, per
+// decision 8's ordering, so links and line breaks survive byte-for-byte.
+const fm = fmText(Astro.locals, { protect: [name] });
+const tagline = await fm(String(artist["Artist Presentation Title"] ?? ""));
+const bioMarkdown = await fm(String(artist.artistPresentationString ?? ""), "markdown");
 const bioHtml = renderBio(bioMarkdown);
 
 // seo-phase-1b-brief.md P1 item 7: the same person can appear on both the
