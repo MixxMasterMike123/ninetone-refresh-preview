@@ -8,8 +8,14 @@ import EditorialNewsBlock from "../components/EditorialNewsBlock.astro";
 import MarqueeBand from "../components/MarqueeBand.astro";
 import MerchSection from "../components/MerchSection.astro";
 import { sectionAccent } from "../lib/sections";
-import { url } from "../lib/url";
-import { sharedT } from "../lib/t";
+import { url, urlFor } from "../lib/url";
+import { fmText, sharedT } from "../lib/t";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 import {
   getFeaturedArtists,
   getArtistOfTheWeek,
@@ -141,6 +147,15 @@ const whatsMovingH2 = await t("What's moving.");
 const whatsMovingBody = await t("Projekt, releaser, berättelser och människor vi arbetar med just nu.");
 const updatedWeeklyLabel = await t("Updated weekly");
 const artistOfWeekKicker = await t("Artist of the week");
+// FM CONTENT on the homepage (decision 8). The bento tiles and the Latest
+// Story headline render FM prose directly — without this they stayed Swedish
+// on /en/ while the chrome around them was English. Names are protected so
+// "Hälsingefyr" and "Avdelning 44" are never "translated".
+const fm = fmText(Astro.locals, { protect: [heroArtistName, heroClientName].filter(Boolean) });
+const heroArtistBlurb = await fm(String(heroArtist?.artistPresentationShort ?? ""));
+const heroClientBlurb = await fm(String(heroClient?.clientPresentationShort || heroClient?.artistPresentationShort || ""));
+const featuredNewsHeading = await fm(String(featuredNewsItem?.Title ?? ""), "title");
+
 const viewProfileCta = await t("View profile"); // reused for both heroArtist + heroClient tiles — memoized to one call.
 const latestStoryKicker = await t("Latest story");
 const readCta = await t("Read");
@@ -214,6 +229,7 @@ const closingH2 = await t("Tell us what needs to move.");
 const closingBody = await t(
   "Har du musik som behöver hitta rätt publik, en profil som behöver struktur, ett företag som behöver formulera sitt erbjudande eller en organisation som behöver nå fram? Börja där. Vi hjälper dig att bygga bron.",
 );
+
 ---
 
 <Base
@@ -399,7 +415,7 @@ const closingBody = await t(
             imageHeight={heroArtistImageSize}
             kicker={artistOfWeekKicker}
             heading={heroArtistName}
-            blurb={String(heroArtist.artistPresentationShort ?? "")}
+            blurb={heroArtistBlurb}
             cta={viewProfileCta}
             priority
           />
@@ -413,7 +429,7 @@ const closingBody = await t(
             href={`/news/${String(featuredNewsItem.slug ?? "")}`}
             image={featuredNewsItem.image_webp ? String(featuredNewsItem.image_webp) : undefined}
             kicker={latestStoryKicker}
-            heading={String(featuredNewsItem.Title ?? "")}
+            heading={featuredNewsHeading}
             cta={readCta}
           />
         )}
@@ -459,7 +475,7 @@ const closingBody = await t(
             imageHeight={heroClientImageSize}
             kicker={clientInFocusKicker}
             heading={heroClientName}
-            blurb={String(heroClient.clientPresentationShort || heroClient.artistPresentationShort || "")}
+            blurb={heroClientBlurb}
             cta={viewProfileCta}
           />
         )}

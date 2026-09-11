@@ -2,8 +2,14 @@
 import Base from "../../layouts/Base.astro";
 import { getTeam, getWebPostSection } from "../../lib/ninetone";
 import { renderBio } from "../../lib/markdown";
-import { url } from "../../lib/url";
+import { url, urlFor } from "../../lib/url";
 import { sharedT } from "../../lib/t";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 
 // Core content — failures render the error page (never edge-cached) instead
 // of a silently-empty team grid. Transients are absorbed by lib/cache.ts.
@@ -42,6 +48,7 @@ const description = await t(
 );
 const teamKicker = await t("Ninetone — Team");
 const fallbackHeading = await t("The people behind the work.");
+
 ---
 
 <Base

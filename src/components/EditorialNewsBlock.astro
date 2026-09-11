@@ -1,8 +1,14 @@
 ---
 import NewsCard from "./NewsCard.astro";
 import { getNews } from "../lib/ninetone";
-import { url } from "../lib/url";
-import { sharedT } from "../lib/t";
+import { url, urlFor } from "../lib/url";
+import { fmText, sharedT } from "../lib/t";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 
 interface Props {
   /** Total stories to render. The first becomes the lead, the rest are grid items. */
@@ -47,6 +53,19 @@ const hasNewsVideo = (p: Record<string, unknown>): boolean =>
 let posts: Awaited<ReturnType<typeof getNews>> = [];
 try {
   posts = (await getNews()).slice(0, limit);
+  // FM CONTENT (decision 8): translate the posts ONCE here, before the cards
+  // render. NewsCard only translates its own chrome labels; title and excerpt
+  // arrive as props straight from FM, so without this the English homepage
+  // showed Swedish headlines. "title" kind for headlines, plain for excerpts,
+  // both on the `fast` tier to match what the warm script cached.
+  const fm = fmText(Astro.locals);
+  posts = await Promise.all(
+    posts.map(async (p) => ({
+      ...p,
+      Title: await fm(String(p.Title ?? ""), "title"),
+      shortMessage: await fm(String(p.shortMessage ?? p.Message ?? "")),
+    })),
+  );
 } catch {
   posts = [];
 }
@@ -62,6 +81,7 @@ const hasPosts = posts.length > 0;
 const [lead, ...rest] = posts;
 
 const bg = variant === "warm" ? "bg-ninetone-paper-warm" : "bg-ninetone-paper";
+
 ---
 
 {hasPosts && (
@@ -87,7 +107,7 @@ const bg = variant === "warm" ? "bg-ninetone-paper-warm" : "bg-ninetone-paper";
               title={String(lead.Title ?? "")}
               slug={String(lead.slug ?? "")}
               image={lead.image_webp ? String(lead.image_webp) : undefined}
-              excerpt={String(lead.shortMessage ?? lead.Message ?? "")}
+              excerpt={String(lead.shortMessage ?? "")}
               date={String(lead.Date ?? "")}
               author={String(lead["Created By"] ?? "")}
               category={String(lead.category ?? "")}
@@ -104,7 +124,7 @@ const bg = variant === "warm" ? "bg-ninetone-paper-warm" : "bg-ninetone-paper";
                   title={String(p.Title ?? "")}
                   slug={String(p.slug ?? "")}
                   image={p.image_webp ? String(p.image_webp) : undefined}
-                  excerpt={String(p.shortMessage ?? p.Message ?? "")}
+                  excerpt={String(p.shortMessage ?? "")}
                   date={String(p.Date ?? "")}
                   category={String(p.category ?? "")}
                   hasVideo={hasNewsVideo(p)}

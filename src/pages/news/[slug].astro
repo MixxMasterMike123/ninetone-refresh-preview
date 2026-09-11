@@ -2,13 +2,19 @@
 import Base from "../../layouts/Base.astro";
 import { getNews } from "../../lib/ninetone";
 import { renderBio } from "../../lib/markdown";
-import { url } from "../../lib/url";
+import { url, urlFor } from "../../lib/url";
 import { pageJsonLdOrigin } from "../../lib/site";
 import { breadcrumbs, newsArticle, markdownToPlainText, fmDateToIso } from "../../lib/schema";
 import { shouldAppendSiteName } from "../../lib/display-title";
 import { notFound } from "../../lib/not-found";
 import { fmText, sharedT } from "../../lib/t";
 import { formatDate, type Lang } from "../../lib/dates";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 
 export async function getStaticPaths() {
   const posts = await getNews();
@@ -116,6 +122,7 @@ const backToAllStoriesLabel = await t("← Back to all stories");
 // Intl formatting, not a translation — does not go through t()/sharedT().
 const dateLang: Lang = (Astro.locals as { lang?: Lang } | undefined)?.lang ?? "sv";
 const displayDate = formatDate(date, dateLang);
+
 ---
 
 <Base title={title} appendSiteName={appendSiteName} description={lede} ogImage={image} ogType="article" jsonLd={jsonLd}>

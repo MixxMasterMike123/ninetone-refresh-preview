@@ -1,10 +1,16 @@
 ---
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent, sectionCta } from "../lib/sections";
-import { url } from "../lib/url";
+import { url as basePathOnly, urlFor } from "../lib/url";
 import { switchHref } from "../lib/i18n";
 import type { Lang } from "../lib/translate";
 import { sharedT } from "../lib/t";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 
 interface Props {
   theme?: SectionTheme;
@@ -108,8 +114,18 @@ const isActive = (matches: string[]) =>
 // this same `pathname` through `switchHref` costs nothing extra: on gh
 // there's no rewrite and no "/en" to strip, so `switchHref` is just
 // `localizedPath(pathname, otherLang(lang))` there too.
-const otherHref = url(switchHref(pathname, lang));
+// THE ONE LINK THAT MUST NOT BE LOCALE-BOUND.
+//
+// switchHref() already returns the OTHER locale's path — "/records" when the
+// visitor is on /en/records, "/en/records" when they're on /records. Passing
+// that through the locale-bound url() above re-applied the CURRENT locale on
+// top, so on an English page "/records" became "/en/records" and the switch
+// pointed at the page you were already on: clicking SV never left English.
+// basePathOnly() applies the gh sub-path base and nothing else, which is
+// exactly what a fully-formed cross-locale path needs.
+const otherHref = basePathOnly(switchHref(pathname, lang));
 const otherLangCode = lang === "sv" ? "en" : "sv";
+
 ---
 
 <header

@@ -1,8 +1,14 @@
 ---
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent } from "../lib/sections";
-import { url } from "../lib/url";
+import { url, urlFor } from "../lib/url";
 import { sharedT } from "../lib/t";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 
 export interface ContactField {
   type: "text" | "email" | "tel" | "textarea";
@@ -106,6 +112,7 @@ const mailtoFooter = await t(
 );
 const privacyPolicyLabel = await t("privacy policy");
 const privacyPolicyForLabel = await t("for how we handle personal data.");
+
 ---
 
 <section class="bg-ninetone-paper">

@@ -1,6 +1,13 @@
 ---
-import { url } from "../lib/url";
+import { url as plainUrl, urlFor as bindUrlToLocale } from "../lib/url";
 import { sharedT } from "../lib/t";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+// Aliased import (this file already has its own `urlFor` for page numbers).
+const url = bindUrlToLocale(Astro.locals);
+
 
 interface Props {
   currentPage: number;
@@ -47,6 +54,7 @@ const t = sharedT(Astro.locals);
 const paginationAriaLabel = await t("Pagination");
 const prevLabel = await t("← Prev");
 const nextLabel = await t("Next →");
+
 ---
 
 {hasPages && (

@@ -1,8 +1,14 @@
 ---
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent } from "../lib/sections";
-import { url } from "../lib/url";
+import { url, urlFor } from "../lib/url";
 import { sharedT } from "../lib/t";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 
 export interface ArtistSocials {
   spotify?: string;
@@ -96,6 +102,7 @@ if (socials?.youtubeMusic || socials?.youtube) socialEntries.push({ label: "YouT
 if (socials?.soundcloud) socialEntries.push({ label: "SoundCloud", href: socials.soundcloud, icon: "soundcloud" });
 if (socials?.instagram) socialEntries.push({ label: "Instagram", href: socials.instagram, icon: "instagram" });
 if (socials?.tiktok) socialEntries.push({ label: "TikTok", href: socials.tiktok, icon: "tiktok" });
+
 ---
 
 <article class="group relative flex flex-col bg-ninetone-paper-warm text-ninetone-ink">

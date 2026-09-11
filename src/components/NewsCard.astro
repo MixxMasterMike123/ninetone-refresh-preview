@@ -1,7 +1,13 @@
 ---
-import { url } from "../lib/url";
+import { url, urlFor } from "../lib/url";
 import { sharedT } from "../lib/t";
 import { formatDate, formatIsoDate, type Lang } from "../lib/dates";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 
 interface Props {
   title: string;
@@ -80,6 +86,7 @@ const sizesAttr =
   size === "lg" ? "(min-width: 768px) 66vw, 100vw"
   : size === "md" ? "(min-width: 768px) 50vw, 100vw"
   : "(min-width: 1024px) 25vw, (min-width: 768px) 33vw, 50vw";
+
 ---
 
 <article class="group flex flex-col">

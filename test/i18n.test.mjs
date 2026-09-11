@@ -212,3 +212,39 @@ test("switchHref round-trips: switching twice, each time with the CORRECT curren
     assert.equal(twice, path, `round trip for ${path} (${lang})`);
   }
 });
+
+// --- the language switch must not be locale-bound ---------------------------
+// Regression: Header briefly passed switchHref()'s output through the
+// locale-bound url() added for internal links. switchHref already returns the
+// OTHER locale's path, so re-applying the current locale produced
+// "/en/records" on an English page — the switch pointed at the page you were
+// already on and clicking SV never left English. These assert the composition
+// Header actually performs, for both directions and both deploy targets.
+
+test("switch href composition: locale-bound url() would break the switch, plain url() does not", async () => {
+  // src/lib/url.ts reads import.meta.env.BASE_URL, which plain `node --test`
+  // does not provide (no Vite). Compose the same way url() does, with the
+  // cf-target base ("/"), so this exercises the real composition without
+  // needing a bundler — the locale logic, not the base logic, is the subject.
+  const { localizedPath } = await import("../src/lib/i18n.ts");
+  const url = (path, lang) => (lang ? localizedPath(path, lang) : path);
+
+  for (const [current, lang, expected] of [
+    ["/records", "en", "/records"], // on EN, switch must go to bare sv
+    ["/records", "sv", "/en/records"], // on SV, switch must go to /en
+    ["/", "en", "/"],
+    ["/", "sv", "/en"],
+  ]) {
+    const target = switchHref(current, lang);
+    // What Header does now: base prefix only, no locale re-applied.
+    assert.equal(url(target), expected, `plain url() for ${current} (${lang})`);
+    // What the bug did: re-applying the CURRENT locale on top.
+    if (lang === "en") {
+      assert.notEqual(
+        url(target, lang),
+        expected,
+        "sanity: the buggy composition really does differ, so this test is not vacuous",
+      );
+    }
+  }
+});

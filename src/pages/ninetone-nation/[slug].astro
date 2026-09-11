@@ -9,11 +9,17 @@ import { getBookingPageSet, getBookingCategories, getNewsForArtist, pickRelatedA
 import { resolveChannelId, getYouTubeFeed } from "../../lib/youtube";
 import { getProducts } from "../../lib/shopify";
 import { renderBio } from "../../lib/markdown";
-import { url } from "../../lib/url";
+import { url, urlFor } from "../../lib/url";
 import { pageJsonLdOrigin } from "../../lib/site";
 import { breadcrumbs, person, markdownToPlainText } from "../../lib/schema";
 import { notFound } from "../../lib/not-found";
 import { fmText, sharedT } from "../../lib/t";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 
 // Generate a page for every Active talent listed on the booking page.
 // Source of truth = the curated BOOKING_TAG portal set, filtered to
@@ -171,6 +177,7 @@ const sendBookingRequestLabel = await t("Send booking request");
 const inTheNewsKicker = await t("In the news");
 const merchKicker = await t("Merch");
 const officialSuffix = await t("official.");
+
 ---
 
 <Base

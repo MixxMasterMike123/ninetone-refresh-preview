@@ -288,6 +288,15 @@ const GA4_ID = "G-X26Z7RRXTY";            // reused from current ninetone.com
 const META_PIXEL_ID = "199979048106038";  // reused from current ninetone.com
 const CLARITY_ID = "CLARITY-PLACEHOLDER"; // TODO: replace with real project ID before launch
 const TIKTOK_PIXEL_ID = "TIKTOK-PLACEHOLDER"; // TODO: replace with real pixel ID before launch
+
+// DELIBERATELY NOT locale-bound, unlike every other component.
+//
+// This layout's url() feeds resolveSitePath() for the canonical and OG URLs,
+// and those already apply localizedPath() explicitly (see the canonical block
+// above) — binding url() to the locale here would prefix them a SECOND time
+// and emit "/en/en/records". The handful of chrome links this file renders
+// (skip-link, logo) are locale-agnostic anchors or handled by Header/Footer,
+// which are bound. Left as the plain import on purpose.
 ---
 
 <!doctype html>

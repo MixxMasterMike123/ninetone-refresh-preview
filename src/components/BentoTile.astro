@@ -1,7 +1,13 @@
 ---
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent } from "../lib/sections";
-import { url } from "../lib/url";
+import { url, urlFor } from "../lib/url";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 
 interface Props {
   /** Optional href — turns the whole tile into an anchor. */
@@ -80,6 +86,7 @@ const Tag = href ? "a" : "div";
 const linkProps = href
   ? { href: external ? href : url(href), ...(external ? { target: "_blank", rel: "noopener" } : {}) }
   : {};
+
 ---
 
 <Tag

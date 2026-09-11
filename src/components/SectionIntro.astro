@@ -2,8 +2,14 @@
 import { renderBio } from "../lib/markdown";
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent } from "../lib/sections";
-import { url } from "../lib/url";
+import { url, urlFor } from "../lib/url";
 import { sharedT } from "../lib/t";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 
 interface Props {
   /** Page heading (e.g. "Artists", "Clients", "Entertainers"). */
@@ -43,6 +49,7 @@ const kickerLabel = kicker ?? accent.label;
 const t = sharedT(Astro.locals);
 const readMoreLabel = await t("Read more");
 const readLessLabel = await t("Read less");
+
 ---
 
 <section class="bg-ninetone-paper text-ninetone-ink">

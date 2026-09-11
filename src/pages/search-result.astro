@@ -1,7 +1,13 @@
 ---
 import Base from "../layouts/Base.astro";
-import { url } from "../lib/url";
+import { url, urlFor } from "../lib/url";
 import { sharedT } from "../lib/t";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 
 // t() bound to this request (docs/i18n-phase-2-brief.md section 4). The
 // <script> below runs client-side after hydration and cannot call t()
@@ -34,6 +40,7 @@ const sectionLabelsSource: Record<string, string> = {
 const sectionLabels = Object.fromEntries(
   await Promise.all(Object.entries(sectionLabelsSource).map(async ([k, v]) => [k, await t(v)] as const)),
 );
+
 ---
 
 <Base title={pageTitle}>

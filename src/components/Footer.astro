@@ -1,8 +1,14 @@
 ---
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent } from "../lib/sections";
-import { url } from "../lib/url";
+import { url, urlFor } from "../lib/url";
 import { sharedT } from "../lib/t";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 
 interface Props {
   theme?: SectionTheme;
@@ -95,6 +101,7 @@ const socials = [
   { name: "Vimeo", href: "https://vimeo.com/user188122269" },
   { name: "Wikipedia", href: "https://sv.wikipedia.org/wiki/Ninetone_Records" },
 ];
+
 ---
 
 <footer class="bg-ninetone-ink text-ninetone-paper">

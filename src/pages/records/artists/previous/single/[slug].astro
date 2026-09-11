@@ -9,11 +9,17 @@ import { getPreviousArtists, getArtistDetailWithReleases, getNewsForArtist } fro
 import { resolveChannelId, getYouTubeFeed } from "../../../../../lib/youtube";
 import { getProducts } from "../../../../../lib/shopify";
 import { renderBio } from "../../../../../lib/markdown";
-import { url } from "../../../../../lib/url";
+import { url, urlFor } from "../../../../../lib/url";
 import { pageJsonLdOrigin } from "../../../../../lib/site";
 import { breadcrumbs, musicGroup, markdownToPlainText, fmDateToIso, descriptionWithBioFallback } from "../../../../../lib/schema";
 import { notFound } from "../../../../../lib/not-found";
 import { fmText, sharedT } from "../../../../../lib/t";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 
 export async function getStaticPaths() {
   const artists = await getPreviousArtists();
@@ -141,6 +147,7 @@ const watchKicker = await t("Watch");
 const inTheNewsKicker = await t("In the news");
 const merchKicker = await t("Merch");
 const officialSuffix = await t("official.");
+
 ---
 
 <Base

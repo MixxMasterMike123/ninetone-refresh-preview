@@ -2,11 +2,17 @@
 import Base from "../../layouts/Base.astro";
 import { getTeam } from "../../lib/ninetone";
 import { renderBio, isAiSpeculative } from "../../lib/markdown";
-import { url } from "../../lib/url";
+import { url, urlFor } from "../../lib/url";
 import { pageJsonLdOrigin } from "../../lib/site";
 import { breadcrumbs, person, descriptionWithBioFallback } from "../../lib/schema";
 import { notFound } from "../../lib/not-found";
 import { sharedT } from "../../lib/t";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 
 export async function getStaticPaths() {
   const team = await getTeam();
@@ -77,6 +83,7 @@ const forMoreAboutPrefix = await t("For more about");
 const getInTouchAtSuffix = await t("get in touch at");
 const moreAboutPrefix = await t("More about");
 const moreAboutComingSoonSuffix = await t("coming soon.");
+
 ---
 
 <Base

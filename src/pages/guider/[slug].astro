@@ -3,11 +3,17 @@ import Base from "../../layouts/Base.astro";
 import { getWebPosts } from "../../lib/ninetone";
 import { guidesFromCategory, findGuideBySlug, parseFaqFromMarkdown } from "../../lib/guides";
 import { renderBio } from "../../lib/markdown";
-import { url } from "../../lib/url";
+import { url, urlFor } from "../../lib/url";
 import { pageJsonLdOrigin } from "../../lib/site";
 import { breadcrumbs, article, faqPage, markdownToPlainText, fmDateToIso } from "../../lib/schema";
 import { notFound } from "../../lib/not-found";
 import { formatDate } from "../../lib/dates";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 
 // Mirrors src/pages/news/[slug].astro's dual-resolution pattern exactly:
 // static build (gh) resolves every path via getStaticPaths; the live server
@@ -71,6 +77,7 @@ const jsonLd = [
   }),
   ...(faqItems.length > 0 ? [faqPage(faqItems)] : []),
 ];
+
 ---
 
 <Base title={title} lang="sv" description={markdownToPlainText(guide.message, 155)} ogImage={image} ogType="article" jsonLd={jsonLd}>

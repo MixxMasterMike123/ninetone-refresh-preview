@@ -1,8 +1,14 @@
 ---
 import NewsCard from "./NewsCard.astro";
 import { getNews } from "../lib/ninetone";
-import { url } from "../lib/url";
-import { sharedT } from "../lib/t";
+import { url, urlFor } from "../lib/url";
+import { fmText, sharedT } from "../lib/t";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 
 interface Props {
   /** How many posts to show. Defaults to 2. */
@@ -30,6 +36,19 @@ const hasNewsVideo = (p: Record<string, unknown>): boolean =>
 let posts: Awaited<ReturnType<typeof getNews>> = [];
 try {
   posts = (await getNews()).slice(0, limit);
+  // FM CONTENT (decision 8): translate the posts ONCE here, before the cards
+  // render. NewsCard only translates its own chrome labels; title and excerpt
+  // arrive as props straight from FM, so without this the English homepage
+  // showed Swedish headlines. "title" kind for headlines, plain for excerpts,
+  // both on the `fast` tier to match what the warm script cached.
+  const fm = fmText(Astro.locals);
+  posts = await Promise.all(
+    posts.map(async (p) => ({
+      ...p,
+      Title: await fm(String(p.Title ?? ""), "title"),
+      shortMessage: await fm(String(p.shortMessage ?? p.Message ?? "")),
+    })),
+  );
 } catch {
   posts = [];
 }
@@ -42,6 +61,7 @@ try {
 // an HTML chunk — throwing `ResponseSentError` at flush and leaving the
 // visitor with an empty body / 500. See docs/seo-phase-1b-brief.md P0 item 3.
 const hasPosts = posts.length > 0;
+
 ---
 
 {hasPosts && (
@@ -62,7 +82,7 @@ const hasPosts = posts.length > 0;
             title={String(p.Title ?? "")}
             slug={String(p.slug ?? "")}
             image={p.image_webp ? String(p.image_webp) : undefined}
-            excerpt={String(p.shortMessage ?? p.Message ?? "")}
+            excerpt={String(p.shortMessage ?? "")}
             date={String(p.Date ?? "")}
             author={String(p["Created By"] ?? "")}
             category={String(p.category ?? "")}

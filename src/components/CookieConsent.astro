@@ -5,8 +5,14 @@
 // can reopen the banner. Wires Google Consent Mode v2, Meta Pixel
 // (fbq consent), TikTok Pixel (ttq consent), Clarity gating on
 // analytics consent.
-import { url } from "../lib/url";
+import { url, urlFor } from "../lib/url";
 import { sharedT } from "../lib/t";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 
 // t() bound to this request (docs/i18n-phase-2-brief.md section 4). Swedish
 // kept as source — same choice as Footer/Header (decision 1: sv is the
@@ -31,6 +37,7 @@ const marketingTitle = await t("Marknadsföring");
 const marketingBody = await t("Meta Pixel och TikTok Pixel används för att mäta och rikta annonsering.");
 const backLabel = await t("Tillbaka");
 const saveChoiceLabel = await t("Spara val");
+
 ---
 <div id="cookie-consent" class="cookie-consent" hidden role="dialog" aria-labelledby="cookie-consent-title" aria-describedby="cookie-consent-desc">
   <div class="cookie-consent__inner">

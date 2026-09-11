@@ -1,6 +1,12 @@
 ---
 import type { Artist } from "../lib/ninetone";
-import { url } from "../lib/url";
+import { url, urlFor } from "../lib/url";
+
+// Locale-bound link builder (i18n Phase 2): every internal href on an
+// English page must keep the /en prefix, or one click drops the visitor
+// back to Swedish. Shadows the plain url() import for this component.
+const url = urlFor(Astro.locals);
+
 
 interface Props {
   artists: Artist[];
@@ -33,6 +39,7 @@ for (const a of artists) {
 const sortedLetters = Array.from(byLetter.keys()).sort((a, b) =>
   a === "#" ? -1 : b === "#" ? 1 : a.localeCompare(b, "sv"),
 );
+
 ---
 
 <div data-roster-index style={visible ? undefined : "display: none;"} class="space-y-12">
