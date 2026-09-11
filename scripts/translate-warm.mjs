@@ -561,18 +561,35 @@ async function collectEntityJobs() {
 
   const jobs = [];
 
-  // --- FAST tier: bios ---------------------------------------------------
+  // --- FAST tier: bios AND card blurbs -----------------------------------
+  //
+  // `*PresentationShort` is a SEPARATE FIELD from `*PresentationString`, with
+  // different text: the Short is the two-line blurb every ArtistCard renders
+  // on a listing, the String is the full detail-page bio. Warming only the
+  // bio left every card on every listing page a permanent cache miss — and
+  // because a listing renders dozens of cards against a 25-call per-render
+  // budget, those misses are starved and never self-heal.
+  //
+  // Measured before this fix: 132 of 544 English routes still contained
+  // Swedish text, led by /en/records/artists/previous (561 Swedish words) and
+  // /en/management/clients (149) — both card-heavy listings.
   for (const a of artists) {
     jobs.push(job(a["Artist Presentation Title"], "fast", "title"));
     jobs.push(job(a.artistPresentationString, "fast", "markdown"));
+    jobs.push(job(a.artistPresentationShort, "fast", "plain"));
   }
   for (const a of previousArtists) {
     jobs.push(job(a["Artist Presentation Title"], "fast", "title"));
     jobs.push(job(a.artistPresentationString, "fast", "markdown"));
+    jobs.push(job(a.artistPresentationShort, "fast", "plain"));
   }
   for (const c of clients) {
     jobs.push(job(c.clientPresentationTitle, "fast", "title"));
     jobs.push(job(c.clientPresentationString, "fast", "markdown"));
+    jobs.push(job(c.clientPresentationShort, "fast", "plain"));
+    // clients.astro falls back to artistPresentationShort when the client
+    // variant is empty, so warm whichever the page would actually render.
+    jobs.push(job(c.artistPresentationShort, "fast", "plain"));
   }
   // Booking talent bios (bookingPresentationTitle/String) — bookingCategories'
   // portal rows carry the resolved tagline/blurb; the detail page
