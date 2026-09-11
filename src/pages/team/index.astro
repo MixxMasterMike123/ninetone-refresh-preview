@@ -3,6 +3,7 @@ import Base from "../../layouts/Base.astro";
 import { getTeam, getWebPostSection } from "../../lib/ninetone";
 import { renderBio } from "../../lib/markdown";
 import { url } from "../../lib/url";
+import { sharedT } from "../../lib/t";
 
 // Core content — failures render the error page (never edge-cached) instead
 // of a silently-empty team grid. Transients are absorbed by lib/cache.ts.
@@ -31,19 +32,29 @@ team = [...team].sort((a, b) => {
   if (sa !== sb) return sa.localeCompare(sb);
   return String(a.userNameCalc ?? "").localeCompare(String(b.userNameCalc ?? ""));
 });
+
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4).
+// `webPosts?.title` is FM-derived content, not this page's own chrome.
+const t = sharedT(Astro.locals);
+const pageTitle = await t("Team");
+const description = await t(
+  "The people behind the work — meet the A&R, management and booking team at Ninetone Group.",
+);
+const teamKicker = await t("Ninetone — Team");
+const fallbackHeading = await t("The people behind the work.");
 ---
 
 <Base
-  title="Team"
-  description="The people behind the work — meet the A&R, management and booking team at Ninetone Group."
+  title={pageTitle}
+  description={description}
 >
   <section class="bg-ninetone-paper">
     <div class="mx-auto max-w-7xl px-6 pb-12 pt-16 md:pt-24">
       <div class="grid gap-10 md:grid-cols-12 md:gap-16">
         <div class="md:col-span-8">
-          <span class="kicker text-ninetone-ink/55">Ninetone — Team</span>
+          <span class="kicker text-ninetone-ink/55">{teamKicker}</span>
           <h1 class="mt-6 font-display text-[clamp(2.75rem,7vw,6rem)] leading-[0.95] tracking-[-0.035em]">
-            {webPosts?.title || "The people behind the work."}
+            {webPosts?.title || fallbackHeading}
           </h1>
         </div>
         {ledeHtml && (

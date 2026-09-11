@@ -1,5 +1,6 @@
 ---
 import { url } from "../lib/url";
+import { sharedT } from "../lib/t";
 
 interface Props {
   currentPage: number;
@@ -40,16 +41,22 @@ function buildPageList(current: number, last: number): (number | "…")[] {
 const pages = hasPages ? buildPageList(currentPage, lastPage) : [];
 const prevUrl = hasPages && currentPage > 1 ? urlFor(currentPage - 1) : null;
 const nextUrl = hasPages && currentPage < lastPage ? urlFor(currentPage + 1) : null;
+
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4).
+const t = sharedT(Astro.locals);
+const paginationAriaLabel = await t("Pagination");
+const prevLabel = await t("← Prev");
+const nextLabel = await t("Next →");
 ---
 
 {hasPages && (
-  <nav class="mt-16 flex items-center justify-center gap-2 text-sm" aria-label="Pagination">
+  <nav class="mt-16 flex items-center justify-center gap-2 text-sm" aria-label={paginationAriaLabel}>
     {prevUrl ? (
       <a href={prevUrl} class="border border-ninetone-ink/20 px-3 py-1.5 text-ninetone-ink hover:border-ninetone-ink hover:bg-ninetone-ink hover:text-ninetone-paper" rel="prev">
-        ← Prev
+        {prevLabel}
       </a>
     ) : (
-      <span class="border border-ninetone-ink/10 px-3 py-1.5 text-ninetone-ink/30">← Prev</span>
+      <span class="border border-ninetone-ink/10 px-3 py-1.5 text-ninetone-ink/30">{prevLabel}</span>
     )}
 
     <ul class="flex items-center gap-1">
@@ -70,10 +77,10 @@ const nextUrl = hasPages && currentPage < lastPage ? urlFor(currentPage + 1) : n
 
     {nextUrl ? (
       <a href={nextUrl} class="border border-ninetone-ink/20 px-3 py-1.5 text-ninetone-ink hover:border-ninetone-ink hover:bg-ninetone-ink hover:text-ninetone-paper" rel="next">
-        Next →
+        {nextLabel}
       </a>
     ) : (
-      <span class="border border-ninetone-ink/10 px-3 py-1.5 text-ninetone-ink/30">Next →</span>
+      <span class="border border-ninetone-ink/10 px-3 py-1.5 text-ninetone-ink/30">{nextLabel}</span>
     )}
   </nav>
 )}

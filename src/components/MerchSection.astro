@@ -1,6 +1,7 @@
 ---
 import MerchCard from "./MerchCard.astro";
 import { getProducts } from "../lib/shopify";
+import { sharedT } from "../lib/t";
 
 interface Props {
   /** Shopify collection id to fetch products from. */
@@ -17,11 +18,20 @@ interface Props {
 
 const {
   collectionId,
-  heading = "Shop",
+  heading: headingProp,
   kicker,
   blurb,
   limit = 12,
 } = Astro.props as Props;
+
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4). `kicker`
+// and `blurb` are caller-supplied (translated at their own call sites, if
+// at all); only this component's own "Shop" default + own chrome go
+// through t() here.
+const t = sharedT(Astro.locals);
+const headingLabel = headingProp ?? (await t("Shop"));
+const visitShopLabel = await t("Visit the shop");
+const merchErrorLabel = await t("Couldn't load Shopify products — set SHOPIFY_ADMIN_TOKEN in .env.");
 
 let products: Awaited<ReturnType<typeof getProducts>> = [];
 let merchError: string | null = null;
@@ -47,7 +57,7 @@ const hasContent = merchError || products.length > 0;
       <div class="mb-10 grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
         <div>
           {kicker && <span class="kicker text-ninetone-ink/55">{kicker}</span>}
-          <h2 class="mt-3 font-display text-4xl leading-[1.05] tracking-tight md:text-5xl">{heading}</h2>
+          <h2 class="mt-3 font-display text-4xl leading-[1.05] tracking-tight md:text-5xl">{headingLabel}</h2>
           {blurb && <p class="mt-3 max-w-xl text-base text-ninetone-ink/65">{blurb}</p>}
         </div>
         <a
@@ -56,13 +66,13 @@ const hasContent = merchError || products.length > 0;
           rel="noopener"
           class="inline-flex items-center gap-2 self-start text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink"
         >
-          Visit the shop <span aria-hidden>→</span>
+          {visitShopLabel} <span aria-hidden>→</span>
         </a>
       </div>
 
       {merchError && (
         <p class="mb-6 border-l-2 border-ninetone-ink bg-ninetone-paper-warm p-4 text-sm text-ninetone-ink/80">
-          Couldn't load Shopify products — set SHOPIFY_ADMIN_TOKEN in .env.
+          {merchErrorLabel}
         </p>
       )}
 

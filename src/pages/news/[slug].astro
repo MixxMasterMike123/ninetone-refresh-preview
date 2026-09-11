@@ -7,6 +7,7 @@ import { pageJsonLdOrigin } from "../../lib/site";
 import { breadcrumbs, newsArticle, markdownToPlainText, fmDateToIso } from "../../lib/schema";
 import { shouldAppendSiteName } from "../../lib/display-title";
 import { notFound } from "../../lib/not-found";
+import { sharedT } from "../../lib/t";
 
 export async function getStaticPaths() {
   const posts = await getNews();
@@ -88,13 +89,24 @@ const jsonLd = isoDate
         { name: title, path: `/news/${slug}` },
       ]),
     ];
+
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4). `title`/
+// `lede`/`author`/`date`/`category`/`messageHtml` are FM-derived content,
+// not this page's own chrome. "Publicerad" kept as source (see the
+// DEVIATION comment above for why it's Swedish, not "Published" — same
+// choice as the rest of this codebase's sv-sourced strings).
+const t = sharedT(Astro.locals);
+const backToNewsLabel = await t("← News");
+const byLabel = await t("By");
+const publicerad = await t("Publicerad");
+const backToAllStoriesLabel = await t("← Back to all stories");
 ---
 
 <Base title={title} appendSiteName={appendSiteName} description={lede} ogImage={image} ogType="article" jsonLd={jsonLd}>
   <article class="bg-ninetone-paper">
     <header class="mx-auto max-w-4xl px-6 pt-16 md:pt-24">
       <p class="mb-6">
-        <a href={url("/news")} class="kicker text-ninetone-ink/60 hover:text-ninetone-ink">← News</a>
+        <a href={url("/news")} class="kicker text-ninetone-ink/60 hover:text-ninetone-ink">{backToNewsLabel}</a>
       </p>
 
       {(category || date) && (
@@ -114,12 +126,12 @@ const jsonLd = isoDate
       )}
 
       {author && (
-        <p class="mt-6 text-xs uppercase tracking-[0.16em] text-ninetone-ink/60">By {author}</p>
+        <p class="mt-6 text-xs uppercase tracking-[0.16em] text-ninetone-ink/60">{byLabel} {author}</p>
       )}
 
       {date && (
         <p class="kicker mt-6 text-ninetone-ink/55">
-          Publicerad <time datetime={isoDate}>{date}</time>
+          {publicerad} <time datetime={isoDate}>{date}</time>
         </p>
       )}
     </header>
@@ -152,7 +164,7 @@ const jsonLd = isoDate
       )}
 
       <div class="mt-16 border-t border-ninetone-rule pt-8">
-        <a href={url("/news")} class="kicker text-ninetone-ink/60 hover:text-ninetone-ink">← Back to all stories</a>
+        <a href={url("/news")} class="kicker text-ninetone-ink/60 hover:text-ninetone-ink">{backToAllStoriesLabel}</a>
       </div>
     </div>
   </article>

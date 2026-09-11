@@ -1,5 +1,6 @@
 ---
 import { url } from "../lib/url";
+import { sharedT } from "../lib/t";
 
 interface Props {
   active: "current" | "previous";
@@ -7,18 +8,22 @@ interface Props {
 
 const { active } = Astro.props as Props;
 
-const tabs: { key: "current" | "previous"; label: string; href: string }[] = [
+const t = sharedT(Astro.locals);
+const tabsSource: { key: "current" | "previous"; label: string; href: string }[] = [
   { key: "current", label: "Artists", href: "/records/artists" },
   { key: "previous", label: "Previous Artists", href: "/records/artists/previous" },
 ];
+const tabs = await Promise.all(
+  tabsSource.map(async (tb) => ({ ...tb, label: await t(tb.label) })),
+);
 ---
 
 <div class="mb-12 flex items-center gap-6 border-b border-ninetone-rule pb-3">
-  {tabs.map((t) => {
-    const isActive = t.key === active;
+  {tabs.map((tab) => {
+    const isActive = tab.key === active;
     return (
       <a
-        href={url(t.href)}
+        href={url(tab.href)}
         class={
           isActive
             ? "relative -mb-3 border-b-2 border-ninetone-red pb-3 text-sm font-semibold text-ninetone-ink"
@@ -26,7 +31,7 @@ const tabs: { key: "current" | "previous"; label: string; href: string }[] = [
         }
         aria-current={isActive ? "page" : undefined}
       >
-        {t.label}
+        {tab.label}
       </a>
     );
   })}

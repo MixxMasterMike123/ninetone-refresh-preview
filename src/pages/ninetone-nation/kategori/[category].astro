@@ -10,6 +10,7 @@ import { collectionPage, faqPage } from "../../../lib/schema";
 import { sectionAccent } from "../../../lib/sections";
 import { renderBio } from "../../../lib/markdown";
 import { notFound } from "../../../lib/not-found";
+import { sharedT } from "../../../lib/t";
 
 // Empty categories are not generated at all — no page, no sitemap entry, no
 // llms.txt line (rule 12 / DESIGN.md). Mirrors the `populatedCategories`
@@ -65,16 +66,33 @@ const jsonLd = [
   }),
   ...(faqItems.length > 0 ? [faqPage(faqItems)] : []),
 ];
+
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4). `category.
+// tag`/`category.description` are FM booking-category values (decision 7's
+// protected-terms list, API_BOOKING_TAG) — proper nouns, not translated.
+const t = sharedT(Astro.locals);
+const backToAllEntertainersLabel = await t("← All entertainers");
+const nationKicker = await t("Nation ·");
+const bookableLabel = await t("bookable");
+const oneTalentLabel = await t("talent");
+const manyTalentsLabel = await t("talents");
+const inThisCategoryLabel = await t(
+  "in this category. Get in touch and we'll help you find the right fit for your event.",
+);
+const bookLabel = await t("Book");
+const faqKicker = await t("FAQ");
+const frequentlyAskedHeading = await t("Frequently asked.");
+const bookableThroughSuffix = await t(
+  "bookable through Ninetone Nation — browse the full roster and get in touch to book your event.",
+);
+const description = category.description || `${category.tag} ${bookableThroughSuffix}`;
 ---
 
 <Base
   title={category.tag}
   theme="nation"
   jsonLd={jsonLd}
-  description={
-    category.description ||
-    `${category.tag} bookable through Ninetone Nation — browse the full roster and get in touch to book your event.`
-  }
+  description={description}
 >
   <section class="bg-ninetone-paper">
     <div class="mx-auto max-w-7xl px-6 pb-10 pt-16 md:pb-16 md:pt-24">
@@ -82,10 +100,10 @@ const jsonLd = [
         <div class="md:col-span-7 lg:col-span-8">
           <p class="mb-3">
             <a href={url("/ninetone-nation/booking")} class="kicker text-ninetone-ink/60 hover:text-ninetone-ink">
-              ← All entertainers
+              {backToAllEntertainersLabel}
             </a>
           </p>
-          <span class="kicker text-ninetone-green-dark">Nation · {category.tag}</span>
+          <span class="kicker text-ninetone-green-dark">{nationKicker} {category.tag}</span>
 
           <h1 class="mt-6 max-w-4xl font-display text-[clamp(2.75rem,7vw,6rem)] leading-[0.95] tracking-[-0.035em]">
             {category.tag}
@@ -100,14 +118,13 @@ const jsonLd = [
 
         <div class="md:col-span-5 md:pt-10 lg:col-span-4">
           <p class="max-w-sm text-[0.9375rem] leading-relaxed text-ninetone-ink/85">
-            {category.artists.length} bookable {category.artists.length === 1 ? "talent" : "talents"} in this
-            category. Get in touch and we'll help you find the right fit for your event.
+            {category.artists.length} {bookableLabel} {category.artists.length === 1 ? oneTalentLabel : manyTalentsLabel} {inThisCategoryLabel}
           </p>
           <a
             href={url("/ninetone-nation/contact-ninetone-nation")}
             class={`mt-6 inline-flex min-h-11 items-center gap-2 px-5 py-3 text-sm font-semibold ${accent.cta} transition-colors`}
           >
-            Book {category.tag.toLowerCase()}
+            {bookLabel} {category.tag.toLowerCase()}
             <span aria-hidden>→</span>
           </a>
         </div>
@@ -130,7 +147,7 @@ const jsonLd = [
             imageWidth={a.imageSmall ? 500 : 1000}
             imageHeight={a.imageSmall ? 500 : 1000}
             tags={[category.tag]}
-            ctaLabel="Book"
+            ctaLabel={bookLabel}
             highlight={a.highlight}
             socials={a.socials}
           />
@@ -143,9 +160,9 @@ const jsonLd = [
     <section class="bg-ninetone-paper-warm py-20">
       <div class="mx-auto grid max-w-7xl gap-10 px-6 md:grid-cols-12 md:gap-16">
         <div class="md:col-span-4 md:sticky md:top-28 md:self-start">
-          <span class="kicker text-ninetone-green-dark">FAQ</span>
+          <span class="kicker text-ninetone-green-dark">{faqKicker}</span>
           <h2 class="mt-3 font-display text-4xl leading-[1.05] tracking-tight md:text-5xl">
-            Frequently asked.
+            {frequentlyAskedHeading}
           </h2>
         </div>
         <div class="md:col-span-8">

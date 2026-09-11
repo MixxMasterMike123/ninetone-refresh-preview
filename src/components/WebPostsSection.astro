@@ -2,6 +2,7 @@
 import { renderBio } from "../lib/markdown";
 import type { WebPostCategory } from "../lib/ninetone";
 import { displayTitle } from "../lib/display-title";
+import { sharedT } from "../lib/t";
 
 interface Props {
   data: WebPostCategory | null;
@@ -34,6 +35,13 @@ const blocks = hasContent
   : [];
 
 const pageTitle = hasContent ? displayTitle(heading ?? data!.title) : "";
+
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4). Only
+// this component's own "About" kicker is chrome — `pageTitle`/`b.subject`/
+// `b.messageHtml` are FM-derived content, translated elsewhere via
+// translate(), not this component's job.
+const t = sharedT(Astro.locals);
+const aboutKicker = await t("About");
 ---
 
 {hasContent && (
@@ -42,7 +50,7 @@ const pageTitle = hasContent ? displayTitle(heading ?? data!.title) : "";
       <div class="md:col-span-4 md:sticky md:top-28 md:self-start">
         {pageTitle && (
           <>
-            <span class="kicker text-ninetone-ink/55">About</span>
+            <span class="kicker text-ninetone-ink/55">{aboutKicker}</span>
             <h2 class="mt-3 font-display text-4xl leading-[1.05] tracking-tight md:text-5xl">{pageTitle}</h2>
           </>
         )}

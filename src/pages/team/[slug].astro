@@ -6,6 +6,7 @@ import { url } from "../../lib/url";
 import { pageJsonLdOrigin } from "../../lib/site";
 import { breadcrumbs, person, descriptionWithBioFallback } from "../../lib/schema";
 import { notFound } from "../../lib/not-found";
+import { sharedT } from "../../lib/t";
 
 export async function getStaticPaths() {
   const team = await getTeam();
@@ -64,6 +65,18 @@ const jsonLd = [
     worksFor: true,
   }),
 ];
+
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4). `name`/
+// `title`/`titleDescription`/`descriptionHtml` are FM-derived content, not
+// this page's own chrome.
+const t = sharedT(Astro.locals);
+const backToTeamLabel = await t("← Team");
+const teamKicker = await t("Ninetone — Team");
+const emailLabel = await t("Email");
+const forMoreAboutPrefix = await t("For more about");
+const getInTouchAtSuffix = await t("get in touch at");
+const moreAboutPrefix = await t("More about");
+const moreAboutComingSoonSuffix = await t("coming soon.");
 ---
 
 <Base
@@ -76,7 +89,7 @@ const jsonLd = [
   <section class="bg-ninetone-paper">
     <div class="mx-auto max-w-7xl px-6 pb-12 pt-12 md:pt-16">
       <p class="mb-8">
-        <a href={url("/team")} class="kicker text-ninetone-ink/55 hover:text-ninetone-ink">← Team</a>
+        <a href={url("/team")} class="kicker text-ninetone-ink/55 hover:text-ninetone-ink">{backToTeamLabel}</a>
       </p>
 
       <div class="grid gap-10 md:grid-cols-12 md:gap-16">
@@ -106,7 +119,7 @@ const jsonLd = [
                   href={`mailto:${email}`}
                   class="inline-flex items-center justify-center gap-2 bg-ninetone-ink px-4 py-3 text-sm font-semibold text-ninetone-paper transition-colors hover:bg-ninetone-ink-soft"
                 >
-                  Email <span aria-hidden>→</span>
+                  {emailLabel} <span aria-hidden>→</span>
                 </a>
               )}
               {phone && (
@@ -122,7 +135,7 @@ const jsonLd = [
         </aside>
 
         <div class="md:col-span-8 lg:col-span-8">
-          <span class="kicker text-ninetone-ink/55">Ninetone — Team</span>
+          <span class="kicker text-ninetone-ink/55">{teamKicker}</span>
           <h1 class="mt-4 font-display text-[clamp(3rem,8vw,7rem)] leading-[0.9] tracking-[-0.045em]">{name}</h1>
 
           {title && (
@@ -143,7 +156,7 @@ const jsonLd = [
                   href={`mailto:${email}`}
                   class="inline-flex items-center justify-center gap-2 bg-ninetone-ink px-4 py-3 text-sm font-semibold text-ninetone-paper"
                 >
-                  Email <span aria-hidden>→</span>
+                  {emailLabel} <span aria-hidden>→</span>
                 </a>
               )}
               {phone && (
@@ -162,9 +175,9 @@ const jsonLd = [
           ) : (
             <div class="mt-12 border-t border-ninetone-rule pt-8 text-base text-ninetone-ink/65">
               {email ? (
-                <>For more about {name}, get in touch at <a href={`mailto:${email}`} class="text-ninetone-ink underline-offset-4 hover:underline">{email}</a>.</>
+                <>{forMoreAboutPrefix} {name}, {getInTouchAtSuffix} <a href={`mailto:${email}`} class="text-ninetone-ink underline-offset-4 hover:underline">{email}</a>.</>
               ) : (
-                <>More about {name} coming soon.</>
+                <>{moreAboutPrefix} {name} {moreAboutComingSoonSuffix}</>
               )}
             </div>
           )}

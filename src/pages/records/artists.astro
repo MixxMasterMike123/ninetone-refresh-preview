@@ -7,6 +7,7 @@ import RosterFilters from "../../components/RosterFilters.astro";
 import RosterIndex from "../../components/RosterIndex.astro";
 import { getArtists, getWebPostSection } from "../../lib/ninetone";
 import { displayTitle } from "../../lib/display-title";
+import { sharedT } from "../../lib/t";
 
 // Core content — failures render the error page (never edge-cached) instead
 // of a silently-empty roster. Transients are absorbed by lib/cache.ts.
@@ -24,15 +25,22 @@ const sortedTags = Array.from(tagCounts.entries())
   .sort((a, b) => b[1] - a[1])
   .slice(0, 12)
   .map(([t]) => t);
+
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4).
+const t = sharedT(Astro.locals);
+const artistsTitle = await t("Artists");
+const description = await t(
+  "The Ninetone Records roster — active artists shaping the sound of Sweden right now, from song to universe.",
+);
 ---
 
 <Base
-  title="Artists"
+  title={artistsTitle}
   theme="records"
-  description="The Ninetone Records roster — active artists shaping the sound of Sweden right now, from song to universe."
+  description={description}
 >
   <SectionIntro
-    title="Artists"
+    title={artistsTitle}
     tagline={displayTitle(webPosts?.title)}
     readMore={introBody}
     theme="records"

@@ -6,6 +6,7 @@ import RosterFilters from "../../components/RosterFilters.astro";
 import RosterIndex from "../../components/RosterIndex.astro";
 import { getClients, getWebPostSection } from "../../lib/ninetone";
 import { displayTitle } from "../../lib/display-title";
+import { sharedT } from "../../lib/t";
 
 // Core content — failures render the error page (never edge-cached) instead
 // of a silently-empty client roster. Transients are absorbed by lib/cache.ts.
@@ -28,15 +29,22 @@ const sortedTags = Array.from(tagCounts.entries())
   .sort((a, b) => b[1] - a[1])
   .slice(0, 12)
   .map(([t]) => t);
+
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4).
+const t = sharedT(Astro.locals);
+const clientsTitle = await t("Clients");
+const description = await t(
+  "The Ninetone Management roster — creators, influencers and public figures we build structure and strategy around.",
+);
 ---
 
 <Base
-  title="Clients"
+  title={clientsTitle}
   theme="management"
-  description="The Ninetone Management roster — creators, influencers and public figures we build structure and strategy around."
+  description={description}
 >
   <SectionIntro
-    title="Clients"
+    title={clientsTitle}
     tagline={displayTitle(webPosts?.title)}
     readMore={introBody}
     theme="management"

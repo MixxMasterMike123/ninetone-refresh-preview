@@ -2,6 +2,7 @@
 import NewsCard from "./NewsCard.astro";
 import { getNews } from "../lib/ninetone";
 import { url } from "../lib/url";
+import { sharedT } from "../lib/t";
 
 interface Props {
   /** How many posts to show. Defaults to 2. */
@@ -10,7 +11,15 @@ interface Props {
   heading?: string;
 }
 
-const { limit = 2, heading = "News" } = Astro.props as Props;
+const { limit = 2, heading: headingProp } = Astro.props as Props;
+
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4). Only
+// this component's own default "News" heading + own chrome go through t()
+// — a caller-supplied heading is translated at its own call site.
+const t = sharedT(Astro.locals);
+const headingLabel = headingProp ?? (await t("News"));
+const latestStoriesKicker = await t("Latest stories");
+const allNewsLabel = await t("All news");
 
 const hasNewsVideo = (p: Record<string, unknown>): boolean =>
   ["ytLinkA", "ytLinkB", "ytLinkC", "ytLinkD"].some((k) => {
@@ -40,11 +49,11 @@ const hasPosts = posts.length > 0;
     <div class="mx-auto max-w-7xl px-6">
       <div class="mb-10 grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
         <div>
-          <span class="kicker text-ninetone-ink/55">Latest stories</span>
-          <h2 class="mt-3 font-display text-4xl leading-[1.05] tracking-tight md:text-5xl">{heading}</h2>
+          <span class="kicker text-ninetone-ink/55">{latestStoriesKicker}</span>
+          <h2 class="mt-3 font-display text-4xl leading-[1.05] tracking-tight md:text-5xl">{headingLabel}</h2>
         </div>
         <a href={url("/news")} class="inline-flex items-center gap-2 self-start text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink">
-          All news <span aria-hidden>→</span>
+          {allNewsLabel} <span aria-hidden>→</span>
         </a>
       </div>
       <div class="grid gap-x-10 gap-y-12 md:grid-cols-2">

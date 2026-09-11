@@ -1,6 +1,7 @@
 ---
 import type { ArtistSocials } from "./ArtistCard.astro";
 import { externalUrl } from "../lib/url";
+import { sharedT } from "../lib/t";
 
 interface Props {
   socials: ArtistSocials;
@@ -43,6 +44,12 @@ const hasEntries = safeEntries.length > 0;
 const stream = safeEntries.filter((e) => e.group === "stream");
 const social = safeEntries.filter((e) => e.group === "social");
 
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4). Platform
+// names ("Spotify", "YouTube", ...) are proper nouns — not translated.
+const t = sharedT(Astro.locals);
+const listenLabel = await t("Listen");
+const followLabel = await t("Follow");
+
 const subTextClass = variant === "ink" ? "text-ninetone-paper/55" : "text-ninetone-ink/55";
 const ruleClass = variant === "ink" ? "border-ninetone-paper/15" : "border-ninetone-ink/15";
 const linkClass = variant === "ink"
@@ -56,7 +63,7 @@ const linkClass = variant === "ink"
 
     {stream.length > 0 && (
       <div class={`flex flex-col gap-2 border-t pt-4 ${ruleClass}`}>
-        <span class={`text-[0.6875rem] uppercase tracking-[0.16em] ${subTextClass}`}>Listen</span>
+        <span class={`text-[0.6875rem] uppercase tracking-[0.16em] ${subTextClass}`}>{listenLabel}</span>
         <ul class="flex flex-wrap gap-2">
           {stream.map((e) => (
             <li>
@@ -76,7 +83,7 @@ const linkClass = variant === "ink"
 
     {social.length > 0 && (
       <div class={`flex flex-col gap-2 border-t pt-4 ${ruleClass}`}>
-        <span class={`text-[0.6875rem] uppercase tracking-[0.16em] ${subTextClass}`}>Follow</span>
+        <span class={`text-[0.6875rem] uppercase tracking-[0.16em] ${subTextClass}`}>{followLabel}</span>
         <ul class="flex flex-wrap gap-2">
           {social.map((e) => (
             <li>

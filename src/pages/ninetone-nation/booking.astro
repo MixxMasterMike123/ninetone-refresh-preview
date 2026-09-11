@@ -8,6 +8,7 @@ import { pageJsonLdOrigin } from "../../lib/site";
 import { collectionPage } from "../../lib/schema";
 import { slugifyTag } from "../../lib/booking-slug";
 import { url } from "../../lib/url";
+import { sharedT } from "../../lib/t";
 
 // Core content — failures render the error page (never edge-cached) instead
 // of a silently-empty booking roster. Transients are absorbed by lib/cache.ts.
@@ -33,16 +34,33 @@ const jsonLd = collectionPage(origin, {
     c.artists.map((a) => ({ name: a.name, path: `/ninetone-nation/${a.slug}` })),
   ),
 });
+
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4). `c.tag`
+// values are FM booking-category labels (decision 7's protected-terms
+// list, API_BOOKING_TAG) — proper nouns, not translated. The Swedish
+// pluralization ternary below that builds category headings from `c.tag`
+// is untouched for the same reason.
+const t = sharedT(Astro.locals);
+const pageTitle = await t("Booking");
+const entertainersTitle = await t("Entertainers");
+const description = await t(
+  "Sweden's leading artists, hosts and speakers, available for your event — browse bookable talent by category.",
+);
+const bookableLabel = await t("bookable");
+const browseByCategoryAriaLabel = await t("Browse by category");
+const oneTalentLabel = await t("talent");
+const manyTalentsLabel = await t("talents");
+const bookLabel = await t("Book");
 ---
 
 <Base
-  title="Booking"
+  title={pageTitle}
   theme="nation"
   jsonLd={jsonLd}
-  description="Sweden's leading artists, hosts and speakers, available for your event — browse bookable talent by category."
+  description={description}
 >
   <SectionIntro
-    title="Entertainers"
+    title={entertainersTitle}
     tagline={displayTitle(webPosts?.title)}
     readMore={introBody}
     theme="nation"
@@ -55,11 +73,11 @@ const jsonLd = collectionPage(origin, {
       {populatedCategories.length > 1 && (
         <nav
           class="mb-12 -mx-6 overflow-x-auto border-b border-ninetone-rule [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          aria-label="Browse by category"
+          aria-label={browseByCategoryAriaLabel}
         >
           <ul class="flex items-center gap-1 px-6 pb-3">
             <li class="shrink-0">
-              <span class="kicker text-ninetone-green-dark">{totalArtists} bookable</span>
+              <span class="kicker text-ninetone-green-dark">{totalArtists} {bookableLabel}</span>
             </li>
             <li class="mx-3 h-4 w-px shrink-0 bg-ninetone-rule" aria-hidden></li>
             {populatedCategories.map((c) => (
@@ -86,7 +104,7 @@ const jsonLd = collectionPage(origin, {
                     href={url(`/ninetone-nation/kategori/${slugifyTag(c.tag)}`)}
                     class="kicker inline-flex items-center gap-2 text-ninetone-green-dark transition-opacity hover:opacity-70"
                   >
-                    {c.tag} · {c.artists.length} {c.artists.length === 1 ? "talent" : "talents"}
+                    {c.tag} · {c.artists.length} {c.artists.length === 1 ? oneTalentLabel : manyTalentsLabel}
                     <span aria-hidden>→</span>
                   </a>
                   <h2 class="mt-4 font-display text-[clamp(2rem,5vw,4rem)] leading-[0.95] tracking-[-0.035em]">
@@ -123,7 +141,7 @@ const jsonLd = collectionPage(origin, {
                     imageWidth={a.imageSmall ? 500 : 1000}
                     imageHeight={a.imageSmall ? 500 : 1000}
                     tags={[c.tag]}
-                    ctaLabel="Book"
+                    ctaLabel={bookLabel}
                     highlight={a.highlight}
                     socials={a.socials}
                   />
