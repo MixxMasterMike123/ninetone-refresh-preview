@@ -33,3 +33,48 @@ Companion to [seo-strategy-2026-09.md](seo-strategy-2026-09.md) and [seo-phase-1
 - On staging: `/` and `/records` render Swedish chrome and Swedish content; `/en/` and `/en/records` render English; the same artist page at both URLs shows the bio in each language with markdown intact and the artist name untouched; `<html lang>` and hreflang pairs correct on both; language switch round-trips; sitemap has both locales; the warm script has been run and the PR description reports how many strings were translated, token totals, and cost.
 - `scripts/i18n-list.mjs` output for the chrome strings attached to the PR description so Patrik can review the Swedish voice lines and write overrides.
 - Every place a decision above could not be followed as written is listed in the PR description with the substitute.
+
+## Implementation notes (added during execution — binding on later sections)
+
+These do not reopen any decision above; they constrain HOW two of them are
+implemented, after findings during the build.
+
+**A. The warm script MUST reuse translate.ts's call path (constrains decision 9).**
+Decision 9 correctly has `scripts/translate-warm.mjs` writing KV directly rather
+than going through the render-time scheduling path. That stays. But the script
+must NOT re-implement any of: the Anthropic API call, the system-prompt
+assembly, the protected-terms block, the output-contract guard, or the
+truncation (`stop_reason`) handling. Every one of those comes from
+`src/lib/translate.ts`, exported for the script's use. Re-implementing them
+would let the warm cache and the request-time cache diverge in ways nothing
+tests and nobody notices until Patrik reads a bio that reads differently from
+the one the site renders. The script owns only: entity walking, tier selection,
+key generation via the module's own `translationKey()`, and the
+`wrangler kv bulk put` load.
+
+**B. The overrides import is bundler-load-bearing — verified, keep it verified.**
+`loadOverrides()` in translate.ts reads `src/i18n/overrides.json` via a dynamic
+`import(..., { with: { type: "json" } })` wrapped in `.catch(() => ({}))`. That
+catch means a broken import is INDISTINGUISHABLE from an empty overrides file —
+which is exactly how this mechanism was silently dead once already (the import
+attribute was missing; plain Node ESM rejected it; the catch swallowed it).
+
+Verified on this branch against a real `npm run build:cf`, by temporarily adding
+a route that imports `translate()` so the module actually enters the bundle
+(without an importer, Vite tree-shakes it out entirely and the check is vacuous):
+Vite emits the JSON as a real code-split chunk, `dist/server/chunks/overrides_*.mjs`,
+with the fixture hash and values inlined as a JS module, and the importing chunk
+resolves it by relative path from the same directory. The mechanism survives the
+Cloudflare bundle in its current dynamic form.
+
+Consequences for later sections:
+- Do not "simplify" that import without re-running this check. A static
+  `import overrides from "../i18n/overrides.json"` is also inlined by Vite and
+  is the safer form under a bundler, but it is NOT obviously safe for the warm
+  script's plain-Node path — whichever form is chosen must work in BOTH.
+- Once section 4 wires `t()` into real pages, the reviewer must re-confirm the
+  fixture hash is present in `dist/server/chunks/` on a plain `build:cf` (no
+  probe route needed by then), and that the override actually takes effect on
+  staging — not merely that `node:test` passes. A second silent death under the
+  bundler is the specific failure this note exists to prevent.
+
