@@ -6,5 +6,13 @@
   "dcc839a4015c4b7dd9db959a8f757833b8adb92462a751b973386e453c6d58a3": {
     "sv": "Visa",
     "en": "View"
+  },
+  "a52ace420f2175d08b1577a1bea5445e36801229c074ef9ed6c55a73401fd9c2": {
+    "sv": "Alla",
+    "en": "All"
+  },
+  "b695c090980a50ae44cfb20a346e398c61e1e743a11064316614660469042c86": {
+    "sv": "Alla klienter",
+    "en": "All clients"
   }
 }
