@@ -108,8 +108,13 @@ const accent = sectionAccent.records;
           </button>
         </div>
 
+        {/* `inert` keeps the 341 collapsed links out of the tab order — without
+            it a keyboard user tabs through 341 targets they cannot see. It is
+            removed on expand. Crawlers ignore both `inert` and max-height, so
+            every link stays in the static HTML and the crawl-depth goal holds. */}
         <div
           data-previous-index-panel
+          inert
           class="max-h-0 overflow-hidden opacity-0 transition-[max-height,opacity] duration-300 ease-out"
         >
           <div class="pt-8">
@@ -134,11 +139,13 @@ const accent = sectionAccent.records;
           panel.style.opacity = "0";
           label.textContent = "Show full index";
           btn.setAttribute("aria-expanded", "false");
+          panel.setAttribute("inert", "");
         } else {
           panel.style.maxHeight = `${panel.scrollHeight}px`;
           panel.style.opacity = "1";
           label.textContent = "Hide full index";
           btn.setAttribute("aria-expanded", "true");
+          panel.removeAttribute("inert");
         }
       });
     });

@@ -88,7 +88,19 @@ async function main() {
       // astro.config.mjs's `redirects` on the static target (GH Pages has no
       // server-side redirects). Those are not pages and correctly have no
       // <h1> — exempt them rather than weakening the check for real pages.
-      const isRedirectShim = /http-equiv=["']refresh["']/i.test(content);
+      //
+      // Matched on SHAPE, not on the string appearing anywhere in the file: an
+      // earlier content-only test (`/http-equiv=["']refresh["']/`) failed OPEN,
+      // because FM bio or guide markdown that merely mentions that attribute
+      // reaches the page through set:html and would have silently exempted a
+      // real 0-<h1> page from a build-failing check. A genuine shim is tiny,
+      // has the meta in <head>, and has no <main>.
+      // (Astro's shim omits the literal <head> tag, so key on size + absence of
+      // page chrome instead: a real page always has a <main>.)
+      const isRedirectShim =
+        content.length < 2048 &&
+        !/<main[\s>]/i.test(content) &&
+        /<meta[^>]+http-equiv=["']refresh["']/i.test(content);
       const h1Matches = isRedirectShim ? [] : [...content.matchAll(H1_ALL_RE)];
       if (isRedirectShim) {
         // Intentionally headless — skip.

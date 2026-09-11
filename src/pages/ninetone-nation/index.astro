@@ -13,6 +13,13 @@ const webPosts = await getWebPostSection("Ninetone Nation");
   theme="nation"
   description="Sweden's leading artists, hosts and speakers, available for your event — meet Ninetone Nation's talent and booking team."
 >
+  {/* Page-level H1. Visually hidden because this archetype's identity is
+      carried by the portal tiles and the kicker, and DESIGN.md fixes that
+      treatment — but the page still needs exactly one heading that names it,
+      and it must belong to the PAGE, not to whichever tile happens to render
+      first inside a shared component. */}
+  <h1 class="sr-only">Ninetone Nation</h1>
+
   <SplitPortalHero
     theme="nation"
     kicker="Ninetone Nation"
