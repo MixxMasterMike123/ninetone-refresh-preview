@@ -7,6 +7,7 @@ import {
   otherLang,
   stripLocale,
   hreflangLinks,
+  switchHref,
 } from "../src/lib/i18n.ts";
 
 // ---------------------------------------------------------------------------
@@ -147,4 +148,67 @@ test("hreflangLinks on the root path never doubles the /en segment into /en/", (
     { hreflang: "en", href: "https://ninetone.com/en" },
     { hreflang: "x-default", href: "https://ninetone.com/" },
   ]);
+});
+
+// ---------------------------------------------------------------------------
+// switchHref — the header language-switch target (section 3). The whole
+// point of this function's existence (rather than callers composing
+// alternatePath(path, otherLang(lang)) inline) is the cf-target rewrite
+// scenario: src/middleware.ts rewrites "/en/records" to a render of
+// "/records" BEFORE Astro.url.pathname is ever read by a page/component, so
+// by the time Header.astro runs, the pathname it sees is ALREADY
+// locale-free — there is no "/en" left for stripLocale to find. The correct
+// current language has to come from `locals.lang` (passed in here as
+// `currentLang`), never re-derived from the post-rewrite path. These tests
+// simulate exactly that: an English render where the path argument is
+// already bare, the way it actually arrives on cf.
+// ---------------------------------------------------------------------------
+
+test("switchHref: sv request on a bare path -> the /en version", () => {
+  assert.equal(switchHref("/records", "sv"), "/en/records");
+  assert.equal(switchHref("/", "sv"), "/en");
+});
+
+test("switchHref: en request whose path is ALREADY rewritten bare (the cf post-rewrite shape) -> the sv version", () => {
+  // This is the critical case: on cf, an English visitor on "/en/records" is
+  // rendered from a NEXT("/records") rewrite, so Header.astro's
+  // Astro.url.pathname is "/records", not "/en/records" — no /en prefix
+  // survives for stripLocale to detect. switchHref must still produce the
+  // Swedish URL ("/records" itself) using the explicitly-passed
+  // currentLang="en", not whatever stripLocale would guess from the bare
+  // path alone (which would incorrectly say "sv" and therefore treat "sv"
+  // as the OTHER language, producing "/en/records" — the same page the
+  // visitor is already on).
+  assert.equal(switchHref("/records", "en"), "/records");
+  assert.equal(switchHref("/", "en"), "/");
+});
+
+test("switchHref: also correct if a caller's path still carries a literal /en prefix (gh target shape, or a caller that didn't go through the rewrite)", () => {
+  assert.equal(switchHref("/en/records", "en"), "/records");
+  assert.equal(switchHref("/en/records", "sv"), "/en/records");
+});
+
+test("switchHref round-trips: switching twice, each time with the CORRECT currentLang for that render, returns to the original path", () => {
+  // NOTE on why the second call passes `otherLang(lang)`: `switchHref` means
+  // "the URL of the OTHER language from `currentLang`", so the two calls
+  // model two SEPARATE page renders, not one render called twice. Starting
+  // from "/records" as an "sv" render, the first call yields "/en/records".
+  // A header rendered on THAT page is an "en" render — it knows its own
+  // language from `locals.lang`, which is `otherLang("sv")` — so that is
+  // what the second call receives, and it lands back on "/records".
+  //
+  // This mirrors the real constraint: a page render never receives "the
+  // language I should treat this pathname as having come from", only its
+  // own. That is exactly the ambiguity `switchHref`'s doc comment explains
+  // a bare post-rewrite path cannot resolve on its own.
+  for (const [path, lang] of [
+    ["/", "sv"],
+    ["/records", "sv"],
+    ["/en/records", "en"],
+    ["/ninetone-nation/booking", "sv"],
+  ]) {
+    const once = switchHref(path, lang);
+    const twice = switchHref(once, otherLang(lang));
+    assert.equal(twice, path, `round trip for ${path} (${lang})`);
+  }
 });

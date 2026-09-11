@@ -2,16 +2,35 @@
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent, sectionCta } from "../lib/sections";
 import { url } from "../lib/url";
+import { switchHref } from "../lib/i18n";
+import type { Lang } from "../lib/translate";
 
 interface Props {
   theme?: SectionTheme;
-  lang?: "en" | "sv";
+  lang?: Lang;
 }
 
-const { theme = "group", lang = "en" } = Astro.props;
+// Default "sv", not "en" (matches Base.astro's corrected fallback — see the
+// long comment there): Base.astro always passes an explicit `lang` now, so
+// in practice this default only matters for a hypothetical future caller
+// that renders Header standalone without going through Base. Swedish is the
+// site's actual default locale (decision 1), so a caller-less default
+// should match that rather than silently reintroducing the old English-only
+// mislabel this section otherwise fixes.
+const { theme = "group", lang = "sv" } = Astro.props;
 const accent = sectionAccent[theme];
 const cta = sectionCta[theme];
 const ctaLabel = lang === "sv" ? cta.sv : cta.en;
+
+// gh/static target: `/en/` does not exist at all (decision 2 — it's a
+// CF-only feature, the middleware that would ever rewrite/detect it is
+// entirely HAS_RUNTIME-gated in src/middleware.ts). Rendering a switch that
+// links to a URL nothing serves would be a dead link on every one of the
+// 546 static preview pages, so the switch is gated the same way every other
+// runtime-only affordance in this codebase is (see ContactForm.astro,
+// YouTubeFeed.astro): `import.meta.env.PUBLIC_HAS_RUNTIME`.
+const hasRuntime =
+  import.meta.env.PUBLIC_HAS_RUNTIME === true || import.meta.env.PUBLIC_HAS_RUNTIME === "true";
 
 const navItems = [
   { href: "/", labelEn: "Home", labelSv: "Hem", match: ["/"] },
@@ -30,6 +49,20 @@ const pathname = basePrefix && rawPath.startsWith(basePrefix)
   : rawPath;
 const isActive = (matches: string[]) =>
   matches.some((m) => (m === "/" ? pathname === "/" : pathname === m || pathname.startsWith(`${m}/`)));
+
+// Language switch target (section 3 deliverable). `pathname` above is
+// already base-stripped — on the cf target `base` is "/" so that's a no-op
+// and `pathname === Astro.url.pathname`, which is ALSO already
+// locale-stripped by src/middleware.ts's rewrite before this component
+// ever runs (see src/lib/i18n.ts's `switchHref` doc comment for the full
+// reasoning on why the current URL alone can't tell us the current locale
+// post-rewrite, and why `lang` — sourced from `locals.lang` via Base.astro
+// — is what makes this correct rather than the pathname itself). Passing
+// this same `pathname` through `switchHref` costs nothing extra: on gh
+// there's no rewrite and no "/en" to strip, so `switchHref` is just
+// `localizedPath(pathname, otherLang(lang))` there too.
+const otherHref = url(switchHref(pathname, lang));
+const otherLangCode = lang === "sv" ? "en" : "sv";
 ---
 
 <header
@@ -96,13 +129,17 @@ const isActive = (matches: string[]) =>
         <span aria-hidden>→</span>
       </a>
 
-      <a
-        href={lang === "en" ? Astro.url.pathname.replace(/^\/en/, "/sv") : Astro.url.pathname.replace(/^\/sv/, "/en")}
-        class="hidden md:inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-xs font-semibold text-ninetone-ink/65 hover:text-ninetone-ink"
-        aria-label={lang === "en" ? "Switch to Swedish" : "Switch to English"}
-      >
-        {lang === "en" ? "SV" : "EN"}
-      </a>
+      {hasRuntime && (
+        <a
+          href={otherHref}
+          hreflang={otherLangCode}
+          lang={otherLangCode}
+          class="hidden md:inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-xs font-semibold text-ninetone-ink/65 hover:text-ninetone-ink"
+          aria-label={lang === "en" ? "Switch to Swedish" : "Switch to English"}
+        >
+          {lang === "en" ? "SV" : "EN"}
+        </a>
+      )}
 
       <button
         type="button"
@@ -173,12 +210,16 @@ const isActive = (matches: string[]) =>
         {ctaLabel}
         <span aria-hidden>→</span>
       </a>
-      <a
-        href={lang === "en" ? Astro.url.pathname.replace(/^\/en/, "/sv") : Astro.url.pathname.replace(/^\/sv/, "/en")}
-        class="kicker self-start text-ninetone-ink/55 hover:text-ninetone-ink"
-      >
-        {lang === "en" ? "Svenska →" : "English →"}
-      </a>
+      {hasRuntime && (
+        <a
+          href={otherHref}
+          hreflang={otherLangCode}
+          lang={otherLangCode}
+          class="kicker self-start text-ninetone-ink/55 hover:text-ninetone-ink"
+        >
+          {lang === "en" ? "Svenska →" : "English →"}
+        </a>
+      )}
     </div>
   </nav>
 </div>

@@ -108,6 +108,41 @@ export function alternatePath(currentPath: string, lang: Lang): string {
   return localizedPath(path, lang);
 }
 
+/**
+ * The header language-switch href: given the CURRENT rendered path and the
+ * CURRENT locale (from `locals.lang`, never re-derived from the path — see
+ * below), return the URL of the other language's version of this page.
+ *
+ * WHY THIS TAKES `currentLang` AS A SEPARATE PARAMETER INSTEAD OF CALLING
+ * `alternatePath(currentPath, otherLang(detectedLang))` where `detectedLang`
+ * comes from sniffing `currentPath` itself (e.g. via `stripLocale`): on the
+ * cf target, `src/middleware.ts` REWRITES the request before Astro renders
+ * the page — `/en/records` becomes a render of the `/records` route, and
+ * `next(renderTarget)` is called with the STRIPPED path. That means
+ * `Astro.url.pathname` inside every page/component, Header.astro included,
+ * is ALREADY locale-free by the time this code runs — there is no `/en`
+ * segment left to find. `stripLocale("/records")` would return `{ path:
+ * "/records", lang: "sv" }` regardless of whether the visitor is actually on
+ * `/records` (Swedish) or `/en/records` (English, rewritten) — the pathname
+ * alone cannot distinguish the two post-rewrite. The middleware does not
+ * stash the original pre-rewrite path on `locals` (only `locals.lang`), so
+ * `locals.lang` — set once, correctly, by the one piece of code that saw the
+ * real request path before rewriting it — is the ONLY reliable signal for
+ * "which language is this render in". Callers MUST pass that in as
+ * `currentLang` rather than trying to recover it from `currentPath`.
+ *
+ * `currentPath` itself is still run through `alternatePath()` (which calls
+ * `stripLocale` internally) rather than assumed bare, because this function
+ * is also correct — harmlessly — for a caller that DOES still have a
+ * possibly-`/en`-prefixed path (the gh/static target never rewrites
+ * anything, so there `Astro.url.pathname` could in principle carry a
+ * locale prefix if one ever existed there; decision 2 means it currently
+ * never does, but this function doesn't need to assume that).
+ */
+export function switchHref(currentPath: string, currentLang: Lang): string {
+  return alternatePath(currentPath, otherLang(currentLang));
+}
+
 /** One <link rel="alternate" hreflang> entry: absolute URL + the hreflang value it's tagged with. */
 export interface HreflangLink {
   hreflang: "sv" | "en" | "x-default";
