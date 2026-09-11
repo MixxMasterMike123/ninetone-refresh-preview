@@ -18,6 +18,57 @@
  * static section links plus one factual line per FM entity (name,
  * category/genre if present, tagline as plain text, absolute URL) — never
  * marketing copy, since this file is parsed rather than read.
+ *
+ * SECTION 5 (i18n Phase 2, docs/i18n-phase-2-brief.md) — ENGLISH CONTENT
+ * STRATEGY, chosen and explained here because this is where it's
+ * implemented:
+ *
+ * llms.txt lists EVERY FM entity — as of writing, ~300+ lines (every active
+ * artist, previous artist, client, team member, news post, booking talent,
+ * category, and guide). That is far beyond the per-request translation
+ * budget (25 uncached calls — src/lib/translate.ts's RequestBudget), and
+ * this endpoint has no per-visitor render to amortize the cost across the
+ * way a page does: it's one flat text file, requested cold as often as
+ * warm, with no component tree to spread a shared budget over.
+ *
+ * The choice made here: the small, fixed set of CHROME strings (section
+ * headings, the four static nav-link labels' fixed suffixes, the intro
+ * blurb — roughly 20 literal strings total, enumerated in
+ * `LLMS_CHROME_STRINGS` below) are looked up in an optional `chrome` table
+ * the caller supplies; ENTITY content (every artist/client/team/news/
+ * booking/guide line — names, genres, taglines, the "previous artist" /
+ * "N bookable" fragments baked into their lines) is ALWAYS rendered in
+ * whatever language it already exists in, in FM or in the line-builder
+ * functions below (artistLine, previousArtistLine, etc.) — never live-
+ * translated here.
+ *
+ * Why not translate entity content too, given src/lib/translate.ts's
+ * `translate()` is itself cache-first and never blocks (decision 6)? A
+ * cache HIT is free either way — cheap and correct to use if the warm
+ * script (decision 9) has already populated KV for a string. The problem is
+ * the miss path: `translate()` on a miss with no `waitUntil` scheduler
+ * simply returns source text and schedules nothing (by design — see
+ * translate.ts's own doc comment on why an unscheduled miss must not await
+ * inline), which is exactly the degrade path decision 6 describes. But
+ * calling it WITH a scheduler for 300+ entity lines on every cold request
+ * would fire 300+ concurrent Anthropic calls via `waitUntil` on a single
+ * request with no budget gate appropriate to that volume (the 25-call
+ * budget exists for a page's chrome, not a 300-line manifest) — "silently
+ * blow the budget," precisely what the brief warns against. So entity
+ * content takes the passive, read-only half of decision 6's degrade path:
+ * translated once it's warm (via the warm script bulk-loading KV directly,
+ * decision 9 — not via a live call from this endpoint), source-language
+ * otherwise, and this endpoint never itself schedules a single entity
+ * translation. This IS "serve whatever is already in the KV cache and
+ * untranslated otherwise" — the brief's own suggested fallback.
+ *
+ * Chrome, by contrast, is a small fixed vocabulary (~20 strings) reused on
+ * every request, so warming it is genuinely cheap (note C in the brief:
+ * "translating all ~125 chrome strings costs about $0.08 once,
+ * permanently") and worth doing live if the caller has a resolved `t()` at
+ * hand — hence taking it as a plain lookup table rather than reaching for
+ * translate.ts itself, keeping this module pure (no I/O, no Astro globals,
+ * same contract as before).
  */
 
 import type { Artist, TeamMember, WebPost } from "./ninetone.ts";
@@ -159,6 +210,56 @@ export interface LlmsTxtData {
 }
 
 /**
+ * The fixed, small chrome vocabulary `buildLlmsTxt` renders — see this
+ * module's doc comment ("ENGLISH CONTENT STRATEGY") for why only THESE
+ * strings are ever live-translated, never entity content. Every string
+ * here is a literal that appears verbatim in `buildLlmsTxt` below; keeping
+ * them declared once, in one array, means a caller building the `chrome`
+ * table (src/pages/llms.txt.ts, or its /en/ counterpart) can iterate this
+ * list rather than hand-copy the literals a second time somewhere else —
+ * and a future edit to a heading in `buildLlmsTxt` that forgets to update
+ * this list is a `chromeText()` fallback-to-source, not a crash.
+ */
+export const LLMS_CHROME_STRINGS: readonly string[] = [
+  "# Ninetone Group",
+  "> Swedish music company based in Sundsvall and Stockholm. Three divisions:\n" +
+    "> Ninetone Records (label), Ninetone Management (artist and creator\n" +
+    "> management), Ninetone Nation (booking for events).",
+  "## Ninetone Records",
+  "Artists",
+  "current roster",
+  "Previous artists",
+  "Contact Records",
+  "demo submissions",
+  "## Ninetone Management",
+  "Clients",
+  "managed artists and creators",
+  "Contact Management",
+  "## Ninetone Nation",
+  "Booking",
+  "bookable talent by category",
+  "Contact Nation",
+  "## Company",
+  "Team",
+  "News",
+  "Guider",
+  "Privacy",
+];
+
+/** A resolved-translation lookup for `LLMS_CHROME_STRINGS`, keyed by the
+ *  exact source (Swedish) string — e.g. `{ "Team": "Team", "News": "News",
+ *  "Artists": "Artists", ... }` for English. Absent entries fall back to
+ *  the source string (see `chromeText()`), never to a blank or a crash —
+ *  same "never block, degrade to source" posture as translate.ts itself. */
+export type LlmsChromeTable = Record<string, string>;
+
+export interface BuildLlmsTxtOptions {
+  /** See `LlmsChromeTable`. Omit entirely for source-language (Swedish)
+   *  output — every `chromeText()` call then simply returns its input. */
+  chrome?: LlmsChromeTable;
+}
+
+/**
  * One line per guide (Section 7 — src/pages/guider/[slug].astro), built from
  * the same Guide[] shape guidesFromCategory() (src/lib/guides.ts) produces —
  * that module only `import type`s from ninetone.ts, so no new value import
@@ -185,7 +286,16 @@ export function guideLines(guides: GuideLike[], origin: string): string[] {
  * entity lines — so Sections 6/7 (Nation category pages, guides route) can
  * each add one more section without restructuring anything.
  */
-export function buildLlmsTxt(origin: string, data: LlmsTxtData): string {
+export function buildLlmsTxt(origin: string, data: LlmsTxtData, opts?: BuildLlmsTxtOptions): string {
+  const chrome = opts?.chrome;
+  // Falls back to `source` whenever the table has no entry — an absent
+  // table (Swedish/default render), a miss for one particular string, or a
+  // caller that only warmed a subset all degrade the same way: render the
+  // source string, never throw, never blank. Mirrors translate.ts's own
+  // "cache miss -> return source" posture (decision 6), just without any
+  // live call — this module stays pure.
+  const chromeText = (source: string): string => chrome?.[source] ?? source;
+
   const artistLines = data.artists.map((a) => artistLine(a, origin)).filter((l): l is string => !!l);
   const previousLines = data.previousArtists
     .map((a) => previousArtistLine(a, origin))
@@ -196,17 +306,19 @@ export function buildLlmsTxt(origin: string, data: LlmsTxtData): string {
 
   const sections: string[] = [];
 
-  sections.push("# Ninetone Group");
+  sections.push(chromeText("# Ninetone Group"));
   sections.push(
-    "> Swedish music company based in Sundsvall and Stockholm. Three divisions:\n" +
-      "> Ninetone Records (label), Ninetone Management (artist and creator\n" +
-      "> management), Ninetone Nation (booking for events).",
+    chromeText(
+      "> Swedish music company based in Sundsvall and Stockholm. Three divisions:\n" +
+        "> Ninetone Records (label), Ninetone Management (artist and creator\n" +
+        "> management), Ninetone Nation (booking for events).",
+    ),
   );
 
   sections.push(
     [
-      "## Ninetone Records",
-      entityLine("Artists", "/records/artists", origin, "current roster"),
+      chromeText("## Ninetone Records"),
+      entityLine(chromeText("Artists"), "/records/artists", origin, chromeText("current roster")),
       ...artistLines,
       // Real route is the bare /records/artists/previous (Astro's paginate()
       // emits page 1 unsuffixed in [...page].astro; pages 2+ get /previous/{n})
@@ -215,41 +327,56 @@ export function buildLlmsTxt(origin: string, data: LlmsTxtData): string {
       // brief's Appendix B skeleton writes "/records/artists/previous/1",
       // which 404s; using the real, reachable URL instead, same as the
       // previous/single/{slug} deviation below.
-      entityLine("Previous artists", "/records/artists/previous", origin),
+      entityLine(chromeText("Previous artists"), "/records/artists/previous", origin),
       ...previousLines,
-      entityLine("Contact Records", "/records/contact-records", origin, "demo submissions"),
+      entityLine(
+        chromeText("Contact Records"),
+        "/records/contact-records",
+        origin,
+        chromeText("demo submissions"),
+      ),
     ].join("\n"),
   );
 
   sections.push(
     [
-      "## Ninetone Management",
-      entityLine("Clients", "/management/clients", origin, "managed artists and creators"),
+      chromeText("## Ninetone Management"),
+      entityLine(
+        chromeText("Clients"),
+        "/management/clients",
+        origin,
+        chromeText("managed artists and creators"),
+      ),
       ...clientLines,
-      entityLine("Contact Management", "/management/contact-management", origin),
+      entityLine(chromeText("Contact Management"), "/management/contact-management", origin),
     ].join("\n"),
   );
 
   sections.push(
     [
-      "## Ninetone Nation",
-      entityLine("Booking", "/ninetone-nation/booking", origin, "bookable talent by category"),
+      chromeText("## Ninetone Nation"),
+      entityLine(
+        chromeText("Booking"),
+        "/ninetone-nation/booking",
+        origin,
+        chromeText("bookable talent by category"),
+      ),
       ...(data.bookingCategoryLines ?? []),
       ...data.bookingLines,
-      entityLine("Contact Nation", "/ninetone-nation/contact-ninetone-nation", origin),
+      entityLine(chromeText("Contact Nation"), "/ninetone-nation/contact-ninetone-nation", origin),
     ].join("\n"),
   );
 
   sections.push(
     [
-      "## Company",
-      entityLine("Team", "/team", origin),
+      chromeText("## Company"),
+      entityLine(chromeText("Team"), "/team", origin),
       ...teamLines,
-      entityLine("News", "/news", origin),
+      entityLine(chromeText("News"), "/news", origin),
       ...newsLines,
-      entityLine("Guider", "/guider", origin),
+      entityLine(chromeText("Guider"), "/guider", origin),
       ...(data.guideLines ?? []),
-      entityLine("Privacy", "/integritet", origin),
+      entityLine(chromeText("Privacy"), "/integritet", origin),
     ].join("\n"),
   );
 

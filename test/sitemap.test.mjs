@@ -8,6 +8,8 @@ import {
   bookingCategoryEntries,
   guideEntries,
   buildSitemapEntries,
+  localizeSitemapEntries,
+  buildLocalizedSitemapEntries,
   renderUrlsetXml,
   renderSitemapIndexXml,
 } from "../src/lib/sitemap.ts";
@@ -256,4 +258,126 @@ test("renderSitemapIndexXml: one <sitemap> entry per URL given", () => {
   assert.match(xml, /<sitemapindex xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);
   assert.equal((xml.match(/<sitemap>/g) ?? []).length, 1);
   assert.ok(xml.includes("<loc>https://ninetone.com/sitemap-pages.xml</loc>"));
+});
+
+// ---------------------------------------------------------------------------
+// localizeSitemapEntries / buildLocalizedSitemapEntries (Section 5 —
+// i18n Phase 2: "both locales for every URL, with xhtml:link alternates")
+// ---------------------------------------------------------------------------
+
+test("localizeSitemapEntries: includeEnglish=true emits one sv entry + one en entry per input, each carrying the full alternate set", () => {
+  const entries = localizeSitemapEntries(ORIGIN, [{ loc: `${ORIGIN}/records`, changefreq: "weekly" }], true);
+  assert.equal(entries.length, 2);
+
+  const sv = entries.find((e) => e.loc === "https://ninetone.com/records");
+  const en = entries.find((e) => e.loc === "https://ninetone.com/en/records");
+  assert.ok(sv, "expected a Swedish (bare-path) entry");
+  assert.ok(en, "expected an English (/en-prefixed) entry");
+
+  for (const e of [sv, en]) {
+    assert.equal(e.alternates?.length, 3);
+    assert.deepEqual(
+      e.alternates.map((a) => a.hreflang).sort(),
+      ["en", "sv", "x-default"],
+    );
+    const byLang = Object.fromEntries(e.alternates.map((a) => [a.hreflang, a.href]));
+    assert.equal(byLang.sv, "https://ninetone.com/records");
+    assert.equal(byLang.en, "https://ninetone.com/en/records");
+    // x-default = Swedish (decision 1).
+    assert.equal(byLang["x-default"], byLang.sv);
+  }
+});
+
+test("localizeSitemapEntries: root path localizes to bare /en, not /en/ (localizedPath's own contract)", () => {
+  const entries = localizeSitemapEntries(ORIGIN, [{ loc: `${ORIGIN}/` }], true);
+  const en = entries.find((e) => e.loc.includes("/en"));
+  assert.equal(en.loc, "https://ninetone.com/en");
+});
+
+test("localizeSitemapEntries: includeEnglish=false lists sv-only <url> entries but every entry still carries the full sv/en/x-default alternate set", () => {
+  const entries = localizeSitemapEntries(ORIGIN, [{ loc: `${ORIGIN}/records` }, { loc: `${ORIGIN}/team` }], false);
+  assert.equal(entries.length, 2, "no /en/ <url> entries listed on the gh/static target");
+  assert.ok(entries.every((e) => e.loc.startsWith(ORIGIN) && !e.loc.includes("/en/") && e.loc !== `${ORIGIN}/en`));
+  for (const e of entries) {
+    assert.equal(e.alternates?.length, 3);
+    assert.ok(e.alternates.some((a) => a.hreflang === "en"));
+  }
+});
+
+test("localizeSitemapEntries: preserves changefreq/lastmod on both locale entries", () => {
+  const entries = localizeSitemapEntries(
+    ORIGIN,
+    [{ loc: `${ORIGIN}/news/post-a`, changefreq: "monthly", lastmod: "2026-01-05" }],
+    true,
+  );
+  assert.equal(entries.length, 2);
+  for (const e of entries) {
+    assert.equal(e.changefreq, "monthly");
+    assert.equal(e.lastmod, "2026-01-05");
+  }
+});
+
+test("buildLocalizedSitemapEntries: end-to-end with stubbed lists doubles the entry count when includeEnglish=true", () => {
+  const localeFree = buildSitemapEntries(ORIGIN, stubbedLists());
+  const localized = buildLocalizedSitemapEntries(ORIGIN, stubbedLists(), true);
+  assert.equal(localized.length, localeFree.length * 2);
+});
+
+test("buildLocalizedSitemapEntries: includeEnglish=false keeps the same entry count as the locale-free list", () => {
+  const localeFree = buildSitemapEntries(ORIGIN, stubbedLists());
+  const localized = buildLocalizedSitemapEntries(ORIGIN, stubbedLists(), false);
+  assert.equal(localized.length, localeFree.length);
+});
+
+// ---------------------------------------------------------------------------
+// renderUrlsetXml — xhtml namespace + <xhtml:link> alternates
+// ---------------------------------------------------------------------------
+
+test("renderUrlsetXml: emits xmlns:xhtml on <urlset> when any entry carries alternates", () => {
+  const entries = localizeSitemapEntries(ORIGIN, [{ loc: `${ORIGIN}/records` }], true);
+  const xml = renderUrlsetXml(entries);
+  assert.match(xml, /<urlset[^>]*\sxmlns:xhtml="http:\/\/www\.w3\.org\/1999\/xhtml"[^>]*>/);
+  // Namespace declared exactly once, on the root element — not repeated per <url>.
+  assert.equal((xml.match(/xmlns:xhtml=/g) ?? []).length, 1);
+});
+
+test("renderUrlsetXml: does NOT emit xmlns:xhtml when no entry has alternates (unchanged Phase-1 shape)", () => {
+  const xml = renderUrlsetXml([{ loc: `${ORIGIN}/records` }]);
+  assert.ok(!xml.includes("xmlns:xhtml"));
+  assert.ok(!xml.includes("xhtml:link"));
+});
+
+test("renderUrlsetXml: emits one <xhtml:link rel=\"alternate\"> per alternate, hreflang sv/en/x-default all present", () => {
+  const entries = localizeSitemapEntries(ORIGIN, [{ loc: `${ORIGIN}/records` }], true);
+  const svEntryXml = renderUrlsetXml([entries.find((e) => e.loc === "https://ninetone.com/records")]);
+  assert.equal((svEntryXml.match(/<xhtml:link rel="alternate"/g) ?? []).length, 3);
+  assert.ok(svEntryXml.includes('hreflang="sv" href="https://ninetone.com/records"'));
+  assert.ok(svEntryXml.includes('hreflang="en" href="https://ninetone.com/en/records"'));
+  assert.ok(svEntryXml.includes('hreflang="x-default" href="https://ninetone.com/records"'));
+});
+
+test("renderUrlsetXml: x-default alternate always equals the Swedish href, on both the sv and en <url> entries (decision 1)", () => {
+  const entries = localizeSitemapEntries(ORIGIN, [{ loc: `${ORIGIN}/records` }], true);
+  const xml = renderUrlsetXml(entries);
+  // Both <url> blocks in this document should carry an x-default alternate
+  // pointing at the bare (Swedish) URL, never the /en/ one.
+  const xDefaultHrefs = [...xml.matchAll(/hreflang="x-default" href="([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(xDefaultHrefs.length, 2);
+  assert.ok(xDefaultHrefs.every((h) => h === "https://ninetone.com/records"));
+});
+
+test("renderUrlsetXml: escapes XML-special characters inside xhtml:link href too", () => {
+  const entries = localizeSitemapEntries(ORIGIN, [{ loc: `${ORIGIN}/news/a&b` }], true);
+  const xml = renderUrlsetXml(entries);
+  assert.ok(xml.includes("a&amp;b"));
+  assert.ok(!/href="[^"]*a&b[^"]*"/.test(xml));
+});
+
+test("full pipeline: buildLocalizedSitemapEntries + renderUrlsetXml produces a valid-looking document with /en/ <url> entries and namespace present", () => {
+  const entries = buildLocalizedSitemapEntries(ORIGIN, stubbedLists(), true);
+  const xml = renderUrlsetXml(entries);
+  assert.match(xml, /xmlns:xhtml="http:\/\/www\.w3\.org\/1999\/xhtml"/);
+  assert.ok(xml.includes("<loc>https://ninetone.com/en/records/artists/artist-a</loc>"));
+  assert.ok(xml.includes("<loc>https://ninetone.com/records/artists/artist-a</loc>"));
+  assert.ok(xml.includes('hreflang="x-default"'));
 });

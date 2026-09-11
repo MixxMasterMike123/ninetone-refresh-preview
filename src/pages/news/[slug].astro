@@ -8,6 +8,7 @@ import { breadcrumbs, newsArticle, markdownToPlainText, fmDateToIso } from "../.
 import { shouldAppendSiteName } from "../../lib/display-title";
 import { notFound } from "../../lib/not-found";
 import { sharedT } from "../../lib/t";
+import { formatDate, type Lang } from "../../lib/dates";
 
 export async function getStaticPaths() {
   const posts = await getNews();
@@ -100,6 +101,15 @@ const backToNewsLabel = await t("← News");
 const byLabel = await t("By");
 const publicerad = await t("Publicerad");
 const backToAllStoriesLabel = await t("← Back to all stories");
+
+// Locale-aware dateline (docs/i18n-phase-2-brief.md "Dates" item): replaces
+// the raw FM "MM/DD/YYYY" string this page used to render directly in
+// <time> (the US-format output the design critique flagged). `isoDate`
+// (fmDateToIso, above) still carries the machine-readable `datetime`
+// attribute unchanged — only the human-visible text changes here. Pure
+// Intl formatting, not a translation — does not go through t()/sharedT().
+const dateLang: Lang = (Astro.locals as { lang?: Lang } | undefined)?.lang ?? "sv";
+const displayDate = formatDate(date, dateLang);
 ---
 
 <Base title={title} appendSiteName={appendSiteName} description={lede} ogImage={image} ogType="article" jsonLd={jsonLd}>
@@ -113,7 +123,7 @@ const backToAllStoriesLabel = await t("← Back to all stories");
         <div class="mb-6 flex items-center gap-3 text-[0.6875rem] uppercase tracking-[0.16em] text-ninetone-ink/55">
           {category && <span>{category}</span>}
           {category && date && <span class="opacity-40">·</span>}
-          {date && <time>{date}</time>}
+          {date && <time datetime={isoDate}>{displayDate}</time>}
         </div>
       )}
 
@@ -131,7 +141,7 @@ const backToAllStoriesLabel = await t("← Back to all stories");
 
       {date && (
         <p class="kicker mt-6 text-ninetone-ink/55">
-          {publicerad} <time datetime={isoDate}>{date}</time>
+          {publicerad} <time datetime={isoDate}>{displayDate}</time>
         </p>
       )}
     </header>

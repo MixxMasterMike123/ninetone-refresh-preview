@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildRobotsTxt } from "../src/pages/robots.txt.ts";
-import { buildLlmsTxt, bookingTalentLines, bookingCategoryLines, guideLines } from "../src/lib/llms.ts";
+import {
+  buildLlmsTxt,
+  bookingTalentLines,
+  bookingCategoryLines,
+  guideLines,
+  LLMS_CHROME_STRINGS,
+} from "../src/lib/llms.ts";
+import { handleEnLlmsTxt } from "../src/pages/en/llms.txt.ts";
 
 const ORIGIN = "https://ninetone.com";
 
@@ -325,3 +332,83 @@ test("llms.txt: with no guideLines passed, the Guider link still appears but no 
   const body = buildLlmsTxt(ORIGIN, stubData());
   assert.ok(body.includes(`[Guider](${ORIGIN}/guider)`));
 });
+
+// ---------------------------------------------------------------------------
+// llms.txt — Section 5 (i18n Phase 2): chrome translation table
+// ---------------------------------------------------------------------------
+
+test("buildLlmsTxt: with no chrome table (Swedish/default), renders the literal source strings unchanged", () => {
+  const body = buildLlmsTxt(ORIGIN, stubData());
+  assert.ok(body.startsWith("# Ninetone Group"));
+  assert.ok(body.includes("## Ninetone Records"));
+  assert.ok(body.includes(`[Artists](${ORIGIN}/records/artists): current roster`));
+  assert.ok(body.includes(`[Team](${ORIGIN}/team)`));
+});
+
+test("buildLlmsTxt: chrome table entries replace the matching static strings, headings included", () => {
+  const chrome = {
+    "# Ninetone Group": "# Ninetone Group (EN)",
+    "## Ninetone Records": "## Ninetone Records (EN)",
+    Artists: "Artists (EN)",
+    "current roster": "current roster (EN)",
+    Team: "Team (EN)",
+  };
+  const body = buildLlmsTxt(ORIGIN, stubData(), { chrome });
+  assert.ok(body.startsWith("# Ninetone Group (EN)"));
+  assert.ok(body.includes("## Ninetone Records (EN)"));
+  assert.ok(body.includes(`[Artists (EN)](${ORIGIN}/records/artists): current roster (EN)`));
+  assert.ok(body.includes(`[Team (EN)](${ORIGIN}/team)`));
+});
+
+test("buildLlmsTxt: a chrome table missing some keys falls back to source for those, never blanks or throws", () => {
+  const body = buildLlmsTxt(ORIGIN, stubData(), { chrome: { Team: "Team (EN)" } });
+  assert.ok(body.includes(`[Team (EN)](${ORIGIN}/team)`)); // translated
+  assert.ok(body.includes(`[News](${ORIGIN}/news)`)); // untranslated key -> source, not blank
+  assert.ok(body.startsWith("# Ninetone Group")); // untranslated heading -> source
+});
+
+test("buildLlmsTxt: chrome table NEVER touches entity content — artist/client/team/news names and taglines render in source language regardless of chrome", () => {
+  const chrome = { Artists: "Artists (EN)", Team: "Team (EN)" };
+  const body = buildLlmsTxt(
+    ORIGIN,
+    stubData({
+      artists: [{ SLUG: "anjo", "Head Artist": "Anjo", genre: "Pop", "Artist Presentation Title": "Svensk pop." }],
+      team: [{ SLUG: "pat", userNameCalc: "Pat Person", title: "VD" }],
+    }),
+    { chrome },
+  );
+  // Entity content unchanged — no translation applied to FM-sourced text.
+  assert.ok(body.includes("Anjo"));
+  assert.ok(body.includes("Pop — Svensk pop."));
+  assert.ok(body.includes("Pat Person"));
+  assert.ok(body.includes("VD"));
+  // Only the chrome labels around them changed.
+  assert.ok(body.includes("Artists (EN)"));
+  assert.ok(body.includes("Team (EN)"));
+});
+
+test("LLMS_CHROME_STRINGS: every literal in the list actually appears in a Swedish/default render (no stale entries)", () => {
+  const body = buildLlmsTxt(ORIGIN, stubData());
+  for (const source of LLMS_CHROME_STRINGS) {
+    assert.ok(body.includes(source), `chrome string not found in default render: ${JSON.stringify(source)}`);
+  }
+});
+
+test("LLMS_CHROME_STRINGS: a full chrome table built from this list translates every static label in the document", () => {
+  const chrome = Object.fromEntries(LLMS_CHROME_STRINGS.map((s) => [s, `${s} [EN]`]));
+  const body = buildLlmsTxt(ORIGIN, stubData(), { chrome });
+  for (const source of LLMS_CHROME_STRINGS) {
+    assert.ok(body.includes(`${source} [EN]`), `expected translated chrome for: ${JSON.stringify(source)}`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// /en/llms.txt route (Section 5) — src/pages/en/llms.txt.ts
+// ---------------------------------------------------------------------------
+
+test("handleEnLlmsTxt: 404s when PUBLIC_HAS_RUNTIME is false (gh/static target — decision 2, /en/ does not exist there)", async () => {
+  const res = await handleEnLlmsTxt({}, false);
+  assert.equal(res.status, 404);
+  assert.equal(await res.text(), "Not found");
+});
+

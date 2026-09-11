@@ -15,6 +15,7 @@ import type { YouTubeFeed } from "../lib/youtube";
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent } from "../lib/sections";
 import { sharedT } from "../lib/t";
+import { formatDate as formatDateLocalized, type Lang } from "../lib/dates";
 
 interface Props {
   feed: YouTubeFeed | null;
@@ -70,12 +71,14 @@ const latestTabLabel = await t("Latest");
 const mostViewedTabLabel = await t("Most viewed");
 const viewsLabel = await t("views");
 
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "";
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
-}
+// Locale-aware date formatting (docs/i18n-phase-2-brief.md "Dates" item):
+// src/lib/dates.ts replaces the hardcoded-English-month-abbreviation
+// formatter that used to live here. Same structural `Astro.locals.lang`
+// read + "sv" fallback Base.astro uses for `<html lang>` (see its doc
+// comment) — this is pure Intl formatting, not a translation, so it does
+// NOT go through t()/sharedT() (no API call, no budget).
+const dateLang: Lang = (Astro.locals as { lang?: Lang } | undefined)?.lang ?? "sv";
+const formatDate = (iso: string): string => formatDateLocalized(iso, dateLang);
 
 function formatViews(n: number | undefined): string {
   if (!n || n < 1) return "";

@@ -14,6 +14,7 @@ import type { ArtistRelease } from "../lib/ninetone";
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent } from "../lib/sections";
 import { sharedT } from "../lib/t";
+import { formatDate as formatDateLocalized, formatIsoDate, type Lang } from "../lib/dates";
 
 interface Props {
   releases: ArtistRelease[];
@@ -48,13 +49,15 @@ const filterChipLabels = Object.fromEntries(
   await Promise.all(filterChipsSource.map(async (c) => [c.slug, await t(c.label)] as const)),
 );
 
-function formatDate(fm: string): string {
-  // FM stores MM/DD/YYYY. Render as "27 Jun 2025".
-  const m = fm.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!m) return fm;
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return `${Number(m[2])} ${months[Number(m[1]) - 1]} ${m[3]}`;
-}
+// Locale-aware date formatting (docs/i18n-phase-2-brief.md "Dates" item):
+// src/lib/dates.ts replaces the hardcoded-English-month-abbreviation
+// formatter that used to live here (FM stores MM/DD/YYYY; this used to
+// always render "27 Jun 2025" regardless of locale). Same structural
+// `Astro.locals.lang` read + "sv" fallback Base.astro uses for `<html
+// lang>`. Pure Intl formatting, not a translation — does not go through
+// t()/sharedT().
+const dateLang: Lang = (Astro.locals as { lang?: Lang } | undefined)?.lang ?? "sv";
+const formatDate = (fm: string): string => formatDateLocalized(fm, dateLang);
 
 // Streaming icon glyphs match StreamingRow's vocabulary.
 const PLATFORMS: Array<{ key: keyof ArtistRelease["streaming"]; label: string; glyph: string }> = [
@@ -140,8 +143,12 @@ const visibleChips = filterChipsSource
                 {latestReleaseLabel}
                 <span class="mx-2 opacity-40" aria-hidden>·</span>
                 {r.type || releaseFallbackLabel}
-                <span class="mx-2 opacity-40" aria-hidden>·</span>
-                <time>{formatDate(r.releaseDate)}</time>
+                {formatDate(r.releaseDate) && (
+                  <>
+                    <span class="mx-2 opacity-40" aria-hidden>·</span>
+                    <time datetime={formatIsoDate(r.releaseDate)}>{formatDate(r.releaseDate)}</time>
+                  </>
+                )}
               </span>
 
               <h3 class="font-display text-3xl font-medium leading-[1.05] tracking-tight md:text-5xl">
@@ -242,8 +249,12 @@ const visibleChips = filterChipsSource
                       <div class="flex flex-col gap-1">
                         <span class={`kicker ${accent.text}`}>
                           {r.type || releaseFallbackLabel}
-                          <span class="mx-1.5 opacity-40" aria-hidden>·</span>
-                          <time>{formatDate(r.releaseDate)}</time>
+                          {formatDate(r.releaseDate) && (
+                            <>
+                              <span class="mx-1.5 opacity-40" aria-hidden>·</span>
+                              <time datetime={formatIsoDate(r.releaseDate)}>{formatDate(r.releaseDate)}</time>
+                            </>
+                          )}
                         </span>
                         <h4 class="font-display text-lg font-medium leading-tight tracking-tight transition-colors group-hover:opacity-70 md:text-xl">
                           {r.album}

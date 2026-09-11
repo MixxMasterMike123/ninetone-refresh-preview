@@ -7,6 +7,7 @@ import { url } from "../../lib/url";
 import { pageJsonLdOrigin } from "../../lib/site";
 import { breadcrumbs, article, faqPage, markdownToPlainText, fmDateToIso } from "../../lib/schema";
 import { notFound } from "../../lib/not-found";
+import { formatDate } from "../../lib/dates";
 
 // Mirrors src/pages/news/[slug].astro's dual-resolution pattern exactly:
 // static build (gh) resolves every path via getStaticPaths; the live server
@@ -40,6 +41,15 @@ const messageHtml = renderBio(guide.message);
 const origin = pageJsonLdOrigin(Astro.request);
 const isoDate = fmDateToIso(date);
 
+// Locale-aware dateline (docs/i18n-phase-2-brief.md "Dates" item). This page
+// hardcodes `lang="sv"` on <Base> above (guides are Swedish-only content,
+// not yet wired into section 4's t()/locals.lang chrome), so the display
+// date is fixed to "sv" too rather than read from Astro.locals.lang — that
+// keeps this page internally consistent instead of mixing an English date
+// into an otherwise all-Swedish render. Pure Intl formatting, not a
+// translation — does not go through t()/sharedT() (this page has none).
+const displayDate = formatDate(date, "sv");
+
 // FAQ block: parse "## Vanliga frågor" / "## FAQ" out of the guide's own
 // markdown body (brief §7) — H3 question + following paragraph. Absent in
 // most guides; when present, both the visible FAQ block below and the
@@ -72,7 +82,7 @@ const jsonLd = [
 
       {date && (
         <div class="mb-6 flex items-center gap-3 text-[0.6875rem] uppercase tracking-[0.16em] text-ninetone-ink/55">
-          <time>{date}</time>
+          <time datetime={isoDate}>{displayDate}</time>
         </div>
       )}
 
@@ -80,7 +90,7 @@ const jsonLd = [
 
       {date && (
         <p class="kicker mt-6 text-ninetone-ink/55">
-          Publicerad {isoDate ? <time datetime={isoDate}>{date}</time> : date}
+          Publicerad {isoDate ? <time datetime={isoDate}>{displayDate}</time> : displayDate}
         </p>
       )}
     </header>

@@ -84,7 +84,27 @@ const memoTables = new WeakMap<object, Map<string, Promise<string>>>();
  * `createT()` does — this is a drop-in wrapper, not a different API — so
  * every call site still reads as `await t("Some copy")`.
  */
-export function sharedT(locals: LocalsForT, opts?: { protect?: string[] }): TFunction {
+export function sharedT(
+  locals: LocalsForT,
+  opts?: {
+    protect?: string[];
+    /**
+     * Render this text in THIS language regardless of `locals.lang`.
+     *
+     * For the one caller that knows the target better than `locals` does:
+     * src/pages/llms.txt.ts serves both /llms.txt and (via the middleware
+     * rewrite) /en/llms.txt, and its gh-target sibling passes "en"
+     * explicitly. That endpoint previously expressed this as
+     * `sharedT({ ...locals, lang })` — which quietly defeated BOTH of this
+     * module's reasons to exist: the spread makes a NEW object, so the
+     * budget stashed on it is private to that call and the memo WeakMap
+     * (keyed by `locals` identity) gets its own empty table. Overriding the
+     * target here instead keeps the one real `locals` object, and with it
+     * the one shared budget and memo, exactly as note C requires.
+     */
+    lang?: Lang;
+  },
+): TFunction {
   const l = locals as LocalsForT;
   // GAP 1 fix: create the budget once per request, reuse thereafter. `locals`
   // is the same object for every component in this render (Astro shares one
@@ -97,7 +117,12 @@ export function sharedT(locals: LocalsForT, opts?: { protect?: string[] }): TFun
   }
   const budget = l.__i18nBudget;
 
-  const baseT = createT(locals, { protect: opts?.protect, budget });
+  // The override is passed through as a locals-SHAPED argument to createT
+  // (which reads `.lang` off it) while the budget and memo below still key
+  // off the real `locals` — so an override changes the target language
+  // without forking per-request state.
+  const forTarget = opts?.lang ? { ...locals, lang: opts.lang } : locals;
+  const baseT = createT(forTarget, { protect: opts?.protect, budget });
 
   // GAP 2 fix: memoize by exact source string for the lifetime of this
   // request's `locals` object. Concurrent callers awaiting the same source

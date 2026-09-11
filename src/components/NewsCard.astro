@@ -1,6 +1,7 @@
 ---
 import { url } from "../lib/url";
 import { sharedT } from "../lib/t";
+import { formatDate, formatIsoDate, type Lang } from "../lib/dates";
 
 interface Props {
   title: string;
@@ -48,6 +49,17 @@ const readMore = await t("Läs");
 const containsVideoLabel = await t("Innehåller video");
 const byLabel = await t("Av");
 const href = url(`${basePath}/${slug}`);
+
+// Locale-aware dateline (docs/i18n-phase-2-brief.md "Dates" item): replaces
+// the raw FM "MM/DD/YYYY" string this card used to render directly in
+// <time> with no `datetime` attribute at all. This is the single formatting
+// point for every caller that passes a `date` prop through (news/index.astro,
+// EditorialNewsBlock.astro, LatestNewsSection.astro all pass the raw FM
+// string straight through). Pure Intl formatting, not a translation — does
+// not go through t()/sharedT().
+const dateLang: Lang = (Astro.locals as { lang?: Lang } | undefined)?.lang ?? "sv";
+const displayDate = date ? formatDate(date, dateLang) : "";
+const isoDate = date ? formatIsoDate(date) : "";
 
 const titleClass = size === "lg"
   ? "font-display text-3xl font-medium leading-[1.1] tracking-tight md:text-5xl"
@@ -101,7 +113,7 @@ const sizesAttr =
       <div class="flex items-center gap-3 text-[0.6875rem] uppercase tracking-[0.16em] text-ninetone-ink/55">
         {category && <span>{category}</span>}
         {category && date && <span class="opacity-40">·</span>}
-        {date && <time>{date}</time>}
+        {date && <time datetime={isoDate}>{displayDate}</time>}
       </div>
     )}
 

@@ -15,11 +15,25 @@
  * truthful to put there today. If a genuine modification-timestamp field
  * ever appears in a fetched layout, thread it through here explicitly
  * rather than guessing from an adjacent date field.
+ *
+ * Section 5 (i18n Phase 2, docs/i18n-phase-2-brief.md): "both locales for
+ * every URL, with xhtml:link alternates." `buildSitemapEntries` below keeps
+ * building the locale-FREE (Swedish-path) entry list exactly as before —
+ * that shape is what every existing test in test/sitemap.test.mjs asserts
+ * against, and it is the natural "one canonical page list" representation.
+ * `localizeSitemapEntries()` is the new layer on top: it takes that list and
+ * expands each entry into one sv entry and (when English is being
+ * advertised — see `renderUrlsetXml`'s `xhtml` param and the gh/static
+ * guard in src/pages/sitemap-pages.xml.ts) one en entry, each carrying the
+ * full sv/en/x-default alternate set on itself. All path math goes through
+ * src/lib/i18n.ts's `localizedPath` — never reimplemented here.
  */
 
 import type { StaticRoute } from "./routes";
 import { PREVIOUS_ARTISTS_PAGE_SIZE } from "./routes.ts";
 import { slugifyTag } from "./booking-slug.ts";
+import { localizedPath } from "./i18n.ts";
+import type { Lang } from "./translate.ts";
 
 export interface SitemapEntry {
   /** Absolute URL — origin + path, no trailing slash added/removed beyond
@@ -29,6 +43,22 @@ export interface SitemapEntry {
   /** ISO date string. Omitted whenever no real modification timestamp
    *  exists for the entity — see module doc. Never fabricated. */
   lastmod?: string;
+  /**
+   * Per-URL hreflang alternate set (sitemap protocol's `xhtml:link
+   * rel="alternate"`), added by `localizeSitemapEntries()` below. Absent on
+   * an entry built directly by `buildSitemapEntries()` — only the localized
+   * layer populates this, and `renderUrlsetXml` only emits the
+   * `xmlns:xhtml` namespace / `<xhtml:link>` tags for entries that carry it,
+   * so the un-localized entry shape (and every existing test asserting
+   * against it) is unaffected.
+   */
+  alternates?: HreflangAlternate[];
+}
+
+/** One `<xhtml:link rel="alternate" hreflang="…">` on a `SitemapEntry`. */
+export interface HreflangAlternate {
+  hreflang: "sv" | "en" | "x-default";
+  href: string;
 }
 
 function joinPath(origin: string, path: string): string {
@@ -179,16 +209,108 @@ export function buildSitemapEntries(
   ];
 }
 
-/** Serialize entries to a `urlset` sitemap XML document. */
+/**
+ * Expand a locale-free entry list (as produced by `buildSitemapEntries()`,
+ * every `loc` a bare Swedish-path URL under `origin`) into "both locales for
+ * every URL, with xhtml:link alternates" (Section 5's Build item).
+ *
+ * For each input entry this produces:
+ *   - ALWAYS one sv entry, at the entry's existing (unprefixed) `loc`.
+ *   - When `includeEnglish` is true, ALSO one en entry, at the `/en`-
+ *     prefixed URL for the same path.
+ * Both carry the identical `alternates` array — sv, en, and x-default (=
+ * Swedish, decision 1) — so "each locale gets an entry, and each entry
+ * lists the full alternate set including itself" (the brief's own
+ * definition of what "both locales" means here) holds for every entry this
+ * function returns, not just the English ones.
+ *
+ * `includeEnglish` exists for the gh/static target (see
+ * src/pages/sitemap-pages.xml.ts's own doc comment for the full reasoning):
+ * `/en/` is a CF-only feature there (decision 2), so advertising `/en/...`
+ * URLs in a STATIC sitemap would point crawlers at pages that don't exist
+ * on that target. Passing `false` collapses this to sv-only entries, each
+ * still carrying its full (sv/en/x-default) alternate set — the alternates
+ * describe the site's actual locale structure (true everywhere the site is
+ * eventually reachable), while the *listed* `<url>` entries describe what
+ * this particular build actually serves.
+ *
+ * All path math is `localizedPath()` from src/lib/i18n.ts — never
+ * reimplemented here. `loc` is origin + path (`joinPath`'s own contract),
+ * so the bare path is recovered by stripping the `origin` prefix before
+ * calling `localizedPath()` and re-joining after.
+ */
+export function localizeSitemapEntries(
+  origin: string,
+  entries: SitemapEntry[],
+  includeEnglish: boolean,
+): SitemapEntry[] {
+  const out: SitemapEntry[] = [];
+  for (const entry of entries) {
+    const path = entry.loc.startsWith(origin) ? entry.loc.slice(origin.length) || "/" : entry.loc;
+    const svHref = joinPath(origin, localizedPath(path, "sv"));
+    const enHref = joinPath(origin, localizedPath(path, "en"));
+    const alternates: HreflangAlternate[] = [
+      { hreflang: "sv", href: svHref },
+      { hreflang: "en", href: enHref },
+      { hreflang: "x-default", href: svHref },
+    ];
+
+    out.push({ ...entry, loc: svHref, alternates });
+    if (includeEnglish) {
+      out.push({ ...entry, loc: enHref, alternates });
+    }
+  }
+  return out;
+}
+
+/**
+ * Convenience: build the locale-free entry list AND localize it in one
+ * call, exactly the two-step pipeline src/pages/sitemap-pages.xml.ts runs.
+ * Kept as a thin wrapper (rather than folding localization into
+ * `buildSitemapEntries` itself) so the many existing tests in
+ * test/sitemap.test.mjs asserting against `buildSitemapEntries`'s
+ * locale-free output keep working unchanged — Section 5 adds a layer, it
+ * does not change what was already there.
+ */
+export function buildLocalizedSitemapEntries(
+  origin: string,
+  input: Parameters<typeof buildSitemapEntries>[1],
+  includeEnglish: boolean,
+): SitemapEntry[] {
+  return localizeSitemapEntries(origin, buildSitemapEntries(origin, input), includeEnglish);
+}
+
+/**
+ * Serialize entries to a `urlset` sitemap XML document.
+ *
+ * Section 5: entries carrying `alternates` (from `localizeSitemapEntries()`)
+ * get one `<xhtml:link rel="alternate" hreflang="…">` per alternate, and the
+ * `xmlns:xhtml` namespace declaration is added to `<urlset>` whenever AT
+ * LEAST ONE entry has alternates — the sitemap protocol requires the
+ * namespace be declared on the root element for `xhtml:link` to be valid at
+ * all, so this is unconditional-per-document rather than per-entry: a
+ * `<urlset>` with `<xhtml:link>` children but no matching `xmlns:xhtml`
+ * declaration is invalid XML-by-schema even though a lenient parser might
+ * render it, which is exactly the "worse than no alternates" failure mode
+ * the brief calls out. Entries with no `alternates` (i.e. anything built by
+ * `buildSitemapEntries()` directly, without going through
+ * `localizeSitemapEntries()`) render exactly as before — this is additive,
+ * not a breaking change to the existing single-locale shape.
+ */
 export function renderUrlsetXml(entries: SitemapEntry[]): string {
+  const hasAlternates = entries.some((e) => e.alternates && e.alternates.length > 0);
   const urls = entries
     .map((e) => {
       const lastmod = e.lastmod ? `<lastmod>${e.lastmod}</lastmod>` : "";
       const changefreq = e.changefreq ? `<changefreq>${e.changefreq}</changefreq>` : "";
-      return `<url><loc>${escapeXml(e.loc)}</loc>${lastmod}${changefreq}</url>`;
+      const alternates = (e.alternates ?? [])
+        .map((a) => `<xhtml:link rel="alternate" hreflang="${a.hreflang}" href="${escapeXml(a.href)}"/>`)
+        .join("");
+      return `<url><loc>${escapeXml(e.loc)}</loc>${alternates}${lastmod}${changefreq}</url>`;
     })
     .join("");
-  return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`;
+  const xhtmlNs = hasAlternates ? ` xmlns:xhtml="http://www.w3.org/1999/xhtml"` : "";
+  return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"${xhtmlNs}>${urls}</urlset>`;
 }
 
 /** Serialize a `sitemapindex` document referencing one or more page
