@@ -49,6 +49,166 @@
 
 import { createT, RequestBudget, type Lang, type TFunction } from "./translate.ts";
 
+// `createRequire` itself has zero runtime side effect until invoked — it
+// just returns a function. Safe as a top-level import on both deploy
+// targets; only `captureSourceString()`'s actual USE of the returned
+// `require` is gated behind the capture flag (see below).
+import { createRequire } from "node:module";
+
+// ---------------------------------------------------------------------------
+// Build-instrumented chrome-string capture (docs/i18n-phase-2-brief.md,
+// SECTION 7, Implementation note D) — READ THIS BEFORE TOUCHING IT.
+//
+// WHY THIS EXISTS: scripts/i18n-list.mjs is a SOURCE scanner — a regex over
+// src/**/*.astro looking for literal `t("...")` call sites. Note D found
+// that scanner structurally blind to any string that reaches `t()`/`sharedT()`
+// through a variable rather than a literal at the call site — an array of
+// nav items mapped over, an object of CTA labels keyed by section, etc. That
+// blind list is not a corner case: it includes the ENTIRE header nav, the
+// ENTIRE homepage portal grid, and the ENTIRE metrics panel, all of which
+// render on every one of this site's 546 pages. No source-level regex can
+// close that gap by construction (a smarter regex still can't evaluate
+// `navItemsSource.map(...)` at parse time) — the only place every one of
+// those strings is guaranteed to surface as a plain runtime string is
+// INSIDE sharedT() itself, right before it calls translate(). So instead of
+// getting smarter at reading source, this hooks the one place that already
+// sees every string sharedT is ever asked to translate, and writes each one
+// to a JSONL file when a build runs with the capture flag on.
+//
+// HOW THE WARM SCRIPT USES THIS: scripts/translate-warm.mjs sets
+// I18N_CAPTURE_CHROME_STRINGS=1 (via `node --env-file=.env`-style env, or a
+// plain shell export) and runs `npm run build` (the gh target — static,
+// renders all 546 pages, and every page that mounts Header/Footer/
+// CommandPalette/the homepage portals/MetricsPanel calls sharedT() for its
+// chrome). Every distinct string sharedT() is ever called with over that
+// whole build lands as one line in the capture file. The warm script then
+// reads that file, de-duplicates, and treats the result as ground truth for
+// "every chrome string this site actually renders" — a strict superset of
+// what scripts/i18n-list.mjs can see, per note D's own accounting (304
+// statically-visible strings PLUS every blind spot: Header.astro's
+// navItemsSource and t(cta.sv), index.astro's portalsSource taglines and
+// all eight metricsSource labels/notes, ArtistCard's "View" default,
+// Discography's Albums/EPs/Singles, YouTubeFeed's freshness ternary,
+// search-result.astro's "Previous artists", and the contact pages' metric
+// labels).
+//
+// MUST STAY COMPLETELY INERT WHEN THE FLAG IS UNSET — this is the load-
+// bearing property, not a nice-to-have: this file is imported by every
+// single page render on BOTH build targets (gh static preview AND the cf
+// Worker in production), so any behavior here that isn't a no-op when
+// I18N_CAPTURE_CHROME_STRINGS is unset would ship into production chrome
+// rendering. Concretely, "inert" means:
+//   - No file handle, no fs import side effect, no I/O of any kind is ever
+//     opened or touched unless the flag is truthy at call time.
+//   - The flag is read ONCE per module instance into a plain boolean
+//     (captureEnabled below), not re-read from process.env on every call —
+//     cheap either way, but this keeps the hot path a single boolean check
+//     with no property lookup chain.
+//   - The write itself is synchronous, best-effort, and wrapped in try/catch
+//     — a capture failure (e.g. running under a sandboxed environment with
+//     no fs access) must never throw out of sharedT() and break a page
+//     render. This is a diagnostic side channel, never a correctness
+//     dependency for the request path.
+//   - fs/path are imported unconditionally at module scope (a static ESM
+//     import has no runtime cost beyond resolving the module graph — it
+//     does not open anything), but every actual filesystem operation is
+//     gated behind `captureEnabled`. On the Cloudflare Worker target, node:fs
+//     does not exist as a real filesystem at all; since `captureEnabled` is
+//     only ever set by the local warm-script build (gh target, plain
+//     Node), the gated calls are simply never reached there — but see the
+//     try/catch above for what happens if that assumption is ever wrong.
+//   - No behavior change to the returned translation, no extra await, no
+//     change to the memoization or budget logic below — capture is a
+//     side-effecting observer bolted onto the existing return path, not a
+//     new branch in it.
+//
+// FILE FORMAT: one JSON object per line (JSONL), `{"source": "<the exact
+// string sharedT() was called with>"}` — deliberately minimal (no timestamp,
+// no call-site location) because the warm script only needs the SET of
+// distinct strings, not provenance. Appended, never truncated, by this
+// module — scripts/translate-warm.mjs deletes/recreates the file itself
+// before invoking `npm run build`, so this module never needs to know
+// whether it's starting a fresh capture or continuing one.
+// ---------------------------------------------------------------------------
+
+// Read once per module instance — see "read ONCE" above. `process` is
+// guarded the same way translate.ts's own readEnv() guards it, since this
+// module (like translate.ts) is reachable from contexts where `process`
+// is not guaranteed to exist (the CF Worker isolate under nodejs_compat
+// does expose it, but being defensive here costs nothing and matches house
+// convention).
+const captureEnabled: boolean = (() => {
+  const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  return proc?.env?.I18N_CAPTURE_CHROME_STRINGS === "1";
+})();
+
+// Path is fixed rather than configurable — this is a build-instrumentation
+// hook for exactly one consumer (scripts/translate-warm.mjs), not a general
+// logging facility, so there is no configuration surface to add. Resolved
+// relative to process.cwd() (the repo root, since `npm run build` always
+// runs from there) rather than import.meta.url, because the latter would
+// resolve into src/lib/ (or dist/ under a bundled Worker) — neither of
+// which is where a build artifact belongs.
+const CAPTURE_FILE_PATH = "i18n-chrome-capture.jsonl";
+
+/**
+ * Best-effort, synchronous append of one captured source string. Called
+ * from sharedT()'s returned function BEFORE the memo check (see call site
+ * below) so a string that this specific request's memo would otherwise
+ * dedupe away still gets recorded at least once per PAGE RENDER — the
+ * cross-page, cross-request union across the whole `npm run build` run is
+ * what the warm script actually reads, so intra-request memoization here is
+ * irrelevant to completeness (a string skipped by this request's memo was
+ * necessarily captured on its FIRST call in this same request, which is all
+ * that matters — the file is a set, de-duplicated by the reader, not a
+ * call-count log).
+ *
+ * Requires `node:fs`'s synchronous `appendFileSync` rather than the async
+ * `fs/promises` API on purpose: sharedT()'s returned function is NOT async
+ * at the point this fires (the memo-miss path immediately calls baseT()
+ * and returns a promise; capture must complete before that, not race it),
+ * and introducing a fire-and-forget async write here would mean the last
+ * few strings of a build could still be in flight when the build process
+ * exits — a sync write side-steps that entirely at a cost (one blocking
+ * syscall per distinct chrome string touched, at most a few hundred over an
+ * entire 546-page build) that is only ever paid when the capture flag is
+ * explicitly on.
+ */
+function captureSourceString(source: string): void {
+  if (!captureEnabled) return; // the entire hot-path cost when unset: one boolean check.
+  try {
+    // `appendFileSyncRef` is populated lazily, the first time capture is
+    // actually enabled and used — see below. This module is imported by
+    // every page render on both deploy targets, and top-level `import
+    // "node:fs"` would resolve the module graph unconditionally even when
+    // capture is off; deferring the import into this branch means the CF
+    // Worker isolate (where node:fs is not a real filesystem) and every
+    // ordinary gh-target render that never sets the flag pay nothing beyond
+    // the boolean check above. `import(...)` returns a promise, but Node's
+    // ESM loader caches the resolved module synchronously after the first
+    // await, and every call site here already tolerates one build's worth
+    // of writes racing slightly behind — see the "best-effort" framing in
+    // the doc comment above — so the first capture in a build may be lost
+    // if the process exits before this settles, and every subsequent one
+    // in the same module instance uses the now-cached synchronous path.
+    // To avoid that first-write race entirely, this instead uses
+    // `node:module`'s `createRequire`, which gives a synchronous `require`
+    // in an ESM module without any top-level side effect until called.
+    if (!requireRef) {
+      requireRef = createRequire(import.meta.url);
+    }
+    const fs = requireRef("node:fs") as typeof import("node:fs");
+    fs.appendFileSync(CAPTURE_FILE_PATH, JSON.stringify({ source }) + "\n", "utf8");
+  } catch {
+    // Never let a diagnostic capture failure break a page render — see
+    // "MUST STAY COMPLETELY INERT" above. Silently dropped by design.
+  }
+}
+
+/** Lazily created synchronous `require`, only ever touched when capture is
+ *  enabled — see captureSourceString() above. */
+let requireRef: NodeRequire | null = null;
+
 /**
  * Shape this module needs from `Astro.locals`. Deliberately structural (see
  * translate.ts's own `LocalsWithScheduler` for the same reasoning) — no
@@ -139,6 +299,17 @@ export function sharedT(
   const memo = table;
 
   return (source: string): Promise<string> => {
+    // Build-instrumented chrome-string capture (note D) — see the doc
+    // comment above captureSourceString() for the full rationale. Fires on
+    // EVERY call, including a memo hit: this function is the one place in
+    // the whole render tree guaranteed to see every source string sharedT()
+    // is ever asked to translate, and the warm script only needs the SET of
+    // distinct strings across the whole build, not a call count — so
+    // capturing ahead of the memo check (rather than only on a miss) is
+    // simpler and just as correct. Inert (single boolean check, see above)
+    // unless I18N_CAPTURE_CHROME_STRINGS=1.
+    captureSourceString(source);
+
     const cached = memo.get(source);
     if (cached) return cached;
     // .catch here rather than relying on translate() never throwing: the memo
