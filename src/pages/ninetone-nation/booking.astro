@@ -35,13 +35,18 @@ const populatedCategories = await Promise.all(
     artists: await Promise.all(
       c.artists.map(async (a) => ({ ...a, blurb: await fm(String(a.blurb ?? "")) })),
     ),
+    description: await fm(String(c.description ?? "")),
   })),
 );
 
 // Section intro copy: pull from WebPosts (same as before).
 const webPosts = await getWebPostSection("Ninetone Nation");
-const introBody =
-  webPosts?.blocks?.find((b) => b.message)?.message ?? "";
+// FM CONTENT (decision 8): the WebPosts intro block and each category's own
+// description are FM prose warmed by the warm script, previously rendered raw.
+const introBody = await fm(
+  String(webPosts?.blocks?.find((b) => b.message)?.message ?? ""),
+  "markdown",
+);
 
 const totalArtists = populatedCategories.reduce((n, c) => n + c.artists.length, 0);
 
