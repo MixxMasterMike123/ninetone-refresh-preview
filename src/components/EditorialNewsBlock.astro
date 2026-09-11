@@ -2,6 +2,7 @@
 import NewsCard from "./NewsCard.astro";
 import { getNews } from "../lib/ninetone";
 import { url } from "../lib/url";
+import { sharedT } from "../lib/t";
 
 interface Props {
   /** Total stories to render. The first becomes the lead, the rest are grid items. */
@@ -20,12 +21,22 @@ interface Props {
 
 const {
   limit = 5,
-  heading = "Latest stories.",
-  kicker = "From the studios",
+  heading: headingProp,
+  kicker: kickerProp,
   blurb,
   href = "/news",
   variant = "warm",
 } = Astro.props as Props;
+
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4). Same
+// "only translate strings this component owns" rule as RosterStrip.astro —
+// see its comment for why `headingProp`/`kickerProp` themselves are NOT
+// re-translated here. "All news" has no prop at all (always this
+// component's own literal), so it's unconditionally translated below.
+const t = sharedT(Astro.locals);
+const heading = headingProp ?? (await t("Latest stories."));
+const kicker = kickerProp ?? (await t("From the studios"));
+const allNewsCta = await t("All news");
 
 const hasNewsVideo = (p: Record<string, unknown>): boolean =>
   ["ytLinkA", "ytLinkB", "ytLinkC", "ytLinkD"].some((k) => {
@@ -65,7 +76,7 @@ const bg = variant === "warm" ? "bg-ninetone-paper-warm" : "bg-ninetone-paper";
           )}
         </div>
         <a href={url(href)} class="inline-flex items-center gap-2 self-start text-xs font-semibold uppercase tracking-[0.16em] text-ninetone-ink">
-          All news <span aria-hidden>→</span>
+          {allNewsCta} <span aria-hidden>→</span>
         </a>
       </div>
 

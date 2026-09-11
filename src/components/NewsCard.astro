@@ -1,5 +1,6 @@
 ---
 import { url } from "../lib/url";
+import { sharedT } from "../lib/t";
 
 interface Props {
   title: string;
@@ -29,12 +30,23 @@ const {
   date,
   author,
   category,
-  lang = "en",
   size = "md",
   hasVideo = false,
   basePath = "/news",
 } = Astro.props;
-const readMore = lang === "sv" ? "Läs" : "Read";
+
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4). sharedT()
+// (src/lib/t.ts), not createT() directly: NewsCard is rendered many times
+// per page (news grid, roster "related stories" strips) and its memoization
+// means "Läs" / "Av" / "Innehåller video" are each translated once per
+// render no matter how many cards ask for them, not once per card.
+const t = sharedT(Astro.locals);
+// Swedish kept as source (same choice as Header/Footer — see their comments
+// for the full reasoning): "Läs"/"Read" was a hardcoded pair pre-dating
+// section 4; decision 5 brings it into t() the same way.
+const readMore = await t("Läs");
+const containsVideoLabel = await t("Innehåller video");
+const byLabel = await t("Av");
 const href = url(`${basePath}/${slug}`);
 
 const titleClass = size === "lg"
@@ -74,8 +86,8 @@ const sizesAttr =
     {hasVideo && (
       <span
         class="absolute bottom-3 right-3 inline-flex h-9 w-9 items-center justify-center bg-ninetone-paper/95 text-ninetone-ink shadow-[0_1px_0_rgba(0,0,0,0.04)] backdrop-blur-sm"
-        aria-label={lang === "sv" ? "Innehåller video" : "Contains video"}
-        title={lang === "sv" ? "Innehåller video" : "Contains video"}
+        aria-label={containsVideoLabel}
+        title={containsVideoLabel}
       >
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true">
           <path d="M8 5v14l11-7z"></path>
@@ -102,7 +114,7 @@ const sizesAttr =
     )}
 
     {author && (
-      <p class="text-xs uppercase tracking-[0.12em] text-ninetone-ink/55">{lang === "sv" ? "Av" : "By"} {author}</p>
+      <p class="text-xs uppercase tracking-[0.12em] text-ninetone-ink/55">{byLabel} {author}</p>
     )}
 
     <a

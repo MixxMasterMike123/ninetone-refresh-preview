@@ -78,3 +78,36 @@ Consequences for later sections:
   staging — not merely that `node:test` passes. A second silent death under the
   bundler is the specific failure this note exists to prevent.
 
+**C. Chrome strings must be pre-warmed too (extends decision 9).**
+Decision 9 has `scripts/translate-warm.mjs` walking FM *entities*. Measured
+during section 4, that is not enough: the homepage render tree
+(index + Header + Footer + CommandPalette + the cards they mount) touches
+**81 distinct chrome strings**, and the whole site has ~125. The per-request
+budget is 25, so on a cold cache roughly 80% of chrome renders untranslated
+and only creeps toward complete over many renders.
+
+Raising the budget is the wrong fix. The budget exists to stop one visitor's
+cold page load from running up unbounded spend and Worker CPU, which is a
+real concern for unbounded FM prose but not for this corpus: the chrome
+strings average ~18 characters, and translating **all ~125 of them costs
+about $0.08 once**, permanently (the KV cache has no TTL). The correct fix
+is to make sure production never does a cold chrome render at all.
+
+So the warm script MUST also warm chrome:
+- Discover the strings the same way `scripts/i18n-list.mjs` does (it already
+  finds 99 statically-resolvable `t("…")` literals across 56 .astro files and
+  honestly reports the ~14 variable-argument call sites it cannot see).
+- Warm them on the `quality` tier — these are the voice lines Patrik reviews.
+- Warm BOTH directions (`sv` and `en` targets), since decision 4 makes
+  translation bidirectional and source strings exist in both languages today.
+- The budget stays at 25. It is a runtime safety valve for the uncached
+  long tail, not the mechanism by which the site gets translated.
+
+Section 4 also added `src/lib/t.ts` (`sharedT`) because `createT()` alone
+gave each component its own 25-call budget (Header + Footer + CommandPalette
++ page = ~100 allowed per render, four times the specified ceiling) and
+because one repeated string could burn many slots — `booking.astro` renders
+up to 100 ArtistCards all asking for `"Book"`. `sharedT` puts ONE budget on
+`Astro.locals` and memoizes by source string per render. Later sections
+should call `sharedT(Astro.locals)`, never `createT()` directly.
+

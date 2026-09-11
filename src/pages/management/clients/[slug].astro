@@ -13,6 +13,7 @@ import { url } from "../../../lib/url";
 import { pageJsonLdOrigin } from "../../../lib/site";
 import { breadcrumbs, person, markdownToPlainText, descriptionWithBioFallback } from "../../../lib/schema";
 import { notFound } from "../../../lib/not-found";
+import { sharedT } from "../../../lib/t";
 
 export async function getStaticPaths() {
   const clients = await getClients();
@@ -136,6 +137,14 @@ const jsonLd = [
     socials,
   }),
 ];
+
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4), scoped
+// to the "More from Management" RosterStrip chrome only — see the analogous
+// comment in src/pages/records/artists/[slug].astro.
+const t = sharedT(Astro.locals);
+const moreFromManagementKicker = await t("More from Management");
+const inGoodCompanyHeading = await t("In good company.");
+const allClientsCta = await t("All clients");
 ---
 
 <Base
@@ -283,9 +292,9 @@ const jsonLd = [
       artists={related}
       theme="management"
       hrefBase="/management/clients"
-      kicker="More from Management"
-      heading="In good company."
-      cta={{ label: "All clients", href: "/management/clients" }}
+      kicker={moreFromManagementKicker}
+      heading={inGoodCompanyHeading}
+      cta={{ label: allClientsCta, href: "/management/clients" }}
     />
   )}
 </Base>

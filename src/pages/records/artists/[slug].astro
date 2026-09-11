@@ -14,6 +14,7 @@ import { url } from "../../../lib/url";
 import { pageJsonLdOrigin } from "../../../lib/site";
 import { breadcrumbs, musicGroup, markdownToPlainText, descriptionWithBioFallback, fmDateToIso } from "../../../lib/schema";
 import { notFound } from "../../../lib/not-found";
+import { sharedT } from "../../../lib/t";
 
 export async function getStaticPaths() {
   const artists = await getArtists();
@@ -35,6 +36,13 @@ if (!artist || !allArtists) {
   if (!artist) return notFound(() => Astro.rewrite("/404"));
 }
 const slug = String(artist.SLUG ?? "");
+
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4) — used
+// only for the "More from Records" RosterStrip chrome below. This page has
+// many more hardcoded/FM-mixed strings that are NOT yet converted in this
+// pass (see the PR description's file list); scoped narrowly here rather
+// than left as a silent gap for the one RosterStrip call this file makes.
+const t = sharedT(Astro.locals);
 
 // Discography is core page content — a failed fetch fails the render (the
 // data layer serves last-known-good on transient errors; see lib/cache.ts).
@@ -154,6 +162,12 @@ const jsonLd = [
     })),
   }),
 ];
+
+// "More from Records" RosterStrip chrome — resolved here (frontmatter, not
+// inline in the template) because t() is async (src/lib/translate.ts).
+const moreFromRecordsKicker = await t("More from Records");
+const inGoodCompanyHeading = await t("In good company.");
+const allArtistsCta = await t("All artists");
 ---
 
 <Base
@@ -339,9 +353,9 @@ const jsonLd = [
     <RosterStrip
       artists={related}
       theme="records"
-      kicker="More from Records"
-      heading="In good company."
-      cta={{ label: "All artists", href: "/records/artists" }}
+      kicker={moreFromRecordsKicker}
+      heading={inGoodCompanyHeading}
+      cta={{ label: allArtistsCta, href: "/records/artists" }}
     />
   )}
 </Base>

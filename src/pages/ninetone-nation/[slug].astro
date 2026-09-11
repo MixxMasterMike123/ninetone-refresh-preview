@@ -13,6 +13,7 @@ import { url } from "../../lib/url";
 import { pageJsonLdOrigin } from "../../lib/site";
 import { breadcrumbs, person, markdownToPlainText } from "../../lib/schema";
 import { notFound } from "../../lib/not-found";
+import { sharedT } from "../../lib/t";
 
 // Generate a page for every Active talent listed on the booking page.
 // Source of truth = the curated BOOKING_TAG portal set, filtered to
@@ -140,6 +141,15 @@ const jsonLd = [
     bookingCategories: additionalType,
   }),
 ];
+
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4), scoped
+// to the "More from Nation" RosterStrip chrome only — see the analogous
+// comment in src/pages/records/artists/[slug].astro for why this page's
+// other strings are not yet converted in this pass.
+const t = sharedT(Astro.locals);
+const moreFromNationKicker = await t("More from Nation");
+const availableNowHeading = await t("Available now.");
+const allEntertainersCta = await t("All entertainers");
 ---
 
 <Base
@@ -301,9 +311,9 @@ const jsonLd = [
       artists={related}
       theme="nation"
       hrefBase="/ninetone-nation"
-      kicker="More from Nation"
-      heading="Available now."
-      cta={{ label: "All entertainers", href: "/ninetone-nation/booking" }}
+      kicker={moreFromNationKicker}
+      heading={availableNowHeading}
+      cta={{ label: allEntertainersCta, href: "/ninetone-nation/booking" }}
     />
   )}
 </Base>

@@ -2,6 +2,7 @@
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent } from "../lib/sections";
 import { url } from "../lib/url";
+import { sharedT } from "../lib/t";
 
 export interface ArtistSocials {
   spotify?: string;
@@ -50,12 +51,24 @@ const {
   blurb,
   tags = [],
   theme = "records",
-  ctaLabel = "View",
+  ctaLabel: ctaLabelProp = "View",
   href: hrefOverride,
   socials,
   kicker,
   highlight = false,
 } = Astro.props;
+
+// t() bound to this request (docs/i18n-phase-2-brief.md section 4). Every
+// current caller passes ctaLabel a hardcoded literal chrome string ("View"
+// default, "Book" on Nation booking pages) — never FM data — so it's
+// resolved through t() HERE rather than requiring every caller to. This is
+// exactly the GAP 2 case src/lib/t.ts documents: src/pages/ninetone-nation/
+// booking.astro renders one ArtistCard per active booking talent (up to 100,
+// getBookingCategories()'s FM query limit) and every one passes the SAME
+// literal "Book" — sharedT()'s memoization means that whole grid costs ONE
+// translate() call for the CTA label, not one per card.
+const t = sharedT(Astro.locals);
+const ctaLabel = await t(ctaLabelProp);
 
 const ruleClasses = highlight
   ? `absolute left-0 top-0 h-1.5 w-16 ${sectionAccent[theme].bg} transition-[width] duration-300 ease-out group-hover:w-full`
