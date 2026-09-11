@@ -6,7 +6,7 @@ import { url, urlFor } from "../../lib/url";
 import { pageJsonLdOrigin } from "../../lib/site";
 import { breadcrumbs, person, descriptionWithBioFallback } from "../../lib/schema";
 import { notFound } from "../../lib/not-found";
-import { sharedT } from "../../lib/t";
+import { fmText, sharedT } from "../../lib/t";
 
 // Locale-bound link builder (i18n Phase 2): every internal href on an
 // English page must keep the /en prefix, or one click drops the visitor
@@ -34,11 +34,20 @@ if (!member) {
 }
 
 const name = String(member.userNameCalc ?? "");
-const title = String(member.title ?? "");
-const titleDescription = String(member.titleDescription ?? "");
+// FM CONTENT (decision 8). Team copy is authored in ENGLISH in FM, so it is
+// the SWEDISH render that needs translating here — see the fuller note in
+// team/index.astro. The person's own name is protected.
+const fm = fmText(Astro.locals, { protect: [name].filter(Boolean) });
+const title = await fm(String(member.title ?? ""), "title");
+const titleDescription = await fm(String(member.titleDescription ?? ""));
+
+// isAiSpeculative() runs on the SOURCE text, before translation: it is a
+// heuristic tuned to the phrasing FM actually stores, and a translated
+// paraphrase could slip past it. Suppression is decided on the source, and
+// only the text that survives is translated for display.
 const rawDescription = String(member.DescriptionString ?? member.Description ?? "");
 const aiBio = isAiSpeculative(rawDescription);
-const descriptionHtml = aiBio ? "" : renderBio(rawDescription);
+const descriptionHtml = aiBio ? "" : renderBio(await fm(rawDescription, "markdown"));
 
 // Meta description: a job title alone is far under the 70-character floor
 // (seo-phase-1b P1 item 7), so fall back to the opening of the bio. Respects

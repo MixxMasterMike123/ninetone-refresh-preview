@@ -507,6 +507,27 @@ function voiceFieldJobs({ artists, clients, bookingCategories, webPostsBySection
     }
   }
 
+  // EVERY section's own `title`, and every section's blocks — not just the
+  // hand-listed ones above.
+  //
+  // `section.title` was never collected anywhere, and sections such as
+  // "Ninetone Group Team" were not in any list. That left /team rendering an
+  // untranslated FM heading: the page's own ~21 chrome strings consume almost
+  // the whole 25-call per-render budget (Implementation note C), so an
+  // unwarmed heading sits at the back of the queue and never gets scheduled —
+  // it does NOT self-heal the way a lightly-loaded page's miss does.
+  //
+  // Note the direction: the Team section's FM copy is authored in ENGLISH, so
+  // it is the SWEDISH render that needs translating. Both targets are warmed
+  // regardless (decision 4 is bidirectional), so no special-casing here.
+  for (const section of webPostsBySection.values()) {
+    jobs.push(job(section.title, "quality", "title"));
+    for (const block of section.blocks) {
+      jobs.push(job(block.subject, "quality", "title"));
+      jobs.push(job(block.message, "quality", "markdown"));
+    }
+  }
+
   return jobs.filter(Boolean);
 }
 
