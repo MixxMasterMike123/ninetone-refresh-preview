@@ -10,6 +10,7 @@
 
 import { cached } from "./cache";
 import { mirrorRecordImages } from "./fm-image-mirror";
+import { timeServer } from "./server-timing";
 
 /**
  * Env resolution that works in all four contexts:
@@ -105,7 +106,7 @@ export function fmFind<T = Record<string, unknown>>(
   layout: string,
   body: FmFindBody,
 ): Promise<T[]> {
-  return cached(`fm-${layout}`, body, () => fmFindUncached<T>(layout, body));
+  return timeServer("fmread", () => cached(`fm-${layout}`, body, () => fmFindUncached<T>(layout, body)));
 }
 
 export type FmRecord<T> = { fieldData: T; portalData?: Record<string, unknown[]> };
@@ -119,15 +120,23 @@ export function fmFindWithPortals<T = Record<string, unknown>>(
   layout: string,
   body: FmFindBody,
 ): Promise<FmRecord<T>[]> {
-  return cached(`fm-portals-${layout}`, body, () =>
+  return timeServer("fmread", () => cached(`fm-portals-${layout}`, body, () =>
     fmFindUncachedWithPortals<T>(layout, body),
-  );
+  ));
 }
 
 async function fmRequest<T>(
   layout: string,
   body: FmFindBody,
   isRetry = false,
+): Promise<FmFindResponse<T> | null> {
+  return timeServer("fmnet", () => fmRequestUntimed<T>(layout, body, isRetry));
+}
+
+async function fmRequestUntimed<T>(
+  layout: string,
+  body: FmFindBody,
+  isRetry: boolean,
 ): Promise<FmFindResponse<T> | null> {
   const token = await getToken();
 

@@ -8,6 +8,7 @@ import EditorialNewsBlock from "../components/EditorialNewsBlock.astro";
 import MarqueeBand from "../components/MarqueeBand.astro";
 import MerchSection from "../components/MerchSection.astro";
 import { sectionAccent } from "../lib/sections";
+import { hoverArtBackground } from "../lib/hover-art";
 import { url, urlFor } from "../lib/url";
 import { fmText, sharedT } from "../lib/t";
 
@@ -310,7 +311,7 @@ const closingBody = await t(
             <div class={`absolute inset-0 ${accent.bg} opacity-0 group-hover:opacity-100`} aria-hidden></div>
             <div
               class="absolute inset-0 bg-cover bg-center opacity-0 mix-blend-multiply transition-opacity duration-700 ease-out group-hover:opacity-50"
-              style={`background-image: url(${url(p.banner)});`}
+              style={`background-image: ${hoverArtBackground(p.banner, url)};`}
               aria-hidden
             ></div>
 

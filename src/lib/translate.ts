@@ -71,6 +71,7 @@
 // imported directly by a node:test file).
 import { getCfEnv } from "./cf.ts";
 import type { KvLike } from "./cache.ts";
+import { timeServer } from "./server-timing.ts";
 
 // ---------------------------------------------------------------------------
 // Env resolution
@@ -847,7 +848,7 @@ function isolateCachedRead(kv: KvLike, key: string): Promise<string | null> {
   if (existing) return existing;
 
   const cacheRef = isolateCache;
-  const job = kv.get(key).catch((err) => {
+  const job = timeServer("trnkv", () => kv.get(key)).catch((err) => {
     // Evict so a transient KV failure is retried rather than pinned for the
     // isolate's lifetime; the caller still treats null as a miss.
     cacheRef.delete(key);
@@ -889,7 +890,7 @@ export async function translate(options: TranslateOptions): Promise<TranslateRes
     // dependency depth the performance audit measured. Errors are handled
     // inside isolateCachedRead(), which resolves null on failure — same
     // "a read failure is just a miss" posture as kvCached.
-    const raw = await isolateCachedRead(kv, key);
+    const raw = await timeServer("trnread", () => isolateCachedRead(kv, key));
     if (raw !== null) {
       return { text: raw, cached: true, lang: target };
     }

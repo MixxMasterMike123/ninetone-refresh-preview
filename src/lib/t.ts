@@ -421,3 +421,12 @@ export function fmText(
     return job;
   };
 }
+
+/** Avoid re-keying locale-resolved FM prose as if it were new source text. */
+export function resolveFmDisplayText(
+  text: string,
+  translateText: (source: string) => Promise<string>,
+  alreadyTranslated: boolean,
+): Promise<string> {
+  return alreadyTranslated ? Promise.resolve(text) : translateText(text);
+}

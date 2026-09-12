@@ -40,6 +40,7 @@ import {
   trailingSlashRedirectTarget,
 } from "./lib/cache-policy";
 import { localizedPath, stripLocale } from "./lib/i18n";
+import { timeServer, withServerTiming } from "./lib/server-timing";
 import type { Lang } from "./lib/translate";
 
 // Statically replaced by Vite (astro.config define); guarded for any context
@@ -108,8 +109,9 @@ function harden(res: Response): Response {
   return res;
 }
 
-export const onRequest = defineMiddleware(async (context, next) => {
+export const onRequest = defineMiddleware((context, next) => withServerTiming(async () => {
   const { request, url, locals } = context;
+  const render = (target?: string) => timeServer("render", () => next(target));
 
   // Trailing-slash canonicalization (seo-phase-1b-brief.md P0 item 5) — the
   // cf target's astro.config.mjs now sets trailingSlash: "never", so
@@ -271,17 +273,19 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // strip it. /en/404 additionally un-did the documented no-cache invariant
   // that cache-policy.ts's header comment exists to explain.
   if (!cacheApi || shouldBypassCache(request, renderTarget ?? rawPathname, url.search)) {
-    return harden(await next(renderTarget ?? undefined));
+    return harden(await render(renderTarget ?? undefined));
   }
 
   const env = await getCfEnv();
-  if (!env) return harden(await next(renderTarget ?? undefined)); // Node runtime (static build / plain dev)
+  if (!env) return harden(await render(renderTarget ?? undefined)); // Node runtime (static build / plain dev)
 
   // Publish-button epoch. KV read is edge-cached 60s, so a Publish takes
   // effect within ~a minute per colo — and costs ~nothing per request.
   let version = "0";
   try {
-    version = (await env.CACHE_STATE?.get("cache-version", { cacheTtl: 60 })) ?? "0";
+    version = await timeServer("cachever", async () =>
+      (await env.CACHE_STATE?.get("cache-version", { cacheTtl: 60 })) ?? "0"
+    );
   } catch {
     // KV unavailable → still cache, just without instant purge.
   }
@@ -304,7 +308,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // cannot cross hosts either.
   const cacheKey = new Request(edgeCacheKey(url.origin, rawPathname, version, BUILD_ID));
 
-  const hit = await cacheApi.match(cacheKey);
+  const hit = await timeServer("cache", () => cacheApi.match(cacheKey));
   if (hit) {
     const res = new Response(hit.body, hit);
     res.headers.set("x-cache", "hit");
@@ -318,7 +322,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // Astro renders the real route; undefined means "no rewrite" (sv request,
   // or HAS_RUNTIME false), which next() treats identically to next() with no
   // arguments per Astro's MiddlewareNext signature.
-  const rendered = await next(renderTarget ?? undefined);
+  const rendered = await render(renderTarget ?? undefined);
   const res = new Response(rendered.body, rendered);
 
   // Only cache successful full responses — a transient error page must never
@@ -359,7 +363,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // these are HTML documents, not large assets. Both the visitor's response
   // and the cached copy are then built from the same settled bytes, so
   // neither can race the other.
-  const body = await res.arrayBuffer();
+  const body = await timeServer("buffer", () => res.arrayBuffer());
   const forVisitor = new Response(body, res);
   const forCache = new Response(body, res);
 
@@ -374,4 +378,4 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   return harden(forVisitor);
-});
+}));

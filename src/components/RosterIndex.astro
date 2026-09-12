@@ -1,7 +1,7 @@
 ---
 import type { Artist } from "../lib/ninetone";
 import { url, urlFor } from "../lib/url";
-import { fmText } from "../lib/t";
+import { fmText, resolveFmDisplayText } from "../lib/t";
 
 // Locale-bound link builder (i18n Phase 2): every internal href on an
 // English page must keep the /en prefix, or one click drops the visitor
@@ -19,9 +19,11 @@ interface Props {
    * always-on index (e.g. previous-artists A–Ö block) passes `visible`.
    */
   visible?: boolean;
+  /** artistPresentationShort already contains locale-resolved display text. */
+  blurbsTranslated?: boolean;
 }
 
-const { artists, hrefBase, visible = false } = Astro.props as Props;
+const { artists, hrefBase, visible = false, blurbsTranslated = false } = Astro.props as Props;
 
 // Group by first letter
 const byLetter = new Map<string, Artist[]>();
@@ -48,15 +50,18 @@ for (const a of artists) {
 // Resolved HERE rather than asking each caller to remember, so a future
 // caller cannot reintroduce the gap. Pre-built as a lookup keyed by slug
 // because the render below happens inside .map(), which cannot await.
-// Translating an already-translated string is a no-op that costs one memo
-// hit (sharedT/fmText dedupe per request), so the pre-translating callers
-// are not penalised.
+// Callers with resolved values say so explicitly. fmText's memo key contains
+// the exact input, so translated prose cannot hit its original source key.
 const fm = fmText(Astro.locals);
 const blurbBySlug = new Map<string, string>(
   await Promise.all(
     artists.map(async (a): Promise<[string, string]> => [
       String(a.SLUG ?? ""),
-      await fm(String(a.artistPresentationShort ?? "")),
+      await resolveFmDisplayText(
+        String(a.artistPresentationShort ?? ""),
+        fm,
+        blurbsTranslated,
+      ),
     ]),
   ),
 );

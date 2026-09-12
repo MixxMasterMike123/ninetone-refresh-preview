@@ -12,6 +12,7 @@ import {
   waitUntilFromLocals,
   createT,
 } from "../src/lib/translate.ts";
+import { resolveFmDisplayText } from "../src/lib/t.ts";
 
 // ---------------------------------------------------------------------------
 // Test doubles — same shape/spirit as test/youtube-cache.test.mjs's fakeKv
@@ -688,3 +689,13 @@ test("buildProtectedTerms: a failed FM lookup for booking-category tags degrades
       assert.deepEqual(new Set(terms), new Set(FIXED_PROTECTED_TERMS));
     },
   ));
+
+test("resolveFmDisplayText skips a second translation for locale-resolved prose", async () => {
+  let calls = 0;
+  const translateText = async (text) => { calls += 1; return `${text} translated`; };
+
+  assert.equal(await resolveFmDisplayText("Already English", translateText, true), "Already English");
+  assert.equal(calls, 0);
+  assert.equal(await resolveFmDisplayText("Svenska", translateText, false), "Svenska translated");
+  assert.equal(calls, 1);
+});

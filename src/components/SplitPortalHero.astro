@@ -1,6 +1,7 @@
 ---
 import type { SectionTheme } from "../lib/sections";
 import { sectionAccent } from "../lib/sections";
+import { hoverArtBackground } from "../lib/hover-art";
 import { url, urlFor } from "../lib/url";
 import { sharedT } from "../lib/t";
 
@@ -46,7 +47,7 @@ const enterLabel = await t("Enter");
         {side.bgImage && (
           <div
             class="absolute inset-0 bg-cover bg-center opacity-0 mix-blend-multiply transition-opacity duration-700 ease-out group-hover:opacity-50"
-            style={`background-image: url(${url(side.bgImage)});`}
+            style={`background-image: ${hoverArtBackground(side.bgImage, url)};`}
             aria-hidden
           ></div>
         )}

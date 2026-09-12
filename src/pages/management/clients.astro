@@ -4,6 +4,7 @@ import ArtistCard from "../../components/ArtistCard.astro";
 import SectionIntro from "../../components/SectionIntro.astro";
 import RosterFilters from "../../components/RosterFilters.astro";
 import RosterIndex from "../../components/RosterIndex.astro";
+import type { Artist } from "../../lib/ninetone";
 import { getClients, getWebPostSection } from "../../lib/ninetone";
 import { displayTitle } from "../../lib/display-title";
 import { fmText, sharedT } from "../../lib/t";
@@ -18,12 +19,24 @@ const fm = fmText(Astro.locals);
 // of a silently-empty client roster. Transients are absorbed by lib/cache.ts.
 const clientsRaw = await getClients();
 // Pre-translate the blurbs here — see the note in records/artists.astro.
+//
+// BOTH fields, deliberately. The cards on this page read
+// `clientPresentationString`, but RosterIndex (the A–Ö index below) reads
+// `artistPresentationShort` — and the object spread carries that second
+// field through untranslated. Resolving only the first one and then telling
+// RosterIndex `blurbsTranslated` would assert something false and leave the
+// index in Swedish on /en with no visible symptom: the source text IS the
+// intended render on a translation miss, so the page looks entirely healthy.
+// fmText memoizes per request on the exact input, so when the two fields
+// hold the same prose (the usual case) the second call is a memo hit, not a
+// second KV read.
 const clients = await Promise.all(
-  clientsRaw.map(async (c) => ({
+  clientsRaw.map(async (c): Promise<Artist> => ({
     ...c,
     clientPresentationString: await fm(
       String(c.clientPresentationString ?? c.artistPresentationShort ?? ""),
     ),
+    artistPresentationShort: await fm(String(c.artistPresentationShort ?? "")),
   })),
 );
 const introBody = String((clients[0] as Record<string, unknown> | undefined)?.readMoreClients ?? "");
@@ -113,7 +126,7 @@ const description = await t(
         })}
       </div>
 
-      <RosterIndex artists={clients} hrefBase="/management/clients" />
+      <RosterIndex artists={clients} hrefBase="/management/clients" blurbsTranslated />
     </div>
   </section>
 </Base>
