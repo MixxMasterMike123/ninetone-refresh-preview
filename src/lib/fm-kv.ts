@@ -37,11 +37,16 @@ import { timeServer } from "./server-timing.ts";
 const FM_KV_TTL_SECONDS = 300;
 const FM_KV_VERSION_MEMO_MS = 60_000;
 
-let versionMemo: { value: string; expires: number } | null = null;
+// Keyed by the KV binding object, like translate.ts's isolate cache — a
+// module-global memo would be "correct only because there is one binding".
+// Note the two windows STACK: this 60 s memo sits on top of KV's own 60 s
+// edge cacheTtl, so a Publish can take up to ~2 min to reach this layer.
+const versionMemos = new WeakMap<object, { value: string; expires: number }>();
 
 async function fmCacheVersion(kv: KvLike): Promise<string> {
   const now = Date.now();
-  if (versionMemo && now < versionMemo.expires) return versionMemo.value;
+  const memo = versionMemos.get(kv as unknown as object);
+  if (memo && now < memo.expires) return memo.value;
   let value = "0";
   try {
     value = (await kv.get("cache-version", { cacheTtl: 60 })) ?? "0";
@@ -49,7 +54,7 @@ async function fmCacheVersion(kv: KvLike): Promise<string> {
     // KV unavailable → still cache under epoch "0"; the edge cache has the
     // same fallback (src/middleware.ts).
   }
-  versionMemo = { value, expires: now + FM_KV_VERSION_MEMO_MS };
+  versionMemos.set(kv as unknown as object, { value, expires: now + FM_KV_VERSION_MEMO_MS });
   return value;
 }
 

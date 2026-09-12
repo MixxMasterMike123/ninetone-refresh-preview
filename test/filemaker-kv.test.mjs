@@ -79,3 +79,12 @@ test("an empty result is cached only briefly (negative-result guard) and a KV fa
     console.error = original;
   }
 });
+
+test("the epoch memo is per binding, never shared across KV objects", async () => {
+  const a = fakeKv({ "cache-version": "1" });
+  const b = fakeKv({ "cache-version": "2" });
+  await fmFindViaKv(a, "API_NEWS", BODY, false, async () => [{ from: "a" }]);
+  await fmFindViaKv(b, "API_NEWS", BODY, false, async () => [{ from: "b" }]);
+  assert.match(a.puts[0][0], /^fm:v1:1:/);
+  assert.match(b.puts[0][0], /^fm:v1:2:/);
+});

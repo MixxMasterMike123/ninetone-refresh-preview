@@ -318,3 +318,40 @@ test("url(): real page routes still take the locale prefix", async () => {
   assert.equal(url("/records/artists/a_friend_of_mine", "en"), "/en/records/artists/a_friend_of_mine");
   assert.equal(url("/records/artists/previous/single/the_s_kid", "en"), "/en/records/artists/previous/single/the_s_kid");
 });
+
+// --- urlFor(): the binding every localized component actually holds --------
+//
+// ~53 call sites reach url() through urlFor(Astro.locals) rather than passing
+// `lang` by hand (see src/lib/url.ts's own comment). url() is well covered
+// above; the BINDING was not, so a regression in how `lang` is read off
+// locals — the only thing urlFor does — would have shipped silently and
+// dropped every English visitor back to Swedish on their first click.
+
+test("urlFor: binds locals.lang so every link from an English render is /en-prefixed", async () => {
+  const { urlFor } = await import("../src/lib/url.ts");
+  const u = urlFor({ lang: "en" });
+  assert.equal(u("/records"), "/en/records");
+  assert.equal(u("/"), "/en");
+});
+
+test("urlFor: a Swedish, absent, or malformed locals is a no-op binding, never a crash", async () => {
+  const { urlFor } = await import("../src/lib/url.ts");
+  // sv is the default locale at the root — no prefix.
+  assert.equal(urlFor({ lang: "sv" })("/records"), "/records");
+  // Astro.locals with no lang yet (static gh target, or before middleware).
+  assert.equal(urlFor({})("/records"), "/records");
+  // null/undefined locals must not throw — a component that renders before
+  // the middleware has populated locals would otherwise 500 the whole page.
+  assert.equal(urlFor(null)("/records"), "/records");
+  assert.equal(urlFor(undefined)("/records"), "/records");
+});
+
+test("urlFor: the asset/endpoint exemption survives the binding (the logo bug)", async () => {
+  const { urlFor } = await import("../src/lib/url.ts");
+  // This is the exact shape of the third bug url.ts documents: a component
+  // holding an EN binding emitting /en/images/LogoDark.svg, which is a 404.
+  const u = urlFor({ lang: "en" });
+  assert.equal(u("/images/LogoDark.svg"), "/images/LogoDark.svg");
+  assert.equal(u("/api/contact"), "/api/contact");
+  assert.equal(u("/robots.txt"), "/robots.txt");
+});

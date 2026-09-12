@@ -34,6 +34,7 @@
 import { defineMiddleware } from "astro:middleware";
 import { getCfEnv } from "./lib/cf";
 import {
+  collapseSlashes,
   edgeCacheKey,
   legacyPreviousArtistTarget,
   shouldBypassCache,
@@ -83,6 +84,7 @@ const TTL_RULES: Array<[RegExp, number]> = [
   [/^\/news(\/|$)/, 900], // news index + articles
   [/^\/team(\/|$)/, 86400], // changes a few times a year
   [/^\/integritet(\/|$)/, 86400], // static legal copy
+  [/^\/guider(\/|$)/, 86400], // hand-authored guides — same cadence as legal copy
   [/^\/(records|management|ninetone-nation)\/?$/, 21600], // section landings
   [/^\/records\/artists\/?$/, 21600], // roster lists
   [/^\/management\/clients\/?$/, 21600],
@@ -94,6 +96,9 @@ const TTL_RULES: Array<[RegExp, number]> = [
   [/^\/ninetone-nation\//, 3600], // nation detail + contact
 ];
 const DEFAULT_TTL = 3600;
+
+/** KV keys are capped at 512 bytes; leave headroom for multi-byte paths. */
+const MAX_BUNDLE_KEY_LENGTH = 400;
 
 function ttlFor(pathname: string): number {
   for (const [re, ttl] of TTL_RULES) {
@@ -137,7 +142,15 @@ export const onRequest = defineMiddleware((context, next) => withServerTiming(as
   // cache read/buffer/store cycle below. trailingSlashRedirectTarget()
   // already exempts "/" and reuses cache-policy's own SKIP list (/api/*,
   // /admin, /404) rather than a second hardcoded exemption list.
-  const redirectTarget = HAS_RUNTIME ? trailingSlashRedirectTarget(url.pathname) : null;
+  //
+  // FIRST, collapse doubled slashes (see collapseSlashes in cache-policy.ts):
+  // "//evil.com/" must never become a protocol-relative Location, and
+  // "//admin/publish" must not slip past the anchored SKIP list. Every
+  // predicate below, and every Location built below, works on `pathname`,
+  // the collapsed form — never on url.pathname directly.
+  const collapsed = HAS_RUNTIME ? collapseSlashes(url.pathname) : null;
+  const pathname = collapsed ?? url.pathname;
+  const redirectTarget = HAS_RUNTIME ? (trailingSlashRedirectTarget(pathname) ?? collapsed) : null;
   if (redirectTarget) {
     const location = `${redirectTarget}${url.search}`;
     return harden(new Response(null, { status: 301, headers: { Location: location } }));
@@ -173,7 +186,7 @@ export const onRequest = defineMiddleware((context, next) => withServerTiming(as
   // English visitor following an old Discogs link got a hard 404 where a
   // Swedish visitor following the same link got a working 301, and the 404
   // was then cached for an hour under the /en/ key.
-  const legacyLocale = HAS_RUNTIME ? stripLocale(url.pathname) : null;
+  const legacyLocale = HAS_RUNTIME ? stripLocale(pathname) : null;
   const legacyPrevious = legacyLocale ? legacyPreviousArtistTarget(legacyLocale.path) : null;
   if (legacyPrevious && legacyLocale) {
     const location = `${localizedPath(legacyPrevious, legacyLocale.lang)}${url.search}`;
@@ -212,7 +225,7 @@ export const onRequest = defineMiddleware((context, next) => withServerTiming(as
   // be the correct locale again. Keeping the /en segment IN the cache-key
   // pathname is what makes the two locales address different cache entries
   // even though they render the same underlying route.
-  const rawPathname = url.pathname;
+  const rawPathname = pathname;
   let renderTarget: string | null = null;
   if (HAS_RUNTIME) {
     // /en/api/* is a 404, NOT a rewrite (brief, decision 2 / Build item):
@@ -359,10 +372,18 @@ export const onRequest = defineMiddleware((context, next) => withServerTiming(as
   // page-cache misses measured on 2026-09-12. Keyed by locale + semantic
   // route, like the TTL table. A miss or a malformed value is simply "no
   // seed"; the render is unaffected either way.
+  //
+  // The key embeds the request path, which is attacker-chosen. Two bounds
+  // keep that harmless: KV keys max out at 512 bytes, so over-long paths skip
+  // the bundle entirely instead of throwing on every request; and the WRITE
+  // below only happens for a 200 (the non-200 early return further down is
+  // what stops a 404 flood from minting bundle keys — keep it ahead of the
+  // write if this block is ever reordered).
   const translationKv = env.CACHE_STATE ?? null;
   const bundleKey = translationBundleKey(lang, renderTarget ?? rawPathname);
-  const bundle = translationKv
-    ? await timeServer("trbundle", () => loadTranslationBundle(translationKv, bundleKey))
+  const bundleUsable = translationKv !== null && bundleKey.length <= MAX_BUNDLE_KEY_LENGTH;
+  const bundle = bundleUsable
+    ? await timeServer("trbundle", () => loadTranslationBundle(translationKv!, bundleKey))
     : null;
   // Created here so the nested /404 rewrite pass (same locals object) and
   // every component in the render append to ONE ledger.
@@ -448,7 +469,7 @@ export const onRequest = defineMiddleware((context, next) => withServerTiming(as
   // Write the route bundle back only when this render resolved something the
   // preloaded bundle did not have (or had differently). The body is fully
   // buffered above, so the ledger is complete here. Off the visitor's path.
-  if (translationKv && ledger.size > 0) {
+  if (bundleUsable && translationKv && ledger.size > 0) {
     const save = storeTranslationBundleIfChanged(translationKv, bundleKey, bundle, ledger).catch(
       (err) => console.error("[translate] bundle write failed:", err),
     );

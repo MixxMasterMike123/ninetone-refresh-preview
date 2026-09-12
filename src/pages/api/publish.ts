@@ -116,7 +116,8 @@ export async function notifyIndexNow(request: Request): Promise<void> {
   } catch {
     return;
   }
-  if (!host.endsWith("ninetone.com")) return;
+  // Dot-anchored: "evilninetone.com" must not pass (2026-09-12 review).
+  if (host !== "ninetone.com" && !host.endsWith(".ninetone.com")) return;
 
   const urls = staticRoutePaths().map((path) => `${origin}${path === "/" ? "" : path}`);
   await pingIndexNow(origin, urls);

@@ -817,3 +817,51 @@ test("route bundle: a cache HIT reads no bundle at all", async () => {
   await run(new Request("https://ninetone.com/news"), async () => new Response("x"), runtime);
   assert.ok(!reads.some((k) => String(k).startsWith("trb:")), "no bundle read on a hit");
 });
+
+// ---------------------------------------------------------------------------
+// 2026-09-12 adversarial review
+// ---------------------------------------------------------------------------
+
+test("a protocol-relative path can never become a protocol-relative Location (open redirect)", async () => {
+  for (const path of ["//evil.com/", "//evil.com", "/en//evil.com/integritet/", "///evil.com/x/"]) {
+    const runtime = createRuntime();
+    let nextCalled = false;
+    const response = await run(
+      new Request(`https://ninetone.com${path}?k=1`),
+      async () => { nextCalled = true; return new Response("must not render"); },
+      runtime,
+    );
+    assert.equal(nextCalled, false, `${path} must be answered before rendering`);
+    assert.equal(response.status, 301);
+    const location = response.headers.get("Location");
+    assert.ok(location.startsWith("/") && !location.startsWith("//"), `${path} → ${location} must be a same-origin path`);
+    assert.ok(location.endsWith("?k=1"), "query preserved");
+  }
+});
+
+test("a doubled slash cannot slip a private route past the SKIP list", async () => {
+  const runtime = createRuntime();
+  const response = await run(
+    new Request("https://ninetone.com//admin/publish"),
+    async () => new Response("must not render"),
+    runtime,
+  );
+  assert.equal(response.status, 301);
+  assert.equal(response.headers.get("Location"), "/admin/publish");
+  assert.equal(runtime.stored.length, 0, "nothing cached for the doubled-slash form");
+});
+
+test("guides share the legal-copy cache tier", async () => {
+  const response = await run(new Request("https://ninetone.com/guider/hur-man-bokar"), async () => new Response("g"), createRuntime());
+  assert.equal(response.headers.get("x-cache-ttl"), "86400");
+});
+
+test("an over-long path never reaches KV as a bundle key", async () => {
+  const reads = [];
+  const kv = { get: async (k) => { reads.push(k); return null; }, put: async () => {} };
+  const long = "/" + "a".repeat(600);
+  const response = await run(new Request(`https://ninetone.com${long}`), async () => new Response("x"), createRuntime({ env: { CACHE_STATE: kv } }));
+  assert.equal(response.status, 200);
+  assert.ok(!reads.some((k) => String(k).startsWith("trb:")), "no bundle read for a 600-char path");
+  assert.ok(reads.every((k) => String(k).length <= 512), "no KV key over the 512-byte limit");
+});

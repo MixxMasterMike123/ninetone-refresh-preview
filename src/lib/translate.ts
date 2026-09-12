@@ -932,6 +932,19 @@ type BulkKvLike = KvLike & {
 
 const pendingReads = new WeakMap<object, PendingRead[]>();
 
+/**
+ * A queued read that is never flushed (timer dropped with the I/O context,
+ * isolate torn down mid-request) would otherwise hang forever — and because
+ * isolateCachedRead holds the in-flight promise, it would pin that key for
+ * the isolate's lifetime. A miss is always a safe answer here, so the wait is
+ * bounded: past this, the read resolves null and the entry is evicted.
+ */
+let kvReadTimeoutMs = 5000;
+/** Test hook — shortens the bound so the orphaned-flush path can be exercised. */
+export function setKvReadTimeoutForTests(ms: number): void {
+  kvReadTimeoutMs = ms;
+}
+
 function queueKvRead(kv: KvLike, key: string): Promise<string | null> {
   let pending = pendingReads.get(kv as unknown as object);
   if (!pending) {
@@ -941,7 +954,23 @@ function queueKvRead(kv: KvLike, key: string): Promise<string | null> {
       void flushKvReads(kv);
     }, 0);
   }
-  return new Promise<string | null>((settle, fail) => pending!.push({ key, settle, fail }));
+  return new Promise<string | null>((settle, fail) => {
+    const timer = setTimeout(() => {
+      console.error(`[translate] KV read for ${key} did not settle within ${kvReadTimeoutMs} ms — treating as a miss`);
+      settle(null);
+    }, kvReadTimeoutMs);
+    pending!.push({
+      key,
+      settle: (value) => {
+        clearTimeout(timer);
+        settle(value);
+      },
+      fail: (err) => {
+        clearTimeout(timer);
+        fail(err);
+      },
+    });
+  });
 }
 
 async function readChunk(kv: KvLike, chunk: PendingRead[]): Promise<void> {

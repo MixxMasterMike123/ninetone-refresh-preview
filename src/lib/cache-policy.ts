@@ -89,6 +89,27 @@ export function edgeCacheKey(origin: string, pathname: string, version: string, 
  *     links to an API path with a trailing slash, and 308 preserves the POST
  *     body anyway.
  */
+/**
+ * Collapse runs of slashes ("//evil.com/x", "/en//admin") to single slashes.
+ * Returns null when the pathname is already canonical.
+ *
+ * Two defects share this root (2026-09-12 adversarial review):
+ *   - OPEN REDIRECT: "//evil.com/" reached the trailing-slash 301 with target
+ *     "//evil.com" — a protocol-relative Location the browser resolves to
+ *     https://evil.com, shipped with our HSTS and noindex headers.
+ *   - SKIP BYPASS: the anchored SKIP patterns never matched "//admin/publish",
+ *     so a doubled slash defeated the cache bypass the same way a "/en"
+ *     prefix once did.
+ * The middleware 301s any such request to the collapsed path first, so every
+ * later predicate and every Location it builds sees a single-slash-rooted
+ * path. WHATWG URL already folds backslashes into slashes for https, so
+ * forward slashes are the only separator that can reach here.
+ */
+export function collapseSlashes(pathname: string): string | null {
+  const collapsed = pathname.replace(/\/{2,}/g, "/");
+  return collapsed === pathname ? null : collapsed;
+}
+
 export function trailingSlashRedirectTarget(pathname: string): string | null {
   if (pathname === "/" || !pathname.endsWith("/")) return null;
   if (SKIP.some((re) => re.test(pathname))) return null;
