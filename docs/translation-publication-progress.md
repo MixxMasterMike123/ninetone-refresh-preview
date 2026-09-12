@@ -45,7 +45,7 @@ are what appear in the dashboard.
 | 0. Baseline committed and pushed | **Done** — `85546d4`, pushed to `origin/i18n-phase-2` |
 | 1. Inventory and contracts | **Done, review-corrected** — 6 counterexamples fixed |
 | 2. Background preparation | **Done, review-corrected** — immutable completions |
-| 3. Safe publication | Not started |
+| 3. Safe publication | **Done** (logic) — `release.ts`, 15 tests |
 | 4. Serving and lifecycle | Not started |
 | 5. Validation and rollout | Not started |
 
@@ -187,3 +187,46 @@ lock should be deleted. That is written at the lock itself.
 
 Tests: 419 total (15 new regressions; 38 checkpoint tests updated to the
 corrected contracts), all passing.
+
+### Checkpoint 3 — safe publication, logic (done)
+
+`src/lib/publication/release.ts` + `test/publication-release.test.mjs` (15
+tests). Assembly, promotion gates, generation resolution, rollback, and the
+urgent-removal path.
+
+**A pointer is never treated as readiness.** Three rules, each tested:
+
+1. `storeRelease()` writes the bundle, THEN a readiness marker. A crash between
+   them leaves a bundle with no marker, which reads as not-ready — safe, and
+   repaired by the next attempt. The reverse order would publish a marker for a
+   bundle that may not be readable.
+2. `verifyGenerationReadable()` checks BOTH the marker and that the bundle
+   parses back. KV is eventually consistent, so a marker visible at one edge
+   does not prove the bundle is.
+3. `resolveGeneration()` walks retained history when the pointer names
+   something unreadable, and returns **null** rather than anything partial when
+   nothing is readable — the caller then keeps its existing behaviour and never
+   falls through to live untranslated FM.
+
+`promoteRelease()` gates on validation, then staleness (`rejectStalePromotion`
+re-reads newest hashes immediately before committing), then readability. The
+pointer write is last.
+
+Mixed generations across edges are safe by construction: every generation
+validates as a whole, so an edge serving an older one shows a consistent older
+site rather than a new listing linking to a missing detail page. Tested
+explicitly.
+
+`withRemovals()` derives a removal generation by FILTERING an existing one —
+no translation involved — and drops references to removed entities from the
+survivors so nothing can link to something gone. A late completion cannot
+re-promote a superseded bundle and resurrect a withdrawn record; also tested.
+
+**Stated limitation, not hidden:** the current pointer is the one mutable key
+in the release path. Without the Durable Object, two concurrent promotions can
+still overwrite each other's pointer. Both would name a complete, internally
+consistent generation, so the failure mode is "an older complete site wins"
+rather than corruption — but it is real, and it is written at `promoteRelease`.
+The coordinator in checkpoint 4 is what closes it.
+
+Tests: 434 total (15 new), all passing.
