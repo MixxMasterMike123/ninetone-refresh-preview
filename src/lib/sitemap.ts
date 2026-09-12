@@ -29,8 +29,7 @@
  * src/lib/i18n.ts's `localizedPath` — never reimplemented here.
  */
 
-import type { StaticRoute } from "./routes";
-import { PREVIOUS_ARTISTS_PAGE_SIZE } from "./routes.ts";
+import { PREVIOUS_ARTISTS_PAGE_SIZE, type StaticRoute } from "./routes.ts";
 import { slugifyTag } from "./booking-slug.ts";
 import { hasEnglishVersion, localizedPath } from "./i18n.ts";
 import type { Lang } from "./translate.ts";

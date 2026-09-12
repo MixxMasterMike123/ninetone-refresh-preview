@@ -271,4 +271,3 @@ export async function contentHashFor(
 }
 
 /** Locale set a complete snapshot must eventually satisfy. */
-export const REQUIRED_LOCALES: readonly Lang[] = SUPPORTED_LOCALES;

@@ -185,23 +185,13 @@ const CAPTURE_FILE_PATH = "i18n-chrome-capture.jsonl";
 function captureSourceString(source: string): void {
   if (!captureEnabled) return; // the entire hot-path cost when unset: one boolean check.
   try {
-    // `appendFileSyncRef` is populated lazily, the first time capture is
-    // actually enabled and used — see below. This module is imported by
-    // every page render on both deploy targets, and top-level `import
-    // "node:fs"` would resolve the module graph unconditionally even when
-    // capture is off; deferring the import into this branch means the CF
-    // Worker isolate (where node:fs is not a real filesystem) and every
-    // ordinary gh-target render that never sets the flag pay nothing beyond
-    // the boolean check above. `import(...)` returns a promise, but Node's
-    // ESM loader caches the resolved module synchronously after the first
-    // await, and every call site here already tolerates one build's worth
-    // of writes racing slightly behind — see the "best-effort" framing in
-    // the doc comment above — so the first capture in a build may be lost
-    // if the process exits before this settles, and every subsequent one
-    // in the same module instance uses the now-cached synchronous path.
-    // To avoid that first-write race entirely, this instead uses
-    // `node:module`'s `createRequire`, which gives a synchronous `require`
-    // in an ESM module without any top-level side effect until called.
+    // node:fs is resolved lazily, the first time capture is actually used:
+    // this module is imported by every page render on both deploy targets,
+    // and a top-level `import "node:fs"` would pull it in unconditionally
+    // (including on the CF Worker, where it is not a real filesystem).
+    // `createRequire` gives a SYNCHRONOUS require in ESM with no side effect
+    // until called, so no write can race the process exiting the way an
+    // `await import()` on the first capture could.
     if (!requireRef) {
       requireRef = createRequire(import.meta.url);
     }
@@ -258,21 +248,6 @@ export function sharedT(
   locals: LocalsForT,
   opts?: {
     protect?: string[];
-    /**
-     * Render this text in THIS language regardless of `locals.lang`.
-     *
-     * For the one caller that knows the target better than `locals` does:
-     * src/pages/llms.txt.ts serves both /llms.txt and (via the middleware
-     * rewrite) /en/llms.txt, and its gh-target sibling passes "en"
-     * explicitly. That endpoint previously expressed this as
-     * `sharedT({ ...locals, lang })` — which quietly defeated BOTH of this
-     * module's reasons to exist: the spread makes a NEW object, so the
-     * budget stashed on it is private to that call and the memo WeakMap
-     * (keyed by `locals` identity) gets its own empty table. Overriding the
-     * target here instead keeps the one real `locals` object, and with it
-     * the one shared budget and memo, exactly as note C requires.
-     */
-    lang?: Lang;
   },
 ): TFunction {
   const l = locals as LocalsForT;
@@ -287,12 +262,7 @@ export function sharedT(
   }
   const budget = l.__i18nBudget;
 
-  // The override is passed through as a locals-SHAPED argument to createT
-  // (which reads `.lang` off it) while the budget and memo below still key
-  // off the real `locals` — so an override changes the target language
-  // without forking per-request state.
-  const forTarget = opts?.lang ? { ...locals, lang: opts.lang } : locals;
-  const baseT = createT(forTarget, { protect: opts?.protect, budget, ledger: translationLedgerFor(l) });
+  const baseT = createT(locals, { protect: opts?.protect, budget, ledger: translationLedgerFor(l) });
 
   // GAP 2 fix: memoize by exact source string for the lifetime of this
   // request's `locals` object. Concurrent callers awaiting the same source
