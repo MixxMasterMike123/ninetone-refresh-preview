@@ -544,6 +544,21 @@ export class RequestBudget {
     return Math.max(0, this.max - this.used);
   }
 
+  /** Uncached strings this render scheduled (each rendered as source text). */
+  get consumedCount(): number {
+    return this.used;
+  }
+
+  /**
+   * Every string that rendered as SOURCE text this render: the ones scheduled
+   * (consumed) plus the ones refused. Non-zero means the page is incomplete
+   * in its target language, whether or not the ceiling was reached — an
+   * edited FM field alone makes one miss (Codex review, 2026-09-12).
+   */
+  get missCount(): number {
+    return this.used + this.refused;
+  }
+
   /**
    * How many uncached strings this render had to leave untranslated AND
    * unscheduled because the ceiling was already reached. Non-zero means the
@@ -861,12 +876,29 @@ const ISOLATE_CACHE_MAX = 5000;
  * WeakMap so an isolate that somehow holds several bindings does not pin
  * their caches after the binding itself is gone.
  */
-const isolateCaches = new WeakMap<object, Map<string, Promise<string | null>>>();
+type IsolateEntry = { job: Promise<string | null>; at: number };
 
-function isolateCacheFor(kv: KvLike): Map<string, Promise<string | null>> {
+/**
+ * Entries AGE OUT. Values are content-addressed, but a value can still be
+ * corrected by hand (the language auditor deletes a wrong-language entry and
+ * the next miss regenerates it). Without an age, an isolate that read the old
+ * value — or was seeded with it from a bundle — would serve it forever and,
+ * through the ledger, write it into a fresh bundle when the old one expired,
+ * so the bundle TTL bounded nothing (Codex review, 2026-09-12). One hour: a
+ * re-read per key per isolate per hour is nothing next to bulk reads.
+ */
+let isolateEntryTtlMs = 60 * 60 * 1000;
+/** Test hook. */
+export function setIsolateEntryTtlForTests(ms: number): void {
+  isolateEntryTtlMs = ms;
+}
+
+const isolateCaches = new WeakMap<object, Map<string, IsolateEntry>>();
+
+function isolateCacheFor(kv: KvLike): Map<string, IsolateEntry> {
   let isolateCache = isolateCaches.get(kv as unknown as object);
   if (!isolateCache) {
-    isolateCache = new Map<string, Promise<string | null>>();
+    isolateCache = new Map<string, IsolateEntry>();
     isolateCaches.set(kv as unknown as object, isolateCache);
   }
   return isolateCache;
@@ -874,7 +906,7 @@ function isolateCacheFor(kv: KvLike): Map<string, Promise<string | null>> {
 
 function isolateCacheSet(kv: KvLike, key: string, job: Promise<string | null>): void {
   const isolateCache = isolateCacheFor(kv);
-  isolateCache.set(key, job);
+  isolateCache.set(key, { job, at: Date.now() });
   if (isolateCache.size > ISOLATE_CACHE_MAX) {
     const oldest = isolateCache.keys().next().value as string | undefined;
     if (oldest && oldest !== key) isolateCache.delete(oldest);
@@ -1025,7 +1057,8 @@ async function flushKvReads(kv: KvLike): Promise<void> {
 function isolateCachedRead(kv: KvLike, key: string): Promise<string | null> {
   const isolateCache = isolateCacheFor(kv);
   const existing = isolateCache.get(key);
-  if (existing) return existing;
+  if (existing && Date.now() - existing.at < isolateEntryTtlMs) return existing.job;
+  if (existing) isolateCache.delete(key); // aged out: revalidate against KV
 
   const job = queueKvRead(kv, key)
     .then((value) => {
@@ -1104,8 +1137,11 @@ export function translationBundleKey(lang: Lang, path: string): string {
 /** Pre-populate the isolate cache; existing entries (possibly in flight) win. */
 export function seedIsolateCache(kv: KvLike, entries: Record<string, string>): void {
   const isolateCache = isolateCacheFor(kv);
+  const now = Date.now();
   for (const [key, value] of Object.entries(entries)) {
-    if (typeof value !== "string" || isolateCache.has(key)) continue;
+    if (typeof value !== "string") continue;
+    const held = isolateCache.get(key);
+    if (held && now - held.at < isolateEntryTtlMs) continue; // a live entry wins over a bundle
     isolateCacheSet(kv, key, Promise.resolve(value));
   }
 }

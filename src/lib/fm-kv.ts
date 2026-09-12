@@ -35,27 +35,27 @@ import { timeServer } from "./server-timing.ts";
 // minutes is the shortest page tier (homepage), so nothing is served staler
 // than its own tier already allows; a Publish still forces a live read.
 const FM_KV_TTL_SECONDS = 300;
-const FM_KV_VERSION_MEMO_MS = 60_000;
 
-// Keyed by the KV binding object, like translate.ts's isolate cache — a
-// module-global memo would be "correct only because there is one binding".
-// Note the two windows STACK: this 60 s memo sits on top of KV's own 60 s
-// edge cacheTtl, so a Publish can take up to ~2 min to reach this layer.
-const versionMemos = new WeakMap<object, { value: string; expires: number }>();
-
+/**
+ * NO in-isolate memo of the epoch, on purpose. The middleware reads
+ * "cache-version" (cacheTtl 60) to build the PAGE cache key; this layer must
+ * never see an OLDER epoch than that read did, or a Publish can render old FM
+ * data and pin it under the new epoch for the page's full tier (24 h on
+ * /team — Codex review, 2026-09-12). Reading the same edge-cached KV entry,
+ * in the same colo, milliseconds later gives exactly that guarantee: the
+ * value is identical or newer, and "newer FM data under an older page key"
+ * is harmless because that key is already dying. A memo broke it. The read
+ * is one edge-cached KV get per in-memory miss (per layout per 60 s per
+ * isolate), which is cheap.
+ */
 async function fmCacheVersion(kv: KvLike): Promise<string> {
-  const now = Date.now();
-  const memo = versionMemos.get(kv as unknown as object);
-  if (memo && now < memo.expires) return memo.value;
-  let value = "0";
   try {
-    value = (await kv.get("cache-version", { cacheTtl: 60 })) ?? "0";
+    return (await kv.get("cache-version", { cacheTtl: 60 })) ?? "0";
   } catch {
     // KV unavailable → still cache under epoch "0"; the edge cache has the
     // same fallback (src/middleware.ts).
+    return "0";
   }
-  versionMemos.set(kv as unknown as object, { value, expires: now + FM_KV_VERSION_MEMO_MS });
-  return value;
 }
 
 /** Content-addressed find key: epoch + layout + shape + exact query body. */

@@ -437,8 +437,14 @@ export const onRequest = defineMiddleware((context, next) => withServerTiming(as
   // to absorb a burst, short enough that the translations the NEXT render
   // schedules become visible within the minute, so the page converges
   // instead of sticking (2026-09-12 i18n review, D2).
-  const budget = (locals as { __i18nBudget?: { refusedCount?: number } }).__i18nBudget;
-  const degraded = (budget?.refusedCount ?? 0) > 0;
+  //
+  // "Degraded" is ANY miss, not only budget exhaustion: a single edited FM
+  // field renders as Swedish source on /en/ and schedules its translation —
+  // with a full-tier cache that page would stay half-translated for up to
+  // 24 h after the job completed seconds later (Codex review, 2026-09-12).
+  const budget = (locals as { __i18nBudget?: { missCount?: number; refusedCount?: number } }).__i18nBudget;
+  const misses = budget?.missCount ?? budget?.refusedCount ?? 0;
+  const degraded = misses > 0;
   const effectiveTtl = degraded ? Math.min(ttl, 60) : ttl;
 
   // Browser gets a short lease (60s), the edge holds the tiered TTL, and the
@@ -451,7 +457,7 @@ export const onRequest = defineMiddleware((context, next) => withServerTiming(as
   );
   res.headers.set("x-cache", "miss");
   res.headers.set("x-cache-ttl", String(effectiveTtl));
-  if (degraded) res.headers.set("x-translation", `degraded; refused=${budget!.refusedCount}`);
+  if (degraded) res.headers.set("x-translation", `degraded; misses=${misses} refused=${budget?.refusedCount ?? 0}`);
 
   const forVisitor = new Response(body, res);
   const forCache = new Response(body, res);

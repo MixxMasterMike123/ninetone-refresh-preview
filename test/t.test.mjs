@@ -38,6 +38,8 @@ test("ONE budget per render: Header-, Footer- and page-level bindings share the 
       assert.ok(locals.__i18nBudget, "the budget is stashed on locals");
       assert.equal(locals.__i18nBudget.remaining, 0);
       assert.equal(locals.__i18nBudget.refusedCount, 5, "30 uncached strings against a 25 ceiling refuse exactly 5");
+      assert.equal(locals.__i18nBudget.consumedCount, 25);
+      assert.equal(locals.__i18nBudget.missCount, 30, "every one of the 30 rendered as source text");
       assert.equal(locals.waits.length, 25, "exactly 25 jobs scheduled for the whole render");
     } finally {
       if (prev !== undefined) process.env.ANTHROPIC_API_KEY = prev;

@@ -707,7 +707,7 @@ test("a render whose translation budget refused strings is cached for 60s, not t
   assert.equal(response.headers.get("x-cache"), "miss");
   assert.equal(response.headers.get("x-cache-ttl"), "60", "team tier is 86400; a degraded render must not pin that long");
   assert.match(response.headers.get("Cache-Control"), /s-maxage=60,/);
-  assert.equal(response.headers.get("x-translation"), "degraded; refused=7");
+  assert.equal(response.headers.get("x-translation"), "degraded; misses=7 refused=7");
   assert.equal(runtime.stored.length, 1, "still cached — briefly — to absorb a burst");
 });
 
@@ -734,7 +734,7 @@ test("budget exhausted by COMPONENTS (after headers, during body streaming) stil
   });
   await Promise.all(runtime.waits);
   assert.equal(response.headers.get("x-cache-ttl"), "60");
-  assert.equal(response.headers.get("x-translation"), "degraded; refused=7");
+  assert.equal(response.headers.get("x-translation"), "degraded; misses=7 refused=7");
   assert.match(response.headers.get("Cache-Control"), /s-maxage=60,/);
   assert.equal(runtime.stored[0].response.headers.get("x-cache-ttl"), "60", "the cached copy carries the same short TTL");
   assert.equal(await response.text(), "<html>half-translated</html>");
@@ -864,4 +864,21 @@ test("an over-long path never reaches KV as a bundle key", async () => {
   assert.equal(response.status, 200);
   assert.ok(!reads.some((k) => String(k).startsWith("trb:")), "no bundle read for a 600-char path");
   assert.ok(reads.every((k) => String(k).length <= 512), "no KV key over the 512-byte limit");
+});
+
+test("ONE untranslated string (a miss, no refusal) is enough to shorten the TTL", async () => {
+  const runtime = createRuntime();
+  const context = {
+    request: new Request("https://ninetone.com/en/team"),
+    url: new URL("https://ninetone.com/en/team"),
+    locals: { cfContext: { waitUntil: (p) => runtime.waits.push(p) } },
+  };
+  const response = await middlewareModule.onRequest(context, async () => {
+    // What an edited FM bio produces: scheduled, not refused.
+    context.locals.__i18nBudget = { missCount: 1, refusedCount: 0 };
+    return new Response("<html>one Swedish bio on /en</html>");
+  });
+  await Promise.all(runtime.waits);
+  assert.equal(response.headers.get("x-cache-ttl"), "60");
+  assert.equal(response.headers.get("x-translation"), "degraded; misses=1 refused=0");
 });

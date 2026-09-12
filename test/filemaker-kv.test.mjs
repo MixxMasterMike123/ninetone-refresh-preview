@@ -80,11 +80,14 @@ test("an empty result is cached only briefly (negative-result guard) and a KV fa
   }
 });
 
-test("the epoch memo is per binding, never shared across KV objects", async () => {
-  const a = fakeKv({ "cache-version": "1" });
-  const b = fakeKv({ "cache-version": "2" });
-  await fmFindViaKv(a, "API_NEWS", BODY, false, async () => [{ from: "a" }]);
-  await fmFindViaKv(b, "API_NEWS", BODY, false, async () => [{ from: "b" }]);
-  assert.match(a.puts[0][0], /^fm:v1:1:/);
-  assert.match(b.puts[0][0], /^fm:v1:2:/);
+test("a Publish epoch change is observed on the very next read — no in-isolate memo", async () => {
+  const kv = fakeKv({ "cache-version": "1" });
+  await fmFindViaKv(kv, "API_NEWS", BODY, false, async () => [{ v: 1 }]);
+  assert.match(kv.puts.at(-1)[0], /^fm:v1:1:/);
+  kv.store.set("cache-version", "2"); // Publish
+  let calls = 0;
+  const rows = await fmFindViaKv(kv, "API_NEWS", BODY, false, async () => { calls++; return [{ v: 2 }]; });
+  assert.equal(calls, 1, "the new epoch misses the old entry and re-reads FM");
+  assert.deepEqual(rows, [{ v: 2 }]);
+  assert.match(kv.puts.at(-1)[0], /^fm:v1:2:/);
 });

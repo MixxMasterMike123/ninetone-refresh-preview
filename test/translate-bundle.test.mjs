@@ -264,3 +264,26 @@ test("a queued read whose flush never settles resolves null within the bound and
     setKvReadTimeoutForTests(5000);
   }
 });
+
+test("isolate entries age out: a corrected KV value replaces a seeded one instead of being carried forward", async () => {
+  const { setIsolateEntryTtlForTests } = await import("../src/lib/translate.ts");
+  setIsolateEntryTtlForTests(30);
+  try {
+    const key = await translationKey("Rätta", "en", "fast");
+    const kv = bulkKv({ [key]: "CORRECTED" });
+    seedIsolateCache(kv, { [key]: "WRONG (old bundle)" });
+    const ledger = new Map();
+    const first = await translate({ text: "Rätta", target: "en", tier: "fast", kv, ledger });
+    assert.equal(first.text, "WRONG (old bundle)", "seeded value serves while fresh");
+    await new Promise((r) => setTimeout(r, 40));
+    const second = await translate({ text: "Rätta", target: "en", tier: "fast", kv, ledger });
+    assert.equal(second.text, "CORRECTED", "after the entry ages out, KV is authoritative again");
+    assert.equal(ledger.get(key), "CORRECTED", "and the ledger — hence the next bundle — carries the corrected value");
+    // A live (fresh) entry is never overwritten by a later seed.
+    seedIsolateCache(kv, { [key]: "WRONG again" });
+    const third = await translate({ text: "Rätta", target: "en", tier: "fast", kv, ledger });
+    assert.equal(third.text, "CORRECTED");
+  } finally {
+    setIsolateEntryTtlForTests(60 * 60 * 1000);
+  }
+});
