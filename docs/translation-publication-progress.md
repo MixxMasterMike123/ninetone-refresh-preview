@@ -806,3 +806,63 @@ blocking. bookingTalent is 9 because only ~11 of 72 roster rows carry
 `bookingPresentation*` prose, matching the earlier probe.
 
 Tests: 589 total (19 new), all passing.
+
+## Checkpoint 6 — DEPLOYED, and the two defects only production could show
+
+Deployed to `ninetone-site` (versions 5efbd371 -> 03c86c91 -> c514fa5e). All
+Cloudflare bindings live: DO, both KV namespaces, queue producer + consumer + DLQ,
+cron `* * * * *`.
+
+Site serving verified immediately after the entrypoint change: `/`, `/records/artists`,
+`/en/records/artists`, `/news`, `/team`, `/ninetone-nation/booking` all 200.
+
+### Defect 1 — sequential KV I/O killed every tick
+
+**Symptom in production:** `pub:v1:cand` and `pub:v1:newest` written for all 557
+records, `pub:v1:inventory` written, and **zero snapshots**. No jobs enqueued, no
+release possible. Ticks were being killed part-way.
+
+**Measured cause:** one scan issues **6,686 KV operations**. Locally against a `Map`
+that is 39ms; against remote KV at ~5ms/op it is **~33s of sequential I/O**, far past a
+scheduled invocation. Breakdown: `reconcile` 2,228 reads, `discover` 1,115,
+`persistDiscovery` 2,229, snapshots the rest.
+
+**Why no test caught it:** every fake store in the suite is a `Map`. The defect exists
+only against a real binding — exactly the class the deployment review warned about.
+
+**Fix:** bounded parallelism (`readMany` / `runBounded`), identical keys, values and
+results — only concurrency changes. **22.6s -> 1.8s** at simulated latency.
+
+### Defect 2 — assembly was still sequential
+
+**Symptom:** after fix 1, snapshots and all 3,208 completions appeared, but the only
+bundles stored held **10 entities** — assembled early while 10 were ready — and no
+complete bundle ever landed once all 557 became ready.
+
+**Measured cause:** `readBackAll` does one read per (field, locale) at **concurrency 1**
+— 3,342 reads = **21.6s** on its own. The tick died inside that loop every time, and
+only succeeded while the ready set was tiny.
+
+**Fix:** batch read-back across fields and entities. **21.6s -> 0.4s.** Whole tick now
+~2.2s.
+
+Both are pinned in `test/publication-kv-concurrency.test.mjs` (8 tests), which asserts
+on **I/O shape** — peak concurrency and wall time under simulated latency — because
+output-based tests cannot see this.
+
+### Live shadow state — verified in production
+
+```
+pub:v1:cand 557 | pub:v1:newest 557 | pub:v1:snap 557 | pub:v1:done 3208 | inventory 1
+Release g-dfff1310b635e43c: 557 entities, 1028 routes, VALIDATION ISSUES: 0
+by kind: artist 33, previousArtist 341, client 37, bookingTalent 9,
+         teamMember 17, newsPost 77, bookingCategory 6, webPostSection 37
+with text: 555/557   DLQ: empty
+rel:v1:current: ABSENT — nothing is served from a release
+```
+
+Real translations, both locales, e.g. anjo sv "Anjo är en dynamisk svensk Artist…" /
+en "Anjo is a dynamic Swedish artist…". Counts match the independent live FM probes
+exactly. All 3,208 translations completed in ~3 minutes with zero dead letters.
+
+Tests: 597 total, all passing.

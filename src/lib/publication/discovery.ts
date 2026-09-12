@@ -152,6 +152,65 @@ export async function releaseScanLock(deps: DiscoveryDeps, holder: string): Prom
  * no jobs, permanently. Reconciling candidate EXISTENCE on every scan — rather
  * than trusting the hash alone — closes that window from either write order.
  */
+
+/**
+ * Read many independent keys with bounded parallelism.
+ *
+ * WHY THIS EXISTS, MEASURED. A full scan of the real corpus (557 records) issues
+ * 6,686 KV operations, of which `discover()` and `reconcile()` contribute 3,343
+ * point reads. Executed sequentially against remote KV (~5ms each) that is ~33s
+ * of pure I/O, and the scheduled invocation was killed part-way through: in
+ * production the candidate and newest-hash keys were written for all 557
+ * records but NOT ONE snapshot, because execution never reached them.
+ *
+ * Local tests never caught it — a Map-backed fake answers in microseconds, so
+ * the same scan completes in 39ms. The cost only exists against a real binding.
+ *
+ * These reads are genuinely independent (one key per record), so issuing them
+ * in bounded batches changes no semantics whatsoever — same keys, same values,
+ * same order of the results array. The bound matters: an unbounded fan-out of
+ * thousands of concurrent subrequests is its own failure mode.
+ */
+export const KV_READ_CONCURRENCY = 24;
+
+export async function runBounded<T>(
+  items: readonly T[],
+  task: (item: T, index: number) => Promise<void>,
+  concurrency: number = KV_READ_CONCURRENCY,
+): Promise<void> {
+  let cursor = 0;
+  async function worker(): Promise<void> {
+    for (;;) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      await task(items[index], index);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
+  );
+}
+
+export async function readMany(
+  store: Pick<KvLike, "get">,
+  keys: readonly string[],
+  concurrency: number = KV_READ_CONCURRENCY,
+): Promise<(string | null)[]> {
+  const out: (string | null)[] = new Array(keys.length);
+  let cursor = 0;
+  async function worker(): Promise<void> {
+    for (;;) {
+      const index = cursor++;
+      if (index >= keys.length) return;
+      out[index] = await store.get(keys[index]);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, keys.length) }, () => worker()),
+  );
+  return out;
+}
+
 export async function discover(
   deps: DiscoveryDeps,
   options: DiscoverOptions = {},
@@ -164,6 +223,25 @@ export async function discover(
 
   const seen = new Set<string>();
 
+  // Batched, not sequential: see readMany()'s comment for the measurement that
+  // forced this. Semantics are identical — the same two keys per active record.
+  const active = records.filter((r) => r.active);
+  const previousHashes = await readMany(
+    deps.store,
+    active.map((r) => stateKeys.newestHash(r.kind, r.id)),
+  );
+  const candidateBlobs = await readMany(
+    deps.store,
+    active.map((r) => stateKeys.candidate(r.kind, r.id, r.hash)),
+  );
+  const previousByRef = new Map<string, string | null>();
+  const candidateByRef = new Map<string, string | null>();
+  active.forEach((r, i) => {
+    const ref = entityRef(r.kind, r.id);
+    previousByRef.set(ref, previousHashes[i]);
+    candidateByRef.set(ref, candidateBlobs[i]);
+  });
+
   for (const record of records) {
     const ref = entityRef(record.kind, record.id);
     seen.add(ref);
@@ -173,10 +251,8 @@ export async function discover(
       continue;
     }
 
-    const previous = await deps.store.get(stateKeys.newestHash(record.kind, record.id));
-    const candidateExists = Boolean(
-      await deps.store.get(stateKeys.candidate(record.kind, record.id, record.hash)),
-    );
+    const previous = previousByRef.get(ref) ?? null;
+    const candidateExists = Boolean(candidateByRef.get(ref));
 
     if (previous === record.hash && candidateExists) {
       unchanged += 1;
@@ -224,7 +300,11 @@ export async function persistDiscovery(
   result: DiscoveryResult,
   keyVersion: string,
 ): Promise<void> {
-  for (const record of result.changed) {
+  // Bounded-parallel, not sequential. Per-record writes are independent; see
+  // readMany()'s comment for the production failure sequential I/O caused.
+  // Candidate writes stay write-once (the get-then-put is per record, and two
+  // workers never touch the same record), so immutability is unaffected.
+  await runBounded(result.changed, async (record) => {
     const key = stateKeys.candidate(record.kind, record.id, record.hash);
     if (!(await deps.store.get(key))) {
       const candidate: Omit<Candidate, "completed" | "state"> & { state: Candidate["state"] } = {
@@ -244,14 +324,14 @@ export async function persistDiscovery(
       if (deps.store.delete) await deps.store.delete(removalKey);
       else await deps.store.put(removalKey, "");
     }
-  }
+  });
 
-  for (const entry of result.removed) {
+  await runBounded(result.removed, async (entry) => {
     await deps.store.put(
       stateKeys.removal(entry.kind, entry.id),
       JSON.stringify({ ...entry, at: (deps.now ?? Date.now)() }),
     );
-  }
+  });
 
   // Only a COMPLETE scan may rewrite the inventory. Persisting a partial
   // view would make the next scan read the missing records as deletions.
@@ -316,6 +396,42 @@ export async function reconcile(deps: DiscoveryDeps, keyVersion: string): Promis
   const readyIds = new Set<string>();
   const removals: { kind: string; id: string }[] = [];
 
+  // PREFETCH, BATCHED. reconcile() was the single largest source of sequential
+  // KV reads at real scale — 2,228 of a scan's 6,686 operations, because it
+  // reads one completion key per job (two locales per field per record). Those
+  // reads are independent, so batching them changes nothing but wall time.
+  // See readMany()'s comment for the production failure this fixes.
+  const active = records.filter((r) => r.active);
+  const newestList = await readMany(
+    deps.store,
+    active.map((r) => stateKeys.newestHash(r.kind, r.id)),
+  );
+  const removalList = await readMany(
+    deps.store,
+    active.map((r) => stateKeys.removal(r.kind, r.id)),
+  );
+  const newestByRef = new Map<string, string | null>();
+  const removalByRef = new Map<string, string | null>();
+  active.forEach((r, i) => {
+    const ref = entityRef(r.kind, r.id);
+    newestByRef.set(ref, newestList[i]);
+    removalByRef.set(ref, removalList[i]);
+  });
+
+  const allJobIds: string[] = [];
+  const jobsByRef = new Map<string, TranslationJob[]>();
+  for (const record of active) {
+    const recordJobs = jobsForRecord(record);
+    jobsByRef.set(entityRef(record.kind, record.id), recordJobs);
+    for (const job of recordJobs) allJobIds.push(jobId(job, keyVersion));
+  }
+  const completionList = await readMany(
+    deps.store,
+    allJobIds.map((id) => stateKeys.completion(id)),
+  );
+  const completionById = new Map<string, boolean>();
+  allJobIds.forEach((id, i) => completionById.set(id, Boolean(completionList[i])));
+
   for (const record of records) {
     // An ACTIVE record is not removed, whatever a stale marker says. The
     // marker is cleared by persistDiscovery() when the record returns, but
@@ -326,19 +442,20 @@ export async function reconcile(deps: DiscoveryDeps, keyVersion: string): Promis
       removals.push({ kind: record.kind, id: record.id });
       continue;
     }
-    if (await deps.store.get(stateKeys.removal(record.kind, record.id))) {
+    const ref = entityRef(record.kind, record.id);
+    if (removalByRef.get(ref)) {
       // Marker present but the record is active again: treat it as live and
       // let the next persist clear the marker.
       if (deps.store.delete) await deps.store.delete(stateKeys.removal(record.kind, record.id));
     }
 
-    const newest = await deps.store.get(stateKeys.newestHash(record.kind, record.id));
-    const recordJobs = jobsForRecord(record);
+    const newest = newestByRef.get(ref) ?? null;
+    const recordJobs = jobsByRef.get(ref) ?? jobsForRecord(record);
     const completed: Record<string, boolean> = {};
 
     for (const job of recordJobs) {
       const id = jobId(job, keyVersion);
-      const done = Boolean(await deps.store.get(stateKeys.completion(id)));
+      const done = completionById.get(id) ?? false;
       completed[id] = done;
       if (!done) jobs.push(job);
     }

@@ -31,6 +31,7 @@ import {
   persistDiscovery,
   recordJobCompletion,
   reconcile,
+  runBounded,
   type DiscoveryDeps,
   type ReconciledState,
 } from "./discovery.ts";
@@ -154,40 +155,51 @@ export async function runDiscovery(deps: DiscoveryRunDeps): Promise<DiscoveryRun
   const snapshots: SourceSnapshot[] = [];
   const queued: SnapshotBoundJob[] = [];
 
-  for (const [ref, record] of outstandingByRef) {
-    if (!record) continue; // job for a record FM no longer returns; removal path handles it
+  // Index outstanding jobs once rather than re-scanning the list per record:
+  // at real scale that inner filter was O(records x jobs).
+  const outstandingFieldsByRef = new Map<string, Set<string>>();
+  for (const job of reconciled.jobs) {
+    const ref = entityRef(job.entityKind, job.entityId);
+    let set = outstandingFieldsByRef.get(ref);
+    if (!set) {
+      set = new Set();
+      outstandingFieldsByRef.set(ref, set);
+    }
+    set.add(`${job.field}:${job.target}`);
+  }
+
+  // Bounded-parallel: snapshot writes are independent and write-once.
+  await runBounded([...outstandingByRef.entries()], async ([ref, record]) => {
+    if (!record) return; // job for a record FM no longer returns; removal path handles it
     const protect = loaded.protectedNames[ref] ?? [];
     const snapshot = await writeSnapshot(deps.snapshots, record, { promptVersion, protect });
     snapshots.push(snapshot);
 
     // Only the jobs that are actually outstanding. Re-sending completed jobs
     // would be free (the consumer reads the cache first) but pointless traffic.
-    const outstandingIds = new Set(
-      reconciled.jobs
-        .filter((j) => entityRef(j.entityKind, j.entityId) === ref)
-        .map((j) => `${j.field}:${j.target}`),
-    );
+    const outstandingIds = outstandingFieldsByRef.get(ref) ?? new Set<string>();
     const jobs = jobsForSnapshot(snapshot).filter((j) =>
       outstandingIds.has(`${j.field}:${j.target}`),
     );
-    if (!jobs.length) continue;
-    queued.push(...jobs);
-  }
+    if (jobs.length) queued.push(...jobs);
+  });
 
   // Also snapshot records that are complete, so release assembly has their
   // frozen text without re-reading FM.
-  for (const record of loaded.records) {
-    if (!record.active) continue;
+  const readyToSnapshot = loaded.records.filter((record) => {
+    if (!record.active) return false;
     const ref = entityRef(record.kind, record.id);
-    if (outstandingByRef.has(ref)) continue;
-    if (!reconciled.readyIds.has(ref)) continue;
+    return !outstandingByRef.has(ref) && reconciled.readyIds.has(ref);
+  });
+  await runBounded(readyToSnapshot, async (record) => {
+    const ref = entityRef(record.kind, record.id);
     snapshots.push(
       await writeSnapshot(deps.snapshots, record, {
         promptVersion,
         protect: loaded.protectedNames[ref] ?? [],
       }),
     );
-  }
+  });
 
   if (deps.queue && queued.length) {
     if (deps.queue.sendBatch) {

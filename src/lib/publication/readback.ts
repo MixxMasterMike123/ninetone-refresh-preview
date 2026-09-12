@@ -39,7 +39,7 @@ import {
   type Lang,
   type SourceRecord,
 } from "./contracts.ts";
-import { entityRef } from "./discovery.ts";
+import { entityRef, runBounded } from "./discovery.ts";
 import { type SourceSnapshot } from "./snapshot.ts";
 
 /** Read-only view of the translation cache. */
@@ -104,18 +104,28 @@ export async function readBackEntity(
   const text: Record<Lang, Record<string, string>> = { sv: {}, en: {} };
   const missing: MissingTranslation[] = [];
 
+  // BOUNDED-PARALLEL, not sequential. Measured at real scale: 557 ready
+  // entities are 3,342 (field, locale) reads, and issued one at a time against
+  // remote KV (~5ms) that is ~21.6s — on its own more than a scheduled
+  // invocation gets. In production this showed up as a release that assembled
+  // while only 10 entities were ready and then never assembled again once all
+  // 557 became ready, because the tick died in this loop. The reads are
+  // independent, so batching changes nothing but wall time.
+  const pairs: { field: string; locale: Lang; source: string }[] = [];
   for (const field of expectedFields(snapshot)) {
     const source = snapshot.fields[field].trim();
-    for (const locale of SUPPORTED_LOCALES) {
-      const key = await deps.keyFor(source, locale, tier);
-      const value = await deps.cache.get(key);
-      if (value === null || value.trim() === "") {
-        missing.push({ ref, locale, field, key });
-        continue;
-      }
-      text[locale][field] = value;
-    }
+    for (const locale of SUPPORTED_LOCALES) pairs.push({ field, locale, source });
   }
+
+  await runBounded(pairs, async ({ field, locale, source }) => {
+    const key = await deps.keyFor(source, locale, tier);
+    const value = await deps.cache.get(key);
+    if (value === null || value.trim() === "") {
+      missing.push({ ref, locale, field, key });
+      return;
+    }
+    text[locale][field] = value;
+  });
 
   return { ref, text, missing, complete: missing.length === 0 };
 }
@@ -149,7 +159,9 @@ export async function readBackAll(
   const incomplete: string[] = [];
   const missing: MissingTranslation[] = [];
 
-  for (const snapshot of snapshots) {
+  // Entities are independent of one another too. runBounded caps total
+  // in-flight reads via readBackEntity's own bound, so this stays bounded.
+  await runBounded(snapshots, async (snapshot) => {
     const entity = await readBackEntity(deps, snapshot, tier);
     translations[entity.ref] = entity.text as Record<Lang, Record<string, string>>;
     if (entity.complete) ready.push(entity.ref);
@@ -157,7 +169,7 @@ export async function readBackAll(
       incomplete.push(entity.ref);
       missing.push(...entity.missing);
     }
-  }
+  }, 8);
 
   return { translations, ready, incomplete, missing };
 }
