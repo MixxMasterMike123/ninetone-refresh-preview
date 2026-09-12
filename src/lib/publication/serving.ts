@@ -72,16 +72,65 @@ export type LookupResult = LookupHit | LookupMiss | LookupUnavailable;
 export interface RequestGeneration {
   readonly generation: string | null;
   readonly release: Release | null;
+  /**
+   * Newer approved generations this request may consult for an entity its own
+   * generation lacks. Newest first.
+   *
+   * This closes the cross-request navigation hole the review reproduced: edge
+   * A serves a new generation containing /artists/new while edge B still
+   * serves the previous one, so a visitor following a link from A gets a 404
+   * at B. Per-request pinning guarantees consistency WITHIN a render and
+   * nothing across renders — my earlier claim that mixed generations were
+   * "safe by construction" was too broad.
+   *
+   * Only APPROVED generations are consultable, so this cannot resurrect a
+   * withdrawn record: a removal produces a new approved generation without it,
+   * and older generations are never consulted for entities the current one
+   * deliberately dropped (see `lookupWithFallback`).
+   */
+  readonly newerApproved: readonly string[];
 }
 
-export async function pinGeneration(deps: ReleaseDeps): Promise<RequestGeneration> {
+export async function pinGeneration(
+  deps: ReleaseDeps,
+  options: { readonly newerApproved?: readonly string[] } = {},
+): Promise<RequestGeneration> {
   const generation = await resolveGeneration(deps);
-  if (!generation) return { generation: null, release: null };
+  if (!generation) return { generation: null, release: null, newerApproved: [] };
   const release = await readRelease(deps, generation);
   // A generation that resolves but does not read back is treated as absent
   // rather than as an empty site.
-  if (!release) return { generation: null, release: null };
-  return { generation, release };
+  if (!release) return { generation: null, release: null, newerApproved: [] };
+  return { generation, release, newerApproved: options.newerApproved ?? [] };
+}
+
+/**
+ * Resolve an entity, consulting NEWER approved generations when this request's
+ * generation does not have it.
+ *
+ * Direction matters and is the safety property: only generations approved
+ * AFTER this one are consulted. Looking backwards would resurrect withdrawn
+ * records, since an older generation still contains what a removal dropped.
+ * Looking forward can only surface something already approved for publication.
+ */
+export async function lookupWithFallback(
+  deps: ReleaseDeps,
+  pinned: RequestGeneration,
+  entityId: string,
+  locale: Lang,
+): Promise<LookupResult> {
+  const direct = lookup(pinned, entityId, locale);
+  if (direct.status !== "miss") return direct;
+
+  for (const generation of pinned.newerApproved) {
+    if (generation === pinned.generation) continue;
+    const release = await readRelease(deps, generation);
+    const entity = release?.entities.find((e) => e.id === entityId);
+    if (entity) {
+      return { status: "hit", generation, entity, text: entity.text[locale] ?? {} };
+    }
+  }
+  return direct;
 }
 
 export function lookup(pinned: RequestGeneration, entityId: string, locale: Lang): LookupResult {

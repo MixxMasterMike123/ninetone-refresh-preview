@@ -86,6 +86,8 @@ test("sourceHashInput is stable across key order but changes with content", () =
     fields: { b: "2", a: "1" },
     references: ["news:y", "news:x"],
   };
+  // References no longer affect the CONTENT hash (they are membership), so
+  // this also confirms reordering them is inert here.
   assert.equal(sourceHashInput(base, "v1"), sourceHashInput(reordered, "v1"));
   assert.notEqual(sourceHashInput(base, "v1"), sourceHashInput({ ...base, fields: { a: "1", b: "3" } }, "v1"));
 });
@@ -97,9 +99,14 @@ test("sourceHashInput changes when the prompt version changes", () => {
   assert.notEqual(sourceHashInput(record, "v1"), sourceHashInput(record, "v2"));
 });
 
-test("sourceHashInput distinguishes an activation change with identical prose", () => {
+test("sourceHashInput IGNORES an activation change with identical prose", () => {
+  // Corrected requirement: the translation cache is keyed on text and target
+  // language, not on whether a record is Active or Previous. Folding `active`
+  // into the content hash meant Active -> Previous -> Active retranslated text
+  // that never changed — paid work for nothing. Membership is tracked
+  // separately by membershipFingerprint().
   const record = { kind: "artist", id: "anjo", fields: { a: "1" }, references: [], active: true };
-  assert.notEqual(sourceHashInput(record, "v1"), sourceHashInput({ ...record, active: false }, "v1"));
+  assert.equal(sourceHashInput(record, "v1"), sourceHashInput({ ...record, active: false }, "v1"));
 });
 
 // ---------------------------------------------------------------------------

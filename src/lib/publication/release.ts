@@ -42,6 +42,7 @@ import {
   validateRelease,
 } from "./contracts.ts";
 import { entityRef } from "./discovery.ts";
+import { digestOf } from "./coordinator.ts";
 
 export const RELEASE_PREFIX = "rel:v1:";
 
@@ -125,12 +126,27 @@ export function buildRelease(args: {
  * and repaired by the next promotion attempt. The reverse order would publish a
  * marker for a bundle that may not be readable.
  */
-export async function storeRelease(deps: ReleaseDeps, release: Release): Promise<void> {
-  await deps.store.put(releaseKeys.bundle(release.generation), JSON.stringify(release));
+export async function storeRelease(deps: ReleaseDeps, release: Release): Promise<string> {
+  const serialized = JSON.stringify(release);
+
+  // Generation keys are immutable. The review found storeRelease() happily
+  // overwriting one, which is how an invalid bundle could sit at the same id a
+  // valid object was promoted under. Refuse to rewrite a generation whose
+  // stored bytes differ.
+  const existing = await deps.store.get(releaseKeys.bundle(release.generation));
+  if (existing !== null && existing !== serialized) {
+    throw new Error(
+      `generation ${release.generation} already stored with different content; generations are immutable`,
+    );
+  }
+
+  await deps.store.put(releaseKeys.bundle(release.generation), serialized);
+  const digest = await digestOf(serialized);
   await deps.store.put(
     releaseKeys.ready(release.generation),
-    JSON.stringify({ at: (deps.now ?? Date.now)(), generation: release.generation }),
+    JSON.stringify({ at: (deps.now ?? Date.now)(), generation: release.generation, digest }),
   );
+  return digest;
 }
 
 /**
@@ -150,7 +166,16 @@ export async function verifyGenerationReadable(
   if (!bundle) return false;
   try {
     const parsed = JSON.parse(bundle) as Release;
-    return parsed.generation === generation && Array.isArray(parsed.entities);
+    if (parsed.generation !== generation || !Array.isArray(parsed.entities)) return false;
+
+    // The marker records the digest of the bytes it was written for. If the
+    // stored bundle no longer matches, the marker is describing something that
+    // is no longer there — treat the generation as not readable rather than
+    // trusting a marker over the artifact.
+    const meta = JSON.parse(marker) as { digest?: string };
+    if (meta.digest && meta.digest !== (await digestOf(bundle))) return false;
+
+    return true;
   } catch {
     return false;
   }
@@ -200,7 +225,19 @@ export async function promoteRelease(
   release: Release,
   newestHashes: Readonly<Record<string, string>>,
 ): Promise<PromotionResult> {
-  const issues = validateRelease(release);
+  // VALIDATE THE STORED ARTIFACT, NOT THE ARGUMENT.
+  //
+  // The review reproduced this: store an invalid bundle, then call promotion
+  // with a valid object carrying the same generation id -> promoted:true, and
+  // visitors would be served the invalid stored bundle. Validation must bind
+  // to the bytes that will actually be read, so the argument is used only to
+  // name the generation.
+  const stored = await readRelease(deps, release.generation);
+  if (!stored) {
+    return { promoted: false, generation: release.generation, reason: "unreadable" };
+  }
+
+  const issues = validateRelease(stored);
   if (issues.length > 0) {
     return {
       promoted: false,
@@ -210,7 +247,7 @@ export async function promoteRelease(
     };
   }
 
-  const stale = rejectStalePromotion(release, newestHashes);
+  const stale = rejectStalePromotion(stored, newestHashes);
   if (stale.length > 0) {
     return { promoted: false, generation: release.generation, reason: "stale", issues: stale };
   }

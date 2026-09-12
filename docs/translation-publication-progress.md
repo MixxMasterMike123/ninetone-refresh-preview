@@ -275,3 +275,32 @@ deleted tomorrow, serving would be byte-identical.
 - No bootstrap generation exists. That needs authorized translation spend.
 
 Tests: 443 total (9 new), all passing. Both builds green. Nothing deployed.
+
+### Second review corrections (docs/publication-implementation-review-2026-09-12.md)
+
+Four counterexamples, all reproduced before fixing, all now regression tests in
+`test/publication-coordinator.test.mjs`. Plus one requirement added mid-session
+about status changes. **5/5 verified.**
+
+| Finding | Fix |
+|---|---|
+| P1 stale scan regresses authoritative state | `src/lib/publication/coordinator.ts`. Every application carries a REVISION; anything computed from an older one is refused. A lock excludes but does not order — scan v1 could take the lock after v2 released it and still write stale data. |
+| P1 cross-request navigation can 404 | `lookupWithFallback()` consults NEWER approved generations when the pinned one lacks an entity. Forward-only is the safety property: looking backwards would resurrect withdrawn records. |
+| P2 promotion validated the argument, not the artifact | `promoteRelease()` now reads the STORED bundle and validates that; `storeRelease()` refuses to overwrite a generation with different bytes and returns a digest; `verifyGenerationReadable()` checks the digest. |
+| P1 removal lost on replay | `pendingRemovals` is a durable outbox that survives until `commitRemovals()`, so a crash between discovery and publication is recoverable. |
+| **Status change must not retranslate** | `sourceHashInput()` no longer includes `active` or `references`; `membershipFingerprint()` tracks those separately. |
+
+**My claim that mixed generations were "safe by construction" was too broad.**
+It holds within a render and not across navigation, which is exactly what the
+review demonstrated. Corrected in the code comments and here.
+
+**The status-change bug was real and mine.** Folding `active` into the content
+hash meant Active → Previous → Active produced a new hash both times and
+re-translated unchanged text — paid work for nothing. The translation cache is
+keyed on `sha256(text)` per target and tier, so identical text is the same
+entry regardless of section. Now: same text reuses, only changed or missing
+text translates, moving back reuses again. A release is still rebuilt on a
+membership change, because listings and route inventories differ — that is
+bundle assembly, not translation.
+
+Tests: 461 total, all passing. Both builds green. Nothing deployed.
