@@ -4,9 +4,9 @@
  *
  *   node scripts/kv-copy-namespace.mjs <srcAccount> <srcNamespace> <dstAccount> <dstNamespace> [--dry-run]
  *
- * Uses the wrangler OAuth token from ~/.wrangler/config/default.toml, which
- * must be authorised for BOTH accounts (pick every account on the consent
- * screen when running `wrangler login`). Reads with the bulk-get API (100
+ * Uses CLOUDFLARE_API_TOKEN if set, else the wrangler OAuth token from
+ * ~/.wrangler/config/default.toml — which must be authorised for BOTH
+ * accounts (tick every account on the consent screen in `wrangler login`). Reads with the bulk-get API (100
  * keys per call), writes with the bulk-put API (chunks of 2,000). Values are
  * copied verbatim; expiration is carried over when present. Idempotent —
  * re-running overwrites with identical bytes.
@@ -25,9 +25,14 @@ if (!src || !srcNs || !dst || !dstNs) {
 }
 const dryRun = flags.includes("--dry-run");
 
-const cfg = readFileSync(`${homedir()}/.wrangler/config/default.toml`, "utf8");
-const token = cfg.match(/oauth_token\s*=\s*"([^"]+)"/)?.[1];
-if (!token) throw new Error("no wrangler OAuth token found — run `npx wrangler login`");
+// CLOUDFLARE_API_TOKEN (an API token created in the dashboard with "Workers
+// KV Storage: Read" on the source account and "…: Edit" on the destination)
+// takes precedence over the wrangler OAuth token, for the case where the
+// OAuth consent screen was not authorised for every account involved.
+const token =
+  process.env.CLOUDFLARE_API_TOKEN ||
+  readFileSync(`${homedir()}/.wrangler/config/default.toml`, "utf8").match(/oauth_token\s*=\s*"([^"]+)"/)?.[1];
+if (!token) throw new Error("no token: set CLOUDFLARE_API_TOKEN or run `npx wrangler login`");
 const API = "https://api.cloudflare.com/client/v4";
 const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
