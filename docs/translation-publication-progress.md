@@ -44,8 +44,8 @@ are what appear in the dashboard.
 |---|---|
 | 0. Baseline committed and pushed | **Done** — `85546d4`, pushed to `origin/i18n-phase-2` |
 | 1. Inventory and contracts | **Done** — `src/lib/publication/contracts.ts`, 21 tests |
-| 2. Background preparation | In progress |
-| 3. Safe publication | Not started |
+| 2. Background preparation | **Done** (logic) — `src/lib/publication/discovery.ts`, 16 tests |
+| 3. Safe publication | In progress |
 | 4. Serving and lifecycle | Not started |
 | 5. Validation and rollout | Not started |
 
@@ -106,8 +106,45 @@ Decisions worth recording:
 
 Tests: 387 total (21 new), all passing.
 
-### Checkpoint 2 — background preparation (in progress)
+### Checkpoint 2 — background preparation, logic (done)
 
-Next: discovery that reads the existing FM helpers, computes source hashes,
-and persists candidate/job state — still with no Cloudflare resources
-declared, so it can be tested locally before any infrastructure exists.
+`src/lib/publication/discovery.ts` + 16 tests. Everything external is injected
+(`loadRecords`, `store`, `hash`), so scan/dedupe/supersede/removal logic runs
+locally with no network, no bindings, and no translation spend. The Worker
+layer will be a thin adapter over this.
+
+Covered by tests, each matching an acceptance requirement in the handoff:
+
+- unchanged hash produces **no work at all**; an edit is rediscovered
+- an inactive record is a removal and generates **zero** translation jobs, so
+  a withdrawal is never held behind prose work
+- job completion is **idempotent**, which is what makes at-least-once queue
+  delivery safe
+- a **late completion from an older edit is refused**, not merged, and its
+  candidate is marked superseded
+- a completion for an unknown candidate is refused rather than creating one
+- `selectPublishable` withholds a record whose reference is not ready (the
+  artist + two posts scenario), includes the group once all are ready, does
+  **not** let one failed record block unrelated ready records, and iterates to
+  a fixed point when dropping a record strands another
+
+**Honest limitation recorded in the code:** the scan lock is advisory, not a
+mutex — KV has no atomic compare-and-set, so two scanners starting in the same
+instant can both proceed. That is tolerable only because discovery is
+idempotent (same hashes produce the same candidates and job ids), so a double
+scan wastes work rather than corrupting state. Promotion is the operation that
+genuinely cannot tolerate a race, which is why the design puts it behind a
+Durable Object.
+
+**Also recorded honestly:** discovery cannot detect that several separate FM
+saves form one finished editorial transaction. Nothing in the Data API marks a
+set of saves as complete. Grouping works only through explicit references on a
+record; saves made after a candidate publishes are a subsequent update.
+
+Tests: 403 total (16 new), all passing.
+
+### Checkpoint 3 — safe publication (in progress)
+
+Next: immutable release bundles, serialized promotion with a known-good
+fallback, and the KV-eventual-consistency handling (a pointer alone is not
+readiness).

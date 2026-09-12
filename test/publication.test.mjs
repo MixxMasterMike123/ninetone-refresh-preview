@@ -295,3 +295,228 @@ test("duplicate entity ids are rejected", () => {
     validateRelease(releaseWith([completeArtist, completeArtist])).some((i) => i.type === "duplicate-id"),
   );
 });
+
+// ---------------------------------------------------------------------------
+// Discovery — checkpoint 2
+// ---------------------------------------------------------------------------
+
+import {
+  acquireScanLock,
+  releaseScanLock,
+  discover,
+  persistDiscovery,
+  recordJobCompletion,
+  pendingReferences,
+  selectPublishable,
+  stateKeys,
+} from "../src/lib/publication/discovery.ts";
+
+/** In-memory KvLike. Honours expirationTtl: 1 as "delete" the way the code uses it. */
+function memStore() {
+  const map = new Map();
+  return {
+    map,
+    async get(key) {
+      return map.has(key) ? map.get(key) : null;
+    },
+    async put(key, value, opts) {
+      if (opts?.expirationTtl === 1 && value === "") map.delete(key);
+      else map.set(key, value);
+    },
+  };
+}
+
+function deps(records, store = memStore()) {
+  return {
+    store,
+    hash: async (input) => `h(${input.length})`,
+    loadRecords: async () => records,
+    now: () => 1757700000000,
+  };
+}
+
+function artist(id, hash, extra = {}) {
+  return {
+    kind: "artist",
+    id,
+    hash,
+    fields: { artistPresentationString: `bio of ${id}` },
+    references: [],
+    active: true,
+    ...extra,
+  };
+}
+
+test("discovery: a new record is changed and produces jobs for both locales", async () => {
+  const d = deps([artist("anjo", "h1")]);
+  const result = await discover(d);
+  assert.equal(result.changed.length, 1);
+  assert.equal(result.unchanged, 0);
+  assert.equal(result.jobs.length, 2, "one field x two locales");
+});
+
+test("discovery: an unchanged hash produces no work at all", async () => {
+  const store = memStore();
+  const d = deps([artist("anjo", "h1")], store);
+  await persistDiscovery(d, await discover(d), "v1");
+
+  const second = await discover(deps([artist("anjo", "h1")], store));
+  assert.equal(second.changed.length, 0);
+  assert.equal(second.unchanged, 1);
+  assert.deepEqual(second.jobs, []);
+});
+
+test("discovery: an edited record is rediscovered and re-jobbed", async () => {
+  const store = memStore();
+  const d = deps([artist("anjo", "h1")], store);
+  await persistDiscovery(d, await discover(d), "v1");
+
+  const edited = await discover(deps([artist("anjo", "h2")], store));
+  assert.equal(edited.changed.length, 1);
+  assert.equal(edited.jobs.length, 2);
+});
+
+test("discovery: an inactive record is a removal and never generates translation work", async () => {
+  // A withdrawal must not queue behind prose work.
+  const d = deps([artist("gone", "h1", { active: false })]);
+  const result = await discover(d);
+  assert.equal(result.removed.length, 1);
+  assert.equal(result.changed.length, 0);
+  assert.deepEqual(result.jobs, []);
+});
+
+test("discovery: persisting a removal records it for the priority path", async () => {
+  const store = memStore();
+  const d = deps([artist("gone", "h1", { active: false })], store);
+  await persistDiscovery(d, await discover(d), "v1");
+  assert.ok(await store.get(stateKeys.removal("artist", "gone")));
+});
+
+test("scan lock: a second scanner cannot take a held lock", async () => {
+  const d = deps([]);
+  assert.equal(await acquireScanLock(d, "scanner-a"), true);
+  assert.equal(await acquireScanLock(d, "scanner-b"), false);
+});
+
+test("scan lock: only the holder can release it", async () => {
+  const d = deps([]);
+  await acquireScanLock(d, "scanner-a");
+  await releaseScanLock(d, "scanner-b");
+  assert.equal(await acquireScanLock(d, "scanner-c"), false, "b must not free a's lock");
+  await releaseScanLock(d, "scanner-a");
+  assert.equal(await acquireScanLock(d, "scanner-c"), true);
+});
+
+test("job completion is idempotent — at-least-once delivery is safe", async () => {
+  const store = memStore();
+  const record = artist("anjo", "h1");
+  const d = deps([record], store);
+  await persistDiscovery(d, await discover(d), "v1");
+
+  const job = {
+    entityKind: "artist",
+    entityId: "anjo",
+    sourceHash: "h1",
+    field: "artistPresentationString",
+    target: "en",
+    kind: "markdown",
+    tier: "fast",
+    protect: [],
+  };
+  const first = await recordJobCompletion(d, job, "v1");
+  const second = await recordJobCompletion(d, job, "v1");
+  assert.deepEqual(first.completed, second.completed, "redelivery changes nothing");
+  assert.equal(Object.values(second.completed).filter(Boolean).length, 1);
+});
+
+test("a late completion from an older edit is refused, not merged", async () => {
+  // The corruption case: an older queue message finishes after a newer edit
+  // was discovered. It must never overwrite the newer state.
+  const store = memStore();
+  const d1 = deps([artist("anjo", "h1")], store);
+  await persistDiscovery(d1, await discover(d1), "v1");
+
+  const d2 = deps([artist("anjo", "h2")], store);
+  await persistDiscovery(d2, await discover(d2), "v1");
+
+  const staleJob = {
+    entityKind: "artist",
+    entityId: "anjo",
+    sourceHash: "h1",
+    field: "artistPresentationString",
+    target: "en",
+    kind: "markdown",
+    tier: "fast",
+    protect: [],
+  };
+  assert.equal(await recordJobCompletion(d2, staleJob, "v1"), null);
+
+  const stored = JSON.parse(await store.get(stateKeys.candidate("artist", "anjo", "h1")));
+  assert.equal(stored.state, "superseded");
+});
+
+test("a completion for an unknown candidate is refused rather than creating one", async () => {
+  const d = deps([]);
+  const job = {
+    entityKind: "artist",
+    entityId: "ghost",
+    sourceHash: "h9",
+    field: "artistPresentationString",
+    target: "en",
+    kind: "markdown",
+    tier: "fast",
+    protect: [],
+  };
+  assert.equal(await recordJobCompletion(d, job, "v1"), null);
+});
+
+test("pendingReferences reports references that are not yet ready", () => {
+  const record = artist("anjo", "h1", { references: ["news:a", "news:b"] });
+  assert.deepEqual(pendingReferences(record, new Set(["news:a"])), ["news:b"]);
+  assert.deepEqual(pendingReferences(record, new Set(["news:a", "news:b"])), []);
+});
+
+test("selectPublishable withholds a record whose reference is not ready", () => {
+  // The acceptance scenario: an artist plus two related posts publish together
+  // or not at all, so a listing link can never reach an unavailable detail.
+  const records = [
+    artist("anjo", "h1", { references: ["news:a", "news:b"] }),
+    { ...artist("news:a", "h2"), kind: "newsPost" },
+  ];
+  const ready = new Set(["anjo", "news:a"]);
+  assert.deepEqual(selectPublishable(records, ready).map((r) => r.id), ["news:a"]);
+});
+
+test("selectPublishable includes the group once every reference is ready", () => {
+  const records = [
+    artist("anjo", "h1", { references: ["news:a", "news:b"] }),
+    { ...artist("news:a", "h2"), kind: "newsPost" },
+    { ...artist("news:b", "h3"), kind: "newsPost" },
+  ];
+  const ready = new Set(["anjo", "news:a", "news:b"]);
+  assert.deepEqual(selectPublishable(records, ready).map((r) => r.id).sort(), ["anjo", "news:a", "news:b"]);
+});
+
+test("selectPublishable does not let one failed record block unrelated ready records", () => {
+  // Design: compose from validated new versions, omitting pending new records,
+  // rather than holding the whole site for one failure.
+  const records = [artist("anjo", "h1"), artist("stuck", "h2"), artist("other", "h3")];
+  const ready = new Set(["anjo", "other"]);
+  assert.deepEqual(selectPublishable(records, ready).map((r) => r.id).sort(), ["anjo", "other"]);
+});
+
+test("selectPublishable reaches a fixed point when dropping a record strands another", () => {
+  // Readiness is transitive: dropping "c" must also drop "b", which referenced
+  // it, and then "a", which referenced "b".
+  const records = [
+    artist("a", "h1", { references: ["b"] }),
+    artist("b", "h2", { references: ["c"] }),
+    artist("c", "h3"),
+  ];
+  assert.deepEqual(selectPublishable(records, new Set(["a", "b"])).map((r) => r.id), []);
+});
+
+test("selectPublishable omits inactive records even when marked ready", () => {
+  const records = [artist("gone", "h1", { active: false })];
+  assert.deepEqual(selectPublishable(records, new Set(["gone"])), []);
+});
