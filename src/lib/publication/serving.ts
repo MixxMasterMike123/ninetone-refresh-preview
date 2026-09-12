@@ -207,3 +207,65 @@ export function compareShadow(
 
   return { generation: pinned.generation, onlyInRelease, onlyInLive, differing };
 }
+
+// ---------------------------------------------------------------------------
+// Deploy gating (handoff: "Deployments must prepare and validate new UI
+// translations before activating that release")
+// ---------------------------------------------------------------------------
+
+export interface ChromeGateResult {
+  readonly ready: boolean;
+  /** Chrome strings with no translation in one or both locales. */
+  readonly missing: readonly { readonly source: string; readonly locale: Lang }[];
+}
+
+/**
+ * Is the chrome for THIS build fully translated?
+ *
+ * A deploy that introduces new UI copy must not activate its release until
+ * that copy exists in both locales. Without this gate the new strings would
+ * fall back to source at render time — which is precisely the visitor-facing
+ * untranslated text the whole design removes.
+ *
+ * Deliberately takes the string list as an argument rather than discovering it
+ * here: the authoritative list comes from instrumenting a build
+ * (I18N_CAPTURE_CHROME_STRINGS), because source parsing misses strings passed
+ * from mapped literals — the header nav, homepage portals and metrics panel
+ * were all invisible to the parser and render on every page.
+ */
+export function chromeGate(
+  chromeStrings: readonly string[],
+  translated: Readonly<Record<string, Readonly<Record<Lang, string | undefined>>>>,
+): ChromeGateResult {
+  const missing: { source: string; locale: Lang }[] = [];
+  for (const source of chromeStrings) {
+    for (const locale of ["sv", "en"] as const) {
+      const value = translated[source]?.[locale];
+      if (value === undefined || value.trim() === "") missing.push({ source, locale });
+    }
+  }
+  return { ready: missing.length === 0, missing };
+}
+
+/**
+ * Should this release be activated for serving?
+ *
+ * Combines the content gate (the release validates) with the chrome gate and
+ * the rollout mode. Returns a reason rather than a bare boolean so operational
+ * status can say WHY a deploy is not serving yet — "preparing" and "broken"
+ * need very different responses.
+ */
+export function activationDecision(args: {
+  readonly mode: PublicationMode;
+  readonly releaseValid: boolean;
+  readonly chrome: ChromeGateResult;
+  readonly generation: string | null;
+}): { readonly activate: boolean; readonly reason: string } {
+  if (args.mode !== "serving") return { activate: false, reason: `mode:${args.mode}` };
+  if (!args.generation) return { activate: false, reason: "no-generation" };
+  if (!args.releaseValid) return { activate: false, reason: "release-invalid" };
+  if (!args.chrome.ready) {
+    return { activate: false, reason: `chrome-missing:${args.chrome.missing.length}` };
+  }
+  return { activate: true, reason: "ready" };
+}

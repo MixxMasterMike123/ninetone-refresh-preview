@@ -46,7 +46,7 @@ are what appear in the dashboard.
 | 1. Inventory and contracts | **Done, review-corrected** — 6 counterexamples fixed |
 | 2. Background preparation | **Done, review-corrected** — immutable completions |
 | 3. Safe publication | **Done** (logic) — `release.ts`, 15 tests |
-| 4. Serving and lifecycle | **Partial** — resolver + entrypoint; rendering not switched |
+| 4. Serving and lifecycle | **Logic done** — consumer, gating, integration tests; rendering not switched |
 | 5. Validation and rollout | Not started |
 
 ## Log
@@ -304,3 +304,56 @@ membership change, because listings and route inventories differ — that is
 bundle assembly, not translation.
 
 Tests: 461 total, all passing. Both builds green. Nothing deployed.
+
+### Queue consumer, integration tests, gating, dry run
+
+`src/lib/publication/consumer.ts` + `test/publication-integration.test.mjs`
+(17 tests). Every test uses a **counting fake provider**, so "zero model calls"
+is asserted rather than assumed. No network, no bindings, no spend.
+
+**Cache before spend is the consumer's central rule.** The translation cache is
+keyed on `sha256(text)` per target and tier — not on record identity or status
+— so `processJob()` resolves the key and looks in KV before calling anything,
+and reports `reused` so the saving is observable.
+
+Covered:
+
+| Requirement | Result |
+|---|---|
+| **Active → Previous → Active, zero model calls** | 2 calls on first publish, **0** across both later transitions |
+| Edit after a status change | Only the changed field, both locales; unchanged tagline reused |
+| >25 strings without visitor traffic | 60 jobs complete; the 25-cap is a *render* budget, background work is bounded by concurrency |
+| Retry and dead letter | Transient failures retried with backoff; exhausted jobs dead-lettered and never cached |
+| Output-contract rejection | Fails without caching and without pointless retries |
+| Duplicate delivery | Second delivery costs nothing |
+| Two records, identical text | Paid once, not twice |
+| **Public rendering makes zero model calls** | Asserted against the counted provider, including the unavailable path |
+| Deploy gating | A build with new UI copy cannot activate until both locales exist; blank counts as missing |
+
+### Bootstrap dry run — measured
+
+Run against live FM and the real translation cache. **Nothing was translated or
+written.**
+
+```
+11,883 keys already present
+11,819 already cached (skipped — idempotent)
+     3 need translation
+Estimated cost: $0.0048
+```
+
+**This corrects my earlier ~$10 guess by three orders of magnitude**, and the
+review was right to refuse it as unverified. The corpus is already warm from
+the earlier Phase 2 runs, and because the cache is keyed on text rather than on
+record identity, a publication bootstrap reuses all of it.
+
+The 3 remaining are known: the two Anthropic HTTP 503 failures from the
+original warm run, plus one of the wrong-language keys deleted during the
+language audit. All three heal on the next live run or request.
+
+**Practical consequence:** the bootstrap is effectively free. The spend
+conversation I flagged as needing a decision does not arise at this corpus
+size. What still needs authorization is deployment, not money.
+
+Tests: 478 total, all passing. Both builds green. Nothing deployed, no
+translation calls made.
