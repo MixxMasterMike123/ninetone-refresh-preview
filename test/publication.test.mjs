@@ -201,11 +201,13 @@ test("a candidate is superseded when FM changed during translation", () => {
 // ---------------------------------------------------------------------------
 
 function releaseWith(entities) {
+  // Routes are collected from the entities so a fixture cannot accidentally
+  // fail the new missing-route check while testing something else.
   return {
     generation: "g1",
     createdAt: "2026-09-12T00:00:00Z",
     entities,
-    routes: [],
+    routes: entities.flatMap((e) => e.routes ?? []),
     buildId: "b1",
     promptVersion: "v1",
   };
@@ -216,6 +218,10 @@ const completeArtist = {
   id: "anjo",
   sourceHash: "h1",
   references: [],
+  // Required fields come from the candidate manifest now, not inferred from
+  // whichever keys happen to be in the output (review P1).
+  requiredFields: ["Artist Presentation Title", "artistPresentationString"],
+  routes: ["/records/artists/anjo", "/en/records/artists/anjo"],
   text: {
     sv: { "Artist Presentation Title": "Svensk titel", artistPresentationString: "Svensk bio" },
     en: { "Artist Presentation Title": "English title", artistPresentationString: "English bio" },
@@ -261,10 +267,24 @@ test("an empty translated value blocks promotion", () => {
   assert.ok(validateRelease(releaseWith([broken])).some((i) => i.type === "empty-value"));
 });
 
-test("a field absent from BOTH locales is not required", () => {
+test("a field the source never had is not required", () => {
   // An artist with no short blurb must not be blocked for lacking its
-  // translation — only fields the source actually had are required.
+  // translation — the manifest lists only the fields the source actually had.
   assert.deepEqual(validateRelease(releaseWith([completeArtist])), []);
+});
+
+test("a required field absent from BOTH locales is now REPORTED, not skipped", () => {
+  // The review's P1: inferring requirements from output meant a field that
+  // vanished everywhere validated cleanly.
+  const stripped = {
+    ...completeArtist,
+    text: { sv: { "Artist Presentation Title": "T" }, en: { "Artist Presentation Title": "T" } },
+  };
+  assert.ok(
+    validateRelease(releaseWith([stripped])).some(
+      (i) => i.type === "missing-field" && i.field === "artistPresentationString",
+    ),
+  );
 });
 
 test("a link to an entity outside the release blocks promotion", () => {
@@ -281,6 +301,8 @@ test("a reference satisfied inside the same release validates", () => {
     id: "news:launch",
     sourceHash: "h2",
     references: [],
+    requiredFields: ["Title", "shortMessage", "MessageString"],
+    routes: ["/news/launch", "/en/news/launch"],
     text: {
       sv: { Title: "Svensk rubrik", shortMessage: "Svensk ingress", MessageString: "Svensk text" },
       en: { Title: "English headline", shortMessage: "English standfirst", MessageString: "English body" },
@@ -307,6 +329,7 @@ import {
   persistDiscovery,
   recordJobCompletion,
   pendingReferences,
+  reconcile,
   selectPublishable,
   stateKeys,
 } from "../src/lib/publication/discovery.ts";
@@ -423,10 +446,12 @@ test("job completion is idempotent — at-least-once delivery is safe", async ()
     tier: "fast",
     protect: [],
   };
-  const first = await recordJobCompletion(d, job, "v1");
-  const second = await recordJobCompletion(d, job, "v1");
-  assert.deepEqual(first.completed, second.completed, "redelivery changes nothing");
-  assert.equal(Object.values(second.completed).filter(Boolean).length, 1);
+  assert.equal(await recordJobCompletion(d, job, "v1"), true);
+  assert.equal(await recordJobCompletion(d, job, "v1"), true, "redelivery is a no-op, not an error");
+
+  const state = await reconcile(d, "v1");
+  const candidate = state.candidates.find((c) => c.entityId === "anjo");
+  assert.equal(Object.values(candidate.completed).filter(Boolean).length, 1);
 });
 
 test("a late completion from an older edit is refused, not merged", async () => {
@@ -449,10 +474,11 @@ test("a late completion from an older edit is refused, not merged", async () => 
     tier: "fast",
     protect: [],
   };
-  assert.equal(await recordJobCompletion(d2, staleJob, "v1"), null);
+  assert.equal(await recordJobCompletion(d2, staleJob, "v1"), false, "stale completion is refused");
 
-  const stored = JSON.parse(await store.get(stateKeys.candidate("artist", "anjo", "h1")));
-  assert.equal(stored.state, "superseded");
+  const state = await reconcile(d2, "v1");
+  const current = state.candidates.find((c) => c.entityId === "anjo");
+  assert.equal(current.sourceHash, "h2", "reconcile reports the NEWEST version");
 });
 
 test("a completion for an unknown candidate is refused rather than creating one", async () => {
@@ -467,7 +493,7 @@ test("a completion for an unknown candidate is refused rather than creating one"
     tier: "fast",
     protect: [],
   };
-  assert.equal(await recordJobCompletion(d, job, "v1"), null);
+  assert.equal(await recordJobCompletion(d, job, "v1"), false);
 });
 
 test("pendingReferences reports references that are not yet ready", () => {
@@ -479,44 +505,53 @@ test("pendingReferences reports references that are not yet ready", () => {
 test("selectPublishable withholds a record whose reference is not ready", () => {
   // The acceptance scenario: an artist plus two related posts publish together
   // or not at all, so a listing link can never reach an unavailable detail.
+  // Identities are kind-qualified — the review found bare ids compared against
+  // "kind:id" references — and links now bind in BOTH directions, so the
+  // referenced post being pending also withholds the artist.
   const records = [
-    artist("anjo", "h1", { references: ["news:a", "news:b"] }),
-    { ...artist("news:a", "h2"), kind: "newsPost" },
+    artist("artist:anjo", "h1", { references: ["newsPost:a", "newsPost:b"] }),
+    { ...artist("newsPost:a", "h2"), kind: "newsPost" },
   ];
-  const ready = new Set(["anjo", "news:a"]);
-  assert.deepEqual(selectPublishable(records, ready).map((r) => r.id), ["news:a"]);
+  const ready = new Set(["artist:anjo", "newsPost:a"]);
+  assert.deepEqual(selectPublishable(records, ready), [], "the group waits for newsPost:b");
 });
 
 test("selectPublishable includes the group once every reference is ready", () => {
   const records = [
-    artist("anjo", "h1", { references: ["news:a", "news:b"] }),
-    { ...artist("news:a", "h2"), kind: "newsPost" },
-    { ...artist("news:b", "h3"), kind: "newsPost" },
+    artist("artist:anjo", "h1", { references: ["newsPost:a", "newsPost:b"] }),
+    { ...artist("newsPost:a", "h2"), kind: "newsPost" },
+    { ...artist("newsPost:b", "h3"), kind: "newsPost" },
   ];
-  const ready = new Set(["anjo", "news:a", "news:b"]);
-  assert.deepEqual(selectPublishable(records, ready).map((r) => r.id).sort(), ["anjo", "news:a", "news:b"]);
+  const ready = new Set(["artist:anjo", "newsPost:a", "newsPost:b"]);
+  assert.deepEqual(
+    selectPublishable(records, ready).map((r) => r.id).sort(),
+    ["artist:anjo", "newsPost:a", "newsPost:b"],
+  );
 });
 
 test("selectPublishable does not let one failed record block unrelated ready records", () => {
   // Design: compose from validated new versions, omitting pending new records,
   // rather than holding the whole site for one failure.
-  const records = [artist("anjo", "h1"), artist("stuck", "h2"), artist("other", "h3")];
-  const ready = new Set(["anjo", "other"]);
-  assert.deepEqual(selectPublishable(records, ready).map((r) => r.id).sort(), ["anjo", "other"]);
+  const records = [artist("artist:anjo", "h1"), artist("artist:stuck", "h2"), artist("artist:other", "h3")];
+  const ready = new Set(["artist:anjo", "artist:other"]);
+  assert.deepEqual(
+    selectPublishable(records, ready).map((r) => r.id).sort(),
+    ["artist:anjo", "artist:other"],
+  );
 });
 
 test("selectPublishable reaches a fixed point when dropping a record strands another", () => {
   // Readiness is transitive: dropping "c" must also drop "b", which referenced
   // it, and then "a", which referenced "b".
   const records = [
-    artist("a", "h1", { references: ["b"] }),
-    artist("b", "h2", { references: ["c"] }),
-    artist("c", "h3"),
+    artist("artist:a", "h1", { references: ["artist:b"] }),
+    artist("artist:b", "h2", { references: ["artist:c"] }),
+    artist("artist:c", "h3"),
   ];
-  assert.deepEqual(selectPublishable(records, new Set(["a", "b"])).map((r) => r.id), []);
+  assert.deepEqual(selectPublishable(records, new Set(["artist:a", "artist:b"])).map((r) => r.id), []);
 });
 
 test("selectPublishable omits inactive records even when marked ready", () => {
-  const records = [artist("gone", "h1", { active: false })];
-  assert.deepEqual(selectPublishable(records, new Set(["gone"])), []);
+  const records = [artist("artist:gone", "h1", { active: false })];
+  assert.deepEqual(selectPublishable(records, new Set(["artist:gone"])), []);
 });

@@ -43,9 +43,9 @@ are what appear in the dashboard.
 | Checkpoint | State |
 |---|---|
 | 0. Baseline committed and pushed | **Done** — `85546d4`, pushed to `origin/i18n-phase-2` |
-| 1. Inventory and contracts | **Done** — `src/lib/publication/contracts.ts`, 21 tests |
-| 2. Background preparation | **Done** (logic) — `src/lib/publication/discovery.ts`, 16 tests |
-| 3. Safe publication | In progress |
+| 1. Inventory and contracts | **Done, review-corrected** — 6 counterexamples fixed |
+| 2. Background preparation | **Done, review-corrected** — immutable completions |
+| 3. Safe publication | Not started |
 | 4. Serving and lifecycle | Not started |
 | 5. Validation and rollout | Not started |
 
@@ -148,3 +148,42 @@ Tests: 403 total (16 new), all passing.
 Next: immutable release bundles, serialized promotion with a known-good
 fallback, and the KV-eventual-consistency handling (a pointer alone is not
 readiness).
+
+### Review corrections (docs/publication-checkpoints-1-2-review.md)
+
+The review found six counterexamples in checkpoints 1–2. **Every one was
+reproduced locally before being fixed**, and each is now a regression test in
+`test/publication-review-regressions.test.mjs` (15 cases). Re-running the
+review's own reproductions afterwards: **6/6 fixed**.
+
+| Finding | Fix |
+|---|---|
+| P1 crash between `newestHash` and candidate strands the version forever | `discover()` treats a known hash with a MISSING candidate as outstanding work, so the window is closed from either write order. `reconcile()` recovers the second window (candidate persisted, never enqueued) by deriving outstanding jobs from what is missing. |
+| P1 concurrent completions lose progress; duplicate scan resets it | Completions are now **immutable per-job records** at their own keys. Writing one never touches another, so concurrency cannot collide and a rescan has no progress field to reset. Candidate state is DERIVED by `reconcile()`. |
+| P1 validation cannot prove completeness | `ReleaseEntity` carries an explicit `requiredFields` manifest and `routes`. Requirements no longer come from whichever keys happen to be in the output. |
+| P1 disappeared records are not removals | Membership is compared against an authoritative inventory from the last **complete** scan, gated on `inventoryComplete` so a partial FM read can never be read as mass deletion. |
+| P2 reverse references publish an artist alone | `selectPublishable()` now binds references in **both** directions and uses kind-qualified identities throughout. |
+| P2 invalid KV TTL | `expirationTtl: 1` is rejected by Cloudflare (minimum 60 — verified against the official docs). The lock now deletes; the test fake throws on any TTL below 60, so this cannot pass again against a lenient stub. |
+
+**Two claims withdrawn rather than defended.** The comment saying the crash
+window "self-repairs" described the failure — the review was right. And
+`validateRelease` no longer claims to check protected names: names are
+protected at translation time via `protect`, and verifying afterwards needs
+the source text a release entity does not carry. If that check is wanted it
+belongs in the queue consumer.
+
+**Also confirmed from the Cloudflare docs while fixing this:** KV allows
+**one write per second per key**. That is independent of the lost-update race
+and on its own disqualifies a mutable shared candidate blob — a hot candidate
+would have produced 429s. It is recorded in the module comment so the pattern
+is not reintroduced elsewhere.
+
+**Still outstanding from the review, and not claimed as done:** the coordinator
+must serialize candidate/job state, not only release promotion. The immutable
+completion records remove the lost-update race that made the current design
+unsafe, but the advisory KV scan lock remains advisory. When the Durable Object
+lands in checkpoint 3 it should own discovery serialization and the advisory
+lock should be deleted. That is written at the lock itself.
+
+Tests: 419 total (15 new regressions; 38 checkpoint tests updated to the
+corrected contracts), all passing.
