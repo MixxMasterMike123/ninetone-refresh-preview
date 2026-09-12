@@ -30,7 +30,7 @@ The Cloudflare Pages project (if it still exists) can be deleted.
 
 Build steps:
 1. Checkout
-2. `actions/setup-node` Node 22.12.0 (cache: npm)
+2. `actions/setup-node` Node 22.19.0 (cache: npm)
 3. `npm ci`
 4. `npm run build` with all `FM_*` and `SHOPIFY_*` env vars from repo secrets
 5. `touch dist/.nojekyll` (so Pages doesn't strip `_astro/`)
@@ -290,15 +290,36 @@ The repo now has **two build targets** from one codebase (astro.config.mjs):
 | Output | static, 540+ pages | `output: "server"`, rendered per request |
 | Host | GH Pages under `/ninetone-refresh-preview/` | Worker `ninetone-site` + Static Assets |
 | Content | frozen at build | **live from FM**, tiered edge cache |
-| Node | ≥22.12 (unchanged) | ≥22.15 (use `nvm use 24`; adapter needs `module.registerHooks`) |
+| Node | ≥22.19 (`package.json` engines floor) | ≥22.19; the adapter needs `module.registerHooks` |
 
 How live data works (see src/middleware.ts + src/lib/cache.ts):
 1. Edge cache per route with tiered TTLs — homepage 5 min, news 15 min, detail 1 h, rosters 6 h, team 24 h. Cache keys embed a **version epoch** from KV.
 2. On miss, the page renders from FM through a 60s in-isolate data cache with in-flight dedup and stale-on-error (an FM hiccup serves last-known-good instead of a 500).
 3. **Publish button** (`/admin/publish`, password = `PUBLISH_PASSWORD` secret) bumps the KV epoch → whole site is fresh within ~a minute. Editors never trigger deploys; deploys are for code only.
 4. Edge caching is live on `*.workers.dev` too (verified: `x-cache: hit` in ~20ms). Cache keys embed the KV epoch (content invalidation via Publish) AND a per-build id — so every deploy automatically starts a fresh cache generation and old-code pages are never served after a release.
+5. Cold renders read FM through a KV read-through (src/lib/fm-kv.ts, 300s, keyed by the same Publish epoch) and translations as one bundle per route (`trb:` keys), so a recycled isolate does not pay FM or per-string KV in full. `node scripts/perf-cold-probe.mjs` fetches staging routes with a cache-busting query and prints the `Server-Timing` split (`trbundle`, `trnkv`, `fmkv`, `fmnet`) — read-only, no purge, no writes, no model calls.
 
 Local prod-like run: `npm run preview:cf` (wrangler dev on the built output; secrets from `.dev.vars`, gitignored).
+
+**CI does not deploy the Worker.** `.github/workflows/deploy.yml` builds and publishes the
+GH Pages preview only. The Worker ships from a developer machine, always as one command:
+`npm run deploy:cf` (= `npm run build:cf && wrangler deploy`).
+
+### Publication cron — paused
+
+`wrangler.jsonc` declares a one-minute cron trigger for the translate-before-publish
+discovery tick, but `vars.PUBLICATION_TICK` is set to `"off"`, which stops the tick
+entirely. The subsystem is shadow-only (`PUBLICATION_SERVING` is absent), so nothing
+visitor-facing depends on it and the polling bought nothing. `PUBLICATION_TICK` is a var,
+not a secret, so it can be flipped in the Cloudflare dashboard without a redeploy. To
+resume discovery, remove the line or set it to anything but `"off"`.
+
+The subsystem still owns real bindings that a deploy provisions, paused or not: the
+`PUBLICATION_COORDINATOR` Durable Object (`NinetonePublicationCoordinator`, sqlite
+migration `v1`), the `ninetone-translation-jobs` queue plus its DLQ, and the
+`PUBLICATION_STATE` / `PUBLICATION_RELEASES` KV namespaces. Deploying to a fresh account
+means creating all of them — another reason `dist/` staleness matters, since the deploy
+config wrangler actually reads is the generated one.
 
 ### Accounts + config redirect — read before deploying
 
@@ -328,14 +349,17 @@ rm -f node_modules/.cache/wrangler/wrangler-account.json  # drop stale account p
 cd worker-fm-proxy && npx wrangler deploy -c wrangler.toml && cd ..
 
 # 2. KV namespaces must live on the same account — recreate if they were made
-#    elsewhere, then update the two ids in wrangler.jsonc:
+#    elsewhere, then update each id in wrangler.jsonc:
 npx wrangler kv namespace create CACHE_STATE
 npx wrangler kv namespace create SESSION
+npx wrangler kv namespace create CONTACT_SUBMISSIONS
+npx wrangler kv namespace create PUBLICATION_STATE
+npx wrangler kv namespace create PUBLICATION_RELEASES
 
 # 3. the site:
-nvm use 24                             # adapter needs Node ≥22.15
-npm run build:cf
-npx wrangler deploy                    # root redirect → dist/server/wrangler.json
+nvm use 22                             # ≥22.19; adapter needs module.registerHooks
+npm run deploy:cf                      # build + deploy as ONE command
+                                       # root redirect → dist/server/wrangler.json
 
 # 4. one-time secrets (values from .env), pinned to the site worker:
 npx wrangler secret put FM_USER --name ninetone-site
