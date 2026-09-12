@@ -286,6 +286,30 @@ test("a stale scan is refused by the coordinator and skips assembly", async () =
   assert.equal(result.assembled, null, "and must not go on to assemble");
 });
 
+test("REAL ordering: a scan whose FM read started before a faster tick applied is refused", async () => {
+  // Reproduces review D2 against runTick itself, with the REAL coordinator:
+  // while this tick is still reading FM, another tick applies. The slow tick
+  // must be refused — which only holds if its revision was read BEFORE the
+  // FM read began, not after.
+  const h = harness();
+  await runTick(h.deps); // establishes revision 1
+  const slowGetters = getters();
+  slowGetters.getArtists = async () => {
+    // "Faster tick" lands mid-read.
+    await h.coord.applyScan({
+      basedOnRevision: (await h.coord.read()).revision,
+      newestHashes: { "artist:anjo": "v2" },
+      removals: [],
+    });
+    return [ARTIST];
+  };
+  const result = await runTick({ ...h.deps, load: { getters: slowGetters, hash: sha } });
+  assert.equal(result.coordinatorApplied, false, "the slow, stale scan must be refused");
+  assert.equal(result.assembled, null);
+  const state = await h.coord.read();
+  assert.equal(state.newestHashes["artist:anjo"], "v2", "the newer hash must survive");
+});
+
 test("a partial FM read never claims an inventory at the coordinator", async () => {
   const broken = getters();
   broken.getNews = async () => {

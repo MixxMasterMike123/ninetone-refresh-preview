@@ -77,7 +77,7 @@ const webPosts = await getWebPostSection("Ninetone Records");
 // seo-phase-1b-brief.md P1 item 7: paginated pages 2+ need a distinct
 // <title> from page 1 (and from each other) or they read as duplicates to a
 // crawler. Page 1 (currentPage === 1) is unchanged.
-const pageTitle = paginatedTitle("Previous Artists", page.currentPage);
+const pageTitle = paginatedTitle("Previous Artists", page.currentPage, (Astro.locals as { lang?: "sv" | "en" }).lang ?? "sv");
 
 // seo-phase-1b-brief.md P1 item 8: page 1 gets a compact A–Ö index linking
 // every previous-artist detail page, so none sit more than three clicks

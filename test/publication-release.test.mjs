@@ -272,3 +272,30 @@ test("a stale job completing after a removal cannot restore the entity", async (
   assert.equal(result.promoted, false, "a superseded bundle cannot be re-promoted");
   assert.equal(await resolveGeneration(d), "g2", "the removal stands");
 });
+
+test("storeRelease does not rewrite an unchanged generation (content-addressed ids reach it every tick)", async () => {
+  const store = memStore();
+  const puts = [];
+  const originalPut = store.put.bind(store);
+  store.put = async (k, v, o) => { puts.push(k); return originalPut(k, v, o); };
+  const d = deps(store);
+  const release = makeRelease("g-same", [record("a")], translationsFor("artist:a"));
+  const first = await storeRelease(d, release);
+  assert.equal(puts.length, 2, "bundle + ready marker on first store");
+  const second = await storeRelease(d, release);
+  assert.equal(second, first, "same digest");
+  assert.equal(puts.length, 2, "no writes at all on an identical re-store");
+});
+
+test("storeRelease repairs a missing ready marker without rewriting the bundle", async () => {
+  const store = memStore();
+  const d = deps(store);
+  const release = makeRelease("g-repair", [record("a")], translationsFor("artist:a"));
+  await storeRelease(d, release);
+  store.map.delete(releaseKeys.ready("g-repair")); // crash between the two puts
+  const puts = [];
+  const originalPut = store.put.bind(store);
+  store.put = async (k, v, o) => { puts.push(k); return originalPut(k, v, o); };
+  await storeRelease(d, release);
+  assert.deepEqual(puts, [releaseKeys.ready("g-repair")]);
+});

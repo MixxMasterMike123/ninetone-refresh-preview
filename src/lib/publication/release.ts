@@ -140,8 +140,19 @@ export async function storeRelease(deps: ReleaseDeps, release: Release): Promise
     );
   }
 
-  await deps.store.put(releaseKeys.bundle(release.generation), serialized);
   const digest = await digestOf(serialized);
+  // Already stored byte-for-byte: nothing to write. Generation ids are
+  // content-addressed, so an unchanged corpus reaches this branch on every
+  // tick — rewriting the bundle and its ready marker each minute was 4,320
+  // needless writes a day to the same three keys (review D5), and it churned
+  // the marker's timestamp for no reason. The marker is only re-written when
+  // it is actually missing (a crash between the two puts).
+  if (existing === serialized) {
+    const marker = await deps.store.get(releaseKeys.ready(release.generation));
+    if (marker !== null) return digest;
+  } else {
+    await deps.store.put(releaseKeys.bundle(release.generation), serialized);
+  }
   await deps.store.put(
     releaseKeys.ready(release.generation),
     JSON.stringify({ at: (deps.now ?? Date.now)(), generation: release.generation, digest }),

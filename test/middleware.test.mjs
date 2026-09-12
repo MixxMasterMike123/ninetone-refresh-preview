@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import test from "node:test";
 import * as esbuild from "esbuild";
+import { translate, translationKey } from "../src/lib/translate.ts";
 
 const middlewareModule = await loadMiddleware();
 
@@ -22,6 +23,15 @@ async function loadMiddleware() {
       setup(build) {
         build.onResolve({ filter: /^astro:middleware$/ }, () => ({ path: "astro", namespace: "stub" }));
         build.onResolve({ filter: /^\.\/lib\/cf$/ }, () => ({ path: "cf", namespace: "stub" }));
+        // Keep translate.ts OUT of the bundle and import it from its real
+        // file URL instead, so this test file and the middleware share ONE
+        // module instance — the per-request translation ledger lives in that
+        // module's AsyncLocalStorage, and a bundled copy would be a second,
+        // invisible ledger.
+        build.onResolve({ filter: /^\.\/lib\/translate$/ }, () => ({
+          path: new URL("../src/lib/translate.ts", import.meta.url).href,
+          external: true,
+        }));
         build.onLoad({ filter: /.*/, namespace: "stub" }, (args) => ({
           contents: args.path === "astro"
             ? "export const defineMiddleware = (fn) => fn;"
@@ -633,4 +643,148 @@ test("the Swedish legacy redirect is unchanged by the locale-aware lookup", asyn
 
   assert.equal(response.status, 301);
   assert.equal(response.headers.get("Location"), "/records/artists/previous/single/kuokka");
+});
+
+// ---------------------------------------------------------------------------
+// 2026-09-12 review fixes
+// ---------------------------------------------------------------------------
+
+test("Swedish-only pages have no /en/ URL: /en/integritet 301s to /integritet, query kept", async () => {
+  const runtime = createRuntime();
+  let nextCalled = false;
+  const response = await run(
+    new Request("https://ninetone.com/en/integritet?x=1"),
+    async () => { nextCalled = true; return new Response("must not render"); },
+    runtime,
+  );
+  assert.equal(nextCalled, false);
+  assert.equal(response.status, 301);
+  assert.equal(response.headers.get("Location"), "/integritet?x=1");
+  assert.equal(runtime.stored.length, 0, "a redirect must not mint a cache entry");
+});
+
+test("Swedish-only guides redirect too; bilingual routes still rewrite", async () => {
+  const runtime = createRuntime();
+  const guide = await run(
+    new Request("https://ninetone.com/en/guider/hur-man-bokar"),
+    async () => new Response("must not render"),
+    runtime,
+  );
+  assert.equal(guide.status, 301);
+  assert.equal(guide.headers.get("Location"), "/guider/hur-man-bokar");
+
+  let target;
+  const records = await run(
+    new Request("https://ninetone.com/en/records"),
+    async (t) => { target = t; return new Response("records"); },
+    createRuntime(),
+  );
+  assert.equal(records.status, 200);
+  assert.equal(target, "/records");
+});
+
+test("SSR HTML carries X-Robots-Tag while the preview is gated", async () => {
+  const response = await run(
+    new Request("https://ninetone.com/news"),
+    async () => new Response("news"),
+    createRuntime(),
+  );
+  assert.equal(response.headers.get("X-Robots-Tag"), "noindex, nofollow, noarchive, nosnippet, noimageindex");
+});
+
+test("a render whose translation budget refused strings is cached for 60s, not the tier TTL", async () => {
+  const runtime = createRuntime();
+  const context = {
+    request: new Request("https://ninetone.com/en/team"),
+    url: new URL("https://ninetone.com/en/team"),
+    locals: { cfContext: { waitUntil: (p) => runtime.waits.push(p) } },
+  };
+  const response = await middlewareModule.onRequest(context, async () => {
+    context.locals.__i18nBudget = { refusedCount: 7 };
+    return new Response("half-translated");
+  });
+  await Promise.all(runtime.waits);
+  assert.equal(response.headers.get("x-cache"), "miss");
+  assert.equal(response.headers.get("x-cache-ttl"), "60", "team tier is 86400; a degraded render must not pin that long");
+  assert.match(response.headers.get("Cache-Control"), /s-maxage=60,/);
+  assert.equal(response.headers.get("x-translation"), "degraded; refused=7");
+  assert.equal(runtime.stored.length, 1, "still cached — briefly — to absorb a burst");
+});
+
+test("a complete render keeps the tier TTL and no degraded marker", async () => {
+  const runtime = createRuntime();
+  const context = {
+    request: new Request("https://ninetone.com/team"),
+    url: new URL("https://ninetone.com/team"),
+    locals: { cfContext: { waitUntil: (p) => runtime.waits.push(p) } },
+  };
+  const response = await middlewareModule.onRequest(context, async () => {
+    context.locals.__i18nBudget = { refusedCount: 0 };
+    return new Response("complete");
+  });
+  assert.equal(response.headers.get("x-cache-ttl"), "86400");
+  assert.equal(response.headers.get("x-translation"), null);
+});
+
+test("route bundle: read before render, every resolved translation written back after", async () => {
+  const key = await translationKey("Nyheter", "en", "quality");
+  const reads = [];
+  const puts = [];
+  const store = new Map([[key, "News"]]);
+  const kv = {
+    get: async (k) => { reads.push(k); return typeof k === "string" && store.has(k) ? store.get(k) : null; },
+    put: async (k, v, o) => { puts.push([k, v, o]); store.set(k, v); },
+  };
+  const runtime = createRuntime({ env: { CACHE_STATE: kv } });
+  const context = {
+    request: new Request("https://ninetone.com/en/news"),
+    url: new URL("https://ninetone.com/en/news"),
+    locals: { cfContext: { waitUntil: (p) => runtime.waits.push(p) } },
+  };
+  const response = await middlewareModule.onRequest(context, async () => {
+    // What sharedT()/fmText() do: resolve through the request's ledger.
+    const r = await translate({ text: "Nyheter", target: "en", tier: "quality", kv, ledger: context.locals.__i18nLedger });
+    return new Response(r.text);
+  });
+  await Promise.all(runtime.waits);
+  assert.equal(await response.text(), "News");
+  assert.ok(reads.includes("trb:v1:en:/news"), "the route bundle is read on a page-cache miss");
+  assert.ok(reads.indexOf("trb:v1:en:/news") < reads.indexOf(key), "…before the render's own reads");
+  const bundlePut = puts.find(([k]) => k === "trb:v1:en:/news");
+  assert.ok(bundlePut, "the ledger is written back as the route's bundle");
+  assert.deepEqual(JSON.parse(bundlePut[1]), { [key]: "News" });
+  assert.equal(bundlePut[2].expirationTtl, 21600);
+});
+
+test("route bundle: a preloaded bundle seeds the render and is not rewritten when unchanged", async () => {
+  const key = await translationKey("Artister", "en", "quality");
+  const reads = [];
+  const puts = [];
+  const store = new Map([["trb:v1:en:/records/artists", JSON.stringify({ [key]: "Artists (bundled)" })]]);
+  const kv = {
+    get: async (k) => { reads.push(k); return typeof k === "string" && store.has(k) ? store.get(k) : null; },
+    put: async (k, v, o) => { puts.push([k, v, o]); },
+  };
+  const runtime = createRuntime({ env: { CACHE_STATE: kv } });
+  const context = {
+    request: new Request("https://ninetone.com/en/records/artists"),
+    url: new URL("https://ninetone.com/en/records/artists"),
+    locals: { cfContext: { waitUntil: (p) => runtime.waits.push(p) } },
+  };
+  const response = await middlewareModule.onRequest(context, async () => {
+    const r = await translate({ text: "Artister", target: "en", tier: "quality", kv, ledger: context.locals.__i18nLedger });
+    return new Response(r.text);
+  });
+  await Promise.all(runtime.waits);
+  assert.equal(await response.text(), "Artists (bundled)");
+  assert.ok(!reads.includes(key), "the seeded key is never read from KV");
+  assert.equal(puts.length, 0, "identical ledger → no bundle write");
+});
+
+test("route bundle: a cache HIT reads no bundle at all", async () => {
+  const reads = [];
+  const kv = { get: async (k) => { reads.push(k); return null; }, put: async () => {} };
+  const runtime = createRuntime({ hit: new Response("cached"), env: { CACHE_STATE: kv } });
+  await run(new Request("https://ninetone.com/news"), async () => new Response("x"), runtime);
+  assert.ok(!reads.some((k) => String(k).startsWith("trb:")), "no bundle read on a hit");
 });

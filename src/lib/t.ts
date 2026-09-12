@@ -51,6 +51,7 @@ import {
   createT,
   RequestBudget,
   translate,
+  translationLedgerFor,
   waitUntilFromLocals,
   type Lang,
   type TFunction,
@@ -226,6 +227,8 @@ interface LocalsForT {
   cfContext?: { waitUntil?: (promise: Promise<unknown>) => void };
   /** Stashed by `sharedT()` on first use per request — see GAP 1 above. */
   __i18nBudget?: RequestBudget;
+  /** Per-request ledger of resolved translations — see translate.ts's route bundles. */
+  __i18nLedger?: Map<string, string>;
 }
 
 /**
@@ -289,7 +292,7 @@ export function sharedT(
   // off the real `locals` — so an override changes the target language
   // without forking per-request state.
   const forTarget = opts?.lang ? { ...locals, lang: opts.lang } : locals;
-  const baseT = createT(forTarget, { protect: opts?.protect, budget });
+  const baseT = createT(forTarget, { protect: opts?.protect, budget, ledger: translationLedgerFor(l) });
 
   // GAP 2 fix: memoize by exact source string for the lifetime of this
   // request's `locals` object. Concurrent callers awaiting the same source
@@ -413,6 +416,7 @@ export function fmText(
       protect: opts?.protect,
       waitUntil,
       budget,
+      ledger: translationLedgerFor(l),
     })
       .then((r) => r.text)
       .catch(() => text);

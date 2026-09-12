@@ -13,12 +13,11 @@ import {
   bookingTalentLines,
   bookingCategoryLines,
   guideLines,
-  LLMS_CHROME_STRINGS,
-  type LlmsChromeTable,
+  llmsLinkOrigin,
+  LLMS_CHROME_SV,
 } from "../lib/llms";
 import { guidesFromCategory } from "../lib/guides";
 import { pageJsonLdOrigin } from "../lib/site";
-import { sharedT } from "../lib/t.ts";
 import type { Lang } from "../lib/translate.ts";
 
 /**
@@ -66,7 +65,7 @@ import type { Lang } from "../lib/translate.ts";
  * emitting stale/unreachable content).
  */
 export async function renderLlmsTxt(context: APIContext, lang: Lang): Promise<Response> {
-  const { request, locals } = context;
+  const { request } = context;
   // pageJsonLdOrigin(), not a bare siteOrigin(): on the still-preview gh
   // target the site is served from a sub-path (/ninetone-refresh-preview),
   // and every generated link must resolve there, not 404. Mirrors
@@ -83,45 +82,23 @@ export async function renderLlmsTxt(context: APIContext, lang: Lang): Promise<Re
     getWebPosts("Guider"),
   ]);
 
-  const bookingLines = bookingTalentLines(bookingCategories, origin);
+  // Entity links follow the manifest locale (2026-09-12 SEO review) — the
+  // English manifest must not send an agent to Swedish pages.
+  const linkOrigin = llmsLinkOrigin(origin, lang);
+  const bookingLines = bookingTalentLines(bookingCategories, linkOrigin);
   // Section 6: one line per Nation category page that actually exists
   // (bookingCategoryLines() applies the same populated-only filter the
   // category page's own getStaticPaths() uses).
-  const bookingCatLines = bookingCategoryLines(bookingCategories, origin);
+  const bookingCatLines = bookingCategoryLines(bookingCategories, linkOrigin);
   // Section 7: one line per guide that actually exists (guidesFromCategory()
   // is the exact same helper the guide pages' own getStaticPaths() uses, so
   // this list can't drift from the real routes — [] when "Guider" is absent).
-  const guideTxtLines = guideLines(guidesFromCategory(guiderSections[0]), origin);
+  const guideTxtLines = guideLines(guidesFromCategory(guiderSections[0]), linkOrigin);
 
-  // Chrome table (Section 5's English-content strategy — see this file's
-  // and src/lib/llms.ts's doc comments). Swedish is the source language
-  // these literals are written in (decision 1), so a Swedish render needs
-  // no lookups at all: `buildLlmsTxt` already falls back to the source
-  // string for any key not present in `chrome`, and `undefined` (no table)
-  // behaves identically to an empty one. Only "en" does any translation
-  // work, and only for this ~20-string fixed vocabulary — never per-entity
-  // content. `sharedT()` (not `createT()` directly) so this shares the
-  // per-request budget/memo table with everything else `locals` touches on
-  // this request — see src/lib/t.ts's own doc comment (binding note C/D).
-  let chrome: LlmsChromeTable | undefined;
-  if (lang === "en") {
-    // `opts.lang` rather than a `{ ...locals, lang }` spread: the
-    // caller-supplied `lang` IS the source of truth for this render
-    // (src/pages/en/llms.txt.ts's gh-target guard passes "en" explicitly,
-    // independent of whatever locals.lang says), but spreading would hand
-    // sharedT a NEW object — and sharedT stashes the per-request
-    // RequestBudget on that object and keys its memo WeakMap by its
-    // identity. A spread therefore forks both, giving this render a private
-    // 25-call ceiling and an empty memo, which is exactly the
-    // budget-fragmentation Implementation note C added sharedT to prevent.
-    // Harmless at 21 chrome strings; a trap the moment anyone adds more or
-    // renders a component here. The override keeps the real locals object.
-    const t = sharedT(locals, { lang });
-    const entries = await Promise.all(
-      LLMS_CHROME_STRINGS.map(async (source) => [source, await t(source)] as const),
-    );
-    chrome = Object.fromEntries(entries);
-  }
+  // Chrome: the literals in LLMS_CHROME_STRINGS are English, so the English
+  // manifest needs no table; the Swedish one uses the static LLMS_CHROME_SV
+  // table. Deterministic, no KV, no model call — see src/lib/llms.ts.
+  const chrome = lang === "en" ? undefined : LLMS_CHROME_SV;
 
   const body = buildLlmsTxt(
     origin,
@@ -135,7 +112,7 @@ export async function renderLlmsTxt(context: APIContext, lang: Lang): Promise<Re
       bookingCategoryLines: bookingCatLines,
       guideLines: guideTxtLines,
     },
-    { chrome },
+    { chrome, lang },
   );
 
   return new Response(body, {

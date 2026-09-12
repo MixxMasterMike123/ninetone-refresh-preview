@@ -535,6 +535,13 @@ export interface TickResult {
  * validate, which is the gap the deployment review correctly refused to deploy.
  */
 export async function runTick(deps: TickDeps): Promise<TickResult> {
+  // Revision FIRST, then the FM scan. `basedOnRevision` must describe the
+  // coordinator state as of when this tick's FM read STARTED: reading it
+  // after discovery let a slow tick (FM read at T0, revision read at T0+2s)
+  // carry a revision newer than a faster tick that had already applied, so
+  // the stale scan passed `applyScan`'s check and regressed `newestHashes`
+  // (2026-09-12 publication review, D2 — reproduced against runTick).
+  const before = deps.coordinator ? await deps.coordinator.read() : null;
   const discovery = await runDiscovery(deps);
   const mode = publicationMode(deps.env);
 
@@ -544,8 +551,7 @@ export async function runTick(deps: TickDeps): Promise<TickResult> {
   // read-modify-write. `applyScan` refuses anything computed from an older
   // revision, which is only genuinely sufficient because the DO serializes.
   let coordinatorApplied: boolean | null = null;
-  if (deps.coordinator) {
-    const before = await deps.coordinator.read();
+  if (deps.coordinator && before) {
     const newestHashes: Record<string, string> = {};
     for (const [ref, snapshot] of discovery.snapshotsByRef) {
       newestHashes[ref] = snapshot.contentHash;

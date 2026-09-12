@@ -29,8 +29,11 @@ export function displayTitle(raw: string | undefined | null): string {
  * matching the site's existing Swedish UI strings — e.g. Pagination.astro)
  * is appended for currentPage >= 2.
  */
-export function paginatedTitle(baseTitle: string, currentPage: number): string {
-  return currentPage >= 2 ? `${baseTitle} · Sida ${currentPage}` : baseTitle;
+export function paginatedTitle(baseTitle: string, currentPage: number, lang: "sv" | "en" = "sv"): string {
+  // Locale-aware (2026-09-12 SEO review): "Sida" on an <html lang="en"> page
+  // was shipping Swedish <title>s for all eleven English pagination URLs.
+  const pageWord = lang === "en" ? "Page" : "Sida";
+  return currentPage >= 2 ? `${baseTitle} · ${pageWord} ${currentPage}` : baseTitle;
 }
 
 /**

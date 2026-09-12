@@ -240,11 +240,10 @@ export function website(origin: string): Record<string, unknown> {
     name: ORG_NAME,
     url: origin,
     publisher: { "@id": orgId(origin) },
-    potentialAction: {
-      "@type": "SearchAction",
-      target: `${origin}/search-result?q={search_term_string}`,
-      "query-input": "required name=search_term_string",
-    },
+    // No SearchAction. Its only possible target, /search-result, is
+    // permanently noindexed (src/pages/search-result.astro) and Google's
+    // sitelinks-searchbox requires a crawlable results page — advertising
+    // one it may not crawl is a validator warning, not a feature.
   };
 }
 

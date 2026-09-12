@@ -101,6 +101,10 @@
   // PUBLICATION_SERVING is deliberately ABSENT from "vars". publicationMode()
   // returns "shadow" unless it is exactly "on", so preparation runs and
   // nothing is served from a release until it is set explicitly.
+  //
+  // PUBLICATION_TICK="off" (a var, settable from the dashboard without a
+  // redeploy) stops the cron tick entirely — the only way to pause the
+  // every-minute FM polling short of removing the trigger above.
   // ---------------------------------------------------------------------
   "ratelimits": [
     {

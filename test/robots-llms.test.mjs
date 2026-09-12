@@ -8,6 +8,8 @@ import {
   bookingCategoryLines,
   guideLines,
   LLMS_CHROME_STRINGS,
+  LLMS_CHROME_SV,
+  llmsLinkOrigin,
 } from "../src/lib/llms.ts";
 import { handleEnLlmsTxt } from "../src/pages/en/llms.txt.ts";
 
@@ -412,3 +414,44 @@ test("handleEnLlmsTxt: 404s when PUBLIC_HAS_RUNTIME is false (gh/static target â
   assert.equal(await res.text(), "Not found");
 });
 
+
+// ---------------------------------------------------------------------------
+// Locale (2026-09-12 SEO review): the English manifest links English pages,
+// and the Swedish manifest is actually Swedish.
+// ---------------------------------------------------------------------------
+
+test("buildLlmsTxt: lang 'en' prefixes every internal link with /en", () => {
+  const body = buildLlmsTxt(ORIGIN, stubData(), { lang: "en" });
+  const hrefs = [...body.matchAll(/\]\((https?:[^)]+)\)/g)].map((m) => m[1]);
+  assert.ok(hrefs.length > 5, "sanity: links present");
+  for (const href of hrefs) {
+    assert.ok(href.startsWith(`${ORIGIN}/en/`), `not an English URL: ${href}`);
+    assert.ok(!href.includes("/en/en/"), `double prefix: ${href}`);
+  }
+});
+
+test("buildLlmsTxt: default/Swedish links carry no /en prefix", () => {
+  const body = buildLlmsTxt(ORIGIN, stubData(), { lang: "sv", chrome: LLMS_CHROME_SV });
+  assert.ok(!body.includes(`${ORIGIN}/en/`));
+  assert.ok(body.includes(`[Artister](${ORIGIN}/records/artists)`));
+  assert.ok(body.includes("## FÃ¶retaget"));
+  assert.ok(body.includes("Svenskt musikbolag"));
+});
+
+test("llmsLinkOrigin: only 'en' changes the origin", () => {
+  assert.equal(llmsLinkOrigin(ORIGIN, "en"), `${ORIGIN}/en`);
+  assert.equal(llmsLinkOrigin(ORIGIN, "sv"), ORIGIN);
+  assert.equal(llmsLinkOrigin(ORIGIN, undefined), ORIGIN);
+});
+
+test("LLMS_CHROME_SV: every key is a real chrome literal, and every literal that reads as English has a Swedish entry", () => {
+  for (const key of Object.keys(LLMS_CHROME_SV)) {
+    assert.ok(LLMS_CHROME_STRINGS.includes(key), `unknown chrome key: ${JSON.stringify(key)}`);
+  }
+  // Headings that are proper names stay; the rest must be covered.
+  const proper = new Set(["# Ninetone Group", "## Ninetone Records", "## Ninetone Management", "## Ninetone Nation"]);
+  for (const literal of LLMS_CHROME_STRINGS) {
+    if (proper.has(literal)) continue;
+    assert.ok(literal in LLMS_CHROME_SV, `no Swedish for: ${JSON.stringify(literal)}`);
+  }
+});

@@ -163,13 +163,11 @@ test("organization: address is Sundsvall, SE with no street", () => {
   assert.equal(org.address.streetAddress, undefined);
 });
 
-test("website: SearchAction target uses the real search-result.astro query param `q`", () => {
+test("website: no SearchAction — /search-result is permanently noindexed, so a sitelinks searchbox target would be uncrawlable", () => {
   const site = website(ORIGIN);
   assert.equal(site["@type"], "WebSite");
   assert.equal(site.publisher["@id"], orgId(ORIGIN));
-  assert.equal(site.potentialAction["@type"], "SearchAction");
-  assert.equal(site.potentialAction.target, "https://ninetone.com/search-result?q={search_term_string}");
-  assert.equal(site.potentialAction["query-input"], "required name=search_term_string");
+  assert.equal(site.potentialAction, undefined);
 });
 
 test("breadcrumbs: builds a positioned ItemList with absolute URLs", () => {

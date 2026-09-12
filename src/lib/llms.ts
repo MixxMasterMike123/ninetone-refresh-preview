@@ -257,7 +257,52 @@ export interface BuildLlmsTxtOptions {
   /** See `LlmsChromeTable`. Omit entirely for source-language (Swedish)
    *  output — every `chromeText()` call then simply returns its input. */
   chrome?: LlmsChromeTable;
+  /**
+   * Locale the LINKS should point at. "en" prefixes every internal href
+   * with /en so an agent reading the English manifest lands on English
+   * pages (2026-09-12 SEO review: /en/llms.txt linked only Swedish URLs).
+   * Entity lines built OUTSIDE this function (booking, guides) must be
+   * built with `llmsLinkOrigin(origin, lang)` for the same reason.
+   */
+  lang?: "sv" | "en";
 }
+
+/** Origin to build entity links against for a given manifest locale. */
+export function llmsLinkOrigin(origin: string, lang: "sv" | "en" | undefined): string {
+  return lang === "en" ? `${origin}/en` : origin;
+}
+
+/**
+ * Swedish chrome for the Swedish manifest. The literals in
+ * `LLMS_CHROME_STRINGS` are English, so the Swedish render used to emit
+ * "## Company" and "Previous artists" while the English one was a
+ * byte-identical copy — a static table beats a live `t()` round trip here:
+ * twenty fixed labels, deterministic, no KV, no model.
+ */
+export const LLMS_CHROME_SV: LlmsChromeTable = {
+  ["> Swedish music company based in Sundsvall and Stockholm. Three divisions:\n" +
+    "> Ninetone Records (label), Ninetone Management (artist and creator\n" +
+    "> management), Ninetone Nation (booking for events)."]:
+    "> Svenskt musikbolag med bas i Sundsvall och Stockholm. Tre divisioner:\n" +
+    "> Ninetone Records (skivbolag), Ninetone Management (artist- och\n" +
+    "> kreatörsmanagement), Ninetone Nation (bokning för evenemang).",
+  Artists: "Artister",
+  "current roster": "aktuell roster",
+  "Previous artists": "Tidigare artister",
+  "Contact Records": "Kontakta Records",
+  "demo submissions": "demoinskick",
+  Clients: "Klienter",
+  "managed artists and creators": "artister och kreatörer under management",
+  "Contact Management": "Kontakta Management",
+  Booking: "Bokning",
+  "bookable talent by category": "bokningsbara talanger per kategori",
+  "Contact Nation": "Kontakta Nation",
+  "## Company": "## Företaget",
+  Team: "Team",
+  News: "Nyheter",
+  Guider: "Guider",
+  Privacy: "Integritet",
+};
 
 /**
  * One line per guide (Section 7 — src/pages/guider/[slug].astro), built from
@@ -286,8 +331,11 @@ export function guideLines(guides: GuideLike[], origin: string): string[] {
  * entity lines — so Sections 6/7 (Nation category pages, guides route) can
  * each add one more section without restructuring anything.
  */
-export function buildLlmsTxt(origin: string, data: LlmsTxtData, opts?: BuildLlmsTxtOptions): string {
+export function buildLlmsTxt(siteOrigin: string, data: LlmsTxtData, opts?: BuildLlmsTxtOptions): string {
   const chrome = opts?.chrome;
+  // Every href below is built against the locale-prefixed origin; the
+  // caller passes the bare site origin and the manifest locale.
+  const origin = llmsLinkOrigin(siteOrigin, opts?.lang);
   // Falls back to `source` whenever the table has no entry — an absent
   // table (Swedish/default render), a miss for one particular string, or a
   // caller that only warmed a subset all degrade the same way: render the

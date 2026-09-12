@@ -136,6 +136,17 @@ export interface TranslateOptions {
   kv?: KvLike | null;
   /** Injectable budget tracker — see `RequestBudget` below. Omit to run unbudgeted (e.g. the warm script). */
   budget?: RequestBudget;
+  /**
+   * Per-request ledger of every (KV key → value) this call resolved from the
+   * cache. The middleware writes it back as the route's translation bundle —
+   * see "Per-route translation bundles" below. Carried on `Astro.locals` by
+   * src/lib/t.ts (the same object the budget rides on), NOT in
+   * AsyncLocalStorage: measured on staging, the async context does not
+   * survive into Astro child-component rendering under workerd (only a page's
+   * own frontmatter reads were captured), so an ALS ledger would have missed
+   * every string Header, Footer, RosterIndex and every card resolve.
+   */
+  ledger?: Map<string, string>;
 }
 
 export interface TranslateResult {
@@ -513,6 +524,7 @@ export class RequestBudget {
   // and Astro's full TS pipeline.
   private readonly max: number;
   private used = 0;
+  private refused = 0;
 
   constructor(max: number = MAX_UNCACHED_CALLS_PER_RENDER) {
     this.max = max;
@@ -520,13 +532,27 @@ export class RequestBudget {
 
   /** True (and consumes one slot) if a call is still allowed this render. */
   tryConsume(): boolean {
-    if (this.used >= this.max) return false;
+    if (this.used >= this.max) {
+      this.refused += 1;
+      return false;
+    }
     this.used += 1;
     return true;
   }
 
   get remaining(): number {
     return Math.max(0, this.max - this.used);
+  }
+
+  /**
+   * How many uncached strings this render had to leave untranslated AND
+   * unscheduled because the ceiling was already reached. Non-zero means the
+   * rendered page is knowingly incomplete in its target language — the
+   * middleware uses this to keep such a page out of the long-TTL edge cache
+   * (see "degraded" in src/middleware.ts).
+   */
+  get refusedCount(): number {
+    return this.refused;
   }
 }
 
@@ -819,7 +845,7 @@ function guessSourceLang(text: string): Lang {
  * NOT a correctness layer: a miss here still falls through to KV, and a miss
  * there still returns source text and schedules the model call.
  */
-const ISOLATE_CACHE_MAX = 2000;
+const ISOLATE_CACHE_MAX = 5000;
 
 /**
  * Keyed by the KV BINDING OBJECT, not globally.
@@ -837,31 +863,281 @@ const ISOLATE_CACHE_MAX = 2000;
  */
 const isolateCaches = new WeakMap<object, Map<string, Promise<string | null>>>();
 
-function isolateCachedRead(kv: KvLike, key: string): Promise<string | null> {
+function isolateCacheFor(kv: KvLike): Map<string, Promise<string | null>> {
   let isolateCache = isolateCaches.get(kv as unknown as object);
   if (!isolateCache) {
     isolateCache = new Map<string, Promise<string | null>>();
     isolateCaches.set(kv as unknown as object, isolateCache);
   }
+  return isolateCache;
+}
 
-  const existing = isolateCache.get(key);
-  if (existing) return existing;
-
-  const cacheRef = isolateCache;
-  const job = timeServer("trnkv", () => kv.get(key)).catch((err) => {
-    // Evict so a transient KV failure is retried rather than pinned for the
-    // isolate's lifetime; the caller still treats null as a miss.
-    cacheRef.delete(key);
-    console.error(`[translate] KV read failed for ${key} — treating as a miss:`, err);
-    return null;
-  });
-
+function isolateCacheSet(kv: KvLike, key: string, job: Promise<string | null>): void {
+  const isolateCache = isolateCacheFor(kv);
   isolateCache.set(key, job);
   if (isolateCache.size > ISOLATE_CACHE_MAX) {
     const oldest = isolateCache.keys().next().value as string | undefined;
     if (oldest && oldest !== key) isolateCache.delete(oldest);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Physical KV reads: batched into bulk `get([...keys])` calls
+// ---------------------------------------------------------------------------
+
+/**
+ * WHY BATCH. A Worker invocation may hold at most SIX outbound connections at
+ * once, and KV `get()` counts (Cloudflare "Limits" — simultaneous open
+ * connections). A `Promise.all` over N translation reads is therefore not
+ * N-wide but six-wide: the 341-entry A–Ö index on /records/artists/previous
+ * paid ~57 sequential KV round trips on a cold isolate, which is the bulk of
+ * the 4.4 s page-cache miss measured on 2026-09-12. KV's bulk read
+ * (`get(string[])`, up to 100 keys, one connection, returns a Map) turns that
+ * into four.
+ *
+ * HOW. Reads requested within the same macrotask are collected per binding
+ * and flushed together on a zero-delay timer. Serial `await t()` chains
+ * still flush one key at a time (a batch of one takes the plain single-key
+ * path, so nothing changes for them — the route bundle below is what fixes
+ * serial depth); parallel fans (Promise.all over a list) land in one batch.
+ *
+ * FEATURE-DETECTED. A binding whose `get` does not understand an array (the
+ * test stubs, or a future runtime without bulk reads) returns something that
+ * is not a Map; the batch then falls back to individual reads, still in
+ * parallel. Bulk never changes WHAT is read, only how many connections it
+ * costs.
+ */
+const BULK_READ_MAX = 100;
+
+/**
+ * Colo-edge cache for translation values. Keys are content-addressed and
+ * values permanent, so a longer-than-default edge TTL is safe; it is capped
+ * at the bundle TTL so a value deleted by hand (the language auditor) is
+ * gone from every layer within the same window.
+ */
+const KV_READ_OPTS = { cacheTtl: 6 * 60 * 60 } as const;
+
+type PendingRead = {
+  key: string;
+  settle: (value: string | null) => void;
+  fail: (err: unknown) => void;
+};
+
+type BulkKvLike = KvLike & {
+  get(keys: string[], opts?: { cacheTtl?: number }): Promise<unknown>;
+};
+
+const pendingReads = new WeakMap<object, PendingRead[]>();
+
+function queueKvRead(kv: KvLike, key: string): Promise<string | null> {
+  let pending = pendingReads.get(kv as unknown as object);
+  if (!pending) {
+    pending = [];
+    pendingReads.set(kv as unknown as object, pending);
+    setTimeout(() => {
+      void flushKvReads(kv);
+    }, 0);
+  }
+  return new Promise<string | null>((settle, fail) => pending!.push({ key, settle, fail }));
+}
+
+async function readChunk(kv: KvLike, chunk: PendingRead[]): Promise<void> {
+  if (chunk.length === 1) {
+    const [only] = chunk;
+    try {
+      only.settle(await timeServer("trnkv", () => kv.get(only.key, KV_READ_OPTS)));
+    } catch (err) {
+      only.fail(err);
+    }
+    return;
+  }
+
+  const keys = chunk.map((p) => p.key);
+  let bulk: unknown = null;
+  try {
+    bulk = await timeServer("trnkv", () => (kv as BulkKvLike).get(keys, KV_READ_OPTS));
+  } catch (err) {
+    for (const p of chunk) p.fail(err);
+    return;
+  }
+
+  if (bulk instanceof Map) {
+    for (const p of chunk) {
+      const value = bulk.get(p.key);
+      p.settle(typeof value === "string" ? value : null);
+    }
+    return;
+  }
+
+  // Binding without bulk support: individual reads, in parallel.
+  await Promise.all(
+    chunk.map(async (p) => {
+      try {
+        p.settle(await timeServer("trnkv", () => kv.get(p.key, KV_READ_OPTS)));
+      } catch (err) {
+        p.fail(err);
+      }
+    }),
+  );
+}
+
+async function flushKvReads(kv: KvLike): Promise<void> {
+  const pending = pendingReads.get(kv as unknown as object);
+  pendingReads.delete(kv as unknown as object);
+  if (!pending || pending.length === 0) return;
+  const chunks: PendingRead[][] = [];
+  for (let i = 0; i < pending.length; i += BULK_READ_MAX) chunks.push(pending.slice(i, i + BULK_READ_MAX));
+  await Promise.all(chunks.map((chunk) => readChunk(kv, chunk)));
+}
+
+function isolateCachedRead(kv: KvLike, key: string): Promise<string | null> {
+  const isolateCache = isolateCacheFor(kv);
+  const existing = isolateCache.get(key);
+  if (existing) return existing;
+
+  const job = queueKvRead(kv, key)
+    .then((value) => {
+      // A MISS IS NOT A CACHEABLE VALUE. The promise is shared while in flight
+      // (concurrent readers dedupe onto it), but once it resolves null it must
+      // leave the map: the scheduled translation writes the real value to KV
+      // moments later, and an isolate that pinned the miss would never read it
+      // back — it would serve source text and re-schedule the same model call
+      // on every render for its whole lifetime (2026-09-12 i18n review, D1).
+      if (value === null) isolateCache.delete(key);
+      return value;
+    })
+    .catch((err) => {
+      // Evict so a transient KV failure is retried rather than pinned for the
+      // isolate's lifetime; the caller still treats null as a miss.
+      isolateCache.delete(key);
+      console.error(`[translate] KV read failed for ${key} — treating as a miss:`, err);
+      return null;
+    });
+
+  isolateCacheSet(kv, key, job);
   return job;
+}
+
+// ---------------------------------------------------------------------------
+// Per-route translation bundles (one KV read per render, not one per string)
+// ---------------------------------------------------------------------------
+
+/**
+ * THE REMAINING COST after the isolate cache and bulk reads: a COLD isolate
+ * still pays one KV round trip per distinct string, and Astro frontmatter
+ * awaits chrome strings one after another — ~100 serial reads on the
+ * homepage. Isolates are recycled constantly, so "cold" is the common case
+ * for the first visitor of a page-cache miss, and that visitor is the one
+ * who feels the site as slow.
+ *
+ * A route bundle is the set of (KV key → value) pairs one render actually
+ * resolved, stored under ONE key per (locale, route). The middleware reads
+ * it before rendering and seeds the isolate cache, so every string the page
+ * needs is already in memory: the whole render costs one KV round trip
+ * instead of hundreds. Anything the bundle lacks (new FM text, new chrome
+ * copy) simply falls through to the per-key path above, and the ledger of
+ * what the render used is written back when it differs from what was
+ * preloaded.
+ *
+ * NOT A CORRECTNESS LAYER. Entries are the same content-addressed keys as
+ * the live cache (`tr:{version}:{target}:{tier}:{sha256(source)}`), so an
+ * edited FM field changes its key and the bundle can never serve a stale
+ * value for it — it can only be silent about it. A value that was deleted
+ * from KV by hand (scripts/audit-translation-language.mjs) can linger in a
+ * bundle until the bundle's TTL lapses; the TTL bounds that to hours, the
+ * same window the isolate cache already had. Overrides (overrides.json) are
+ * consulted before KV and are unaffected.
+ *
+ * The ledger is a plain Map handed in through `TranslateOptions.ledger`;
+ * `translationLedgerFor(locals)` below is how t.ts and the middleware agree
+ * on the one Map per request.
+ */
+export const TRANSLATION_BUNDLE_TTL_SECONDS = 6 * 60 * 60;
+
+/** Minimal locals shape the ledger rides on — the same object as the budget. */
+export interface LocalsWithLedger {
+  __i18nLedger?: Map<string, string>;
+}
+
+/** The one per-request ledger, created on first touch and shared by every caller holding `locals`. */
+export function translationLedgerFor(locals: LocalsWithLedger): Map<string, string> {
+  if (!locals.__i18nLedger) locals.__i18nLedger = new Map<string, string>();
+  return locals.__i18nLedger;
+}
+
+export function translationBundleKey(lang: Lang, path: string): string {
+  return `trb:${TRANSLATION_KEY_VERSION}:${lang}:${path}`;
+}
+
+/** Pre-populate the isolate cache; existing entries (possibly in flight) win. */
+export function seedIsolateCache(kv: KvLike, entries: Record<string, string>): void {
+  const isolateCache = isolateCacheFor(kv);
+  for (const [key, value] of Object.entries(entries)) {
+    if (typeof value !== "string" || isolateCache.has(key)) continue;
+    isolateCacheSet(kv, key, Promise.resolve(value));
+  }
+}
+
+/**
+ * Read one route's bundle and seed the isolate cache from it. Returns the
+ * bundle (for the change comparison on write-back) or null on a miss or any
+ * malformed value — a bad bundle is just a miss, never an error.
+ */
+export async function loadTranslationBundle(
+  kv: KvLike,
+  bundleKey: string,
+): Promise<Record<string, string> | null> {
+  try {
+    const raw = await kv.get(bundleKey);
+    if (typeof raw !== "string" || !raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const entries: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === "string") entries[key] = value;
+    }
+    seedIsolateCache(kv, entries);
+    return entries;
+  } catch (err) {
+    console.error(`[translate] bundle read failed for ${bundleKey} — ignoring:`, err);
+    return null;
+  }
+}
+
+/**
+ * Write the render's ledger back as the route's bundle when it differs from
+ * what was preloaded. Meant for `waitUntil` — never awaited in the visitor's
+ * path. Returns whether a write happened.
+ */
+export async function storeTranslationBundleIfChanged(
+  kv: KvLike,
+  bundleKey: string,
+  previous: Record<string, string> | null,
+  ledger: ReadonlyMap<string, string>,
+): Promise<boolean> {
+  if (ledger.size === 0 || typeof kv.put !== "function") return false;
+  if (previous) {
+    const prevKeys = Object.keys(previous);
+    let same = prevKeys.length === ledger.size;
+    if (same) {
+      for (const [key, value] of ledger) {
+        if (previous[key] !== value) {
+          same = false;
+          break;
+        }
+      }
+    }
+    if (same) return false;
+  }
+  try {
+    await kv.put(bundleKey, JSON.stringify(Object.fromEntries(ledger)), {
+      expirationTtl: TRANSLATION_BUNDLE_TTL_SECONDS,
+    });
+    return true;
+  } catch (err) {
+    console.error(`[translate] bundle write failed for ${bundleKey}:`, err);
+    return false;
+  }
 }
 
 export async function translate(options: TranslateOptions): Promise<TranslateResult> {
@@ -892,6 +1168,7 @@ export async function translate(options: TranslateOptions): Promise<TranslateRes
     // "a read failure is just a miss" posture as kvCached.
     const raw = await timeServer("trnread", () => isolateCachedRead(kv, key));
     if (raw !== null) {
+      options.ledger?.set(key, raw);
       return { text: raw, cached: true, lang: target };
     }
   }
@@ -1015,7 +1292,7 @@ export type TFunction = (source: string) => Promise<string>;
  */
 export function createT(
   locals: LocalsWithScheduler & { lang?: Lang },
-  opts?: { protect?: string[]; kv?: KvLike | null; budget?: RequestBudget | null },
+  opts?: { protect?: string[]; kv?: KvLike | null; budget?: RequestBudget | null; ledger?: Map<string, string> },
 ): TFunction {
   const target = locals.lang ?? "sv";
   const waitUntil = waitUntilFromLocals(locals);
@@ -1035,6 +1312,7 @@ export function createT(
       waitUntil,
       kv: opts?.kv,
       budget,
+      ledger: opts?.ledger,
     });
     return result.text;
   };

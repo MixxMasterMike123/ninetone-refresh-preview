@@ -149,6 +149,18 @@ describeOrSkip("scheduled is inert with no state binding", async () => {
   assert.equal(ctx.promises.length, 0, "no binding means no work scheduled at all");
 });
 
+describeOrSkip("scheduled is a no-op when PUBLICATION_TICK is exactly 'off'", async () => {
+  const ctx = fakeCtx();
+  const state = fakeKv();
+  await bundle.default.scheduled(
+    { cron: "* * * * *", scheduledTime: 0 },
+    { CACHE_STATE: fakeKv(), PUBLICATION_STATE: state, PUBLICATION_TICK: "off" },
+    ctx,
+  );
+  assert.equal(ctx.promises.length, 0, "the kill switch must stop the tick before any work is scheduled");
+  assert.equal(state.map.size, 0);
+});
+
 describeOrSkip("scheduled never throws out of the handler when FM fails", async () => {
   const ctx = fakeCtx();
   // CACHE_STATE present but FM unreachable from the test process: the handler

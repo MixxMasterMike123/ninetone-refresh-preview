@@ -39,9 +39,15 @@ import {
   shouldBypassCache,
   trailingSlashRedirectTarget,
 } from "./lib/cache-policy";
-import { localizedPath, stripLocale } from "./lib/i18n";
+import { hasEnglishVersion, localizedPath, stripLocale } from "./lib/i18n";
 import { timeServer, withServerTiming } from "./lib/server-timing";
-import type { Lang } from "./lib/translate";
+import {
+  loadTranslationBundle,
+  storeTranslationBundleIfChanged,
+  translationBundleKey,
+  translationLedgerFor,
+  type Lang,
+} from "./lib/translate";
 
 // Statically replaced by Vite (astro.config define); guarded for any context
 // where the define isn't applied.
@@ -96,10 +102,21 @@ function ttlFor(pathname: string): number {
   return DEFAULT_TTL;
 }
 
+/**
+ * Site-wide noindex while the preview is gated — the same PUBLIC_NOINDEX
+ * flag Base.astro's <meta name="robots"> and robots.txt read. public/_headers
+ * only covers the static-asset layer, so without this the SSR HTML never
+ * carried the header the launch checklist assumed it did. Flips off with
+ * the same single variable at launch.
+ */
+const NOINDEX_HEADER =
+  String(import.meta.env?.PUBLIC_NOINDEX ?? "true") !== "false";
+
 function harden(res: Response): Response {
   // Some platform responses expose immutable headers; clone before applying
   // policy so redirects/errors receive the same protection reliably.
   res = new Response(res.body, res);
+  if (NOINDEX_HEADER) res.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet, noimageindex");
   res.headers.set("X-Content-Type-Options", "nosniff");
   res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   res.headers.set("X-Frame-Options", "DENY");
@@ -228,6 +245,19 @@ export const onRequest = defineMiddleware((context, next) => withServerTiming(as
 
     const stripped = stripLocale(rawPathname);
     lang = stripped.lang;
+
+    // Swedish-only content (src/lib/i18n.ts SWEDISH_ONLY_PREFIXES — the
+    // privacy policy and the guides) has no English URL: hreflang, the
+    // sitemap and the language switch already say so, and this is the
+    // serving side of the same rule (2026-09-12 SEO review). Without it
+    // "/en/integritet" answered 200 with Swedish HTML canonicalised to
+    // "/integritet" — a crawlable soft-duplicate. A 301 to the Swedish URL
+    // rather than a 404: a visitor who edited the address bar still lands on
+    // the page, and a crawler consolidates instead of recording a dead end.
+    if (lang === "en" && !hasEnglishVersion(stripped.path)) {
+      return harden(new Response(null, { status: 301, headers: { Location: `${stripped.path}${url.search}` } }));
+    }
+
     if (lang === "en") renderTarget = stripped.path;
   }
   // Set locals.lang only if this is the FIRST pass through this middleware
@@ -322,6 +352,22 @@ export const onRequest = defineMiddleware((context, next) => withServerTiming(as
   // Astro renders the real route; undefined means "no rewrite" (sv request,
   // or HAS_RUNTIME false), which next() treats identically to next() with no
   // arguments per Astro's MiddlewareNext signature.
+  // Route translation bundle (see translate.ts, "Per-route translation
+  // bundles"): ONE KV read that seeds the isolate cache with every
+  // translation this route resolved last time, so a cold isolate does not
+  // pay one round trip per string — the cause of the multi-second
+  // page-cache misses measured on 2026-09-12. Keyed by locale + semantic
+  // route, like the TTL table. A miss or a malformed value is simply "no
+  // seed"; the render is unaffected either way.
+  const translationKv = env.CACHE_STATE ?? null;
+  const bundleKey = translationBundleKey(lang, renderTarget ?? rawPathname);
+  const bundle = translationKv
+    ? await timeServer("trbundle", () => loadTranslationBundle(translationKv, bundleKey))
+    : null;
+  // Created here so the nested /404 rewrite pass (same locals object) and
+  // every component in the render append to ONE ledger.
+  const ledger = translationLedgerFor(locals as { __i18nLedger?: Map<string, string> });
+
   const rendered = await render(renderTarget ?? undefined);
   const res = new Response(rendered.body, rendered);
 
@@ -337,14 +383,28 @@ export const onRequest = defineMiddleware((context, next) => withServerTiming(as
     return harden(res);
   }
 
+  // DEGRADED RENDER: the translation budget (25 uncached strings per render,
+  // src/lib/translate.ts RequestBudget) refused at least one string, so this
+  // page is knowingly incomplete in its language — it rendered source text
+  // for strings it could neither read from KV nor schedule. Caching that for
+  // a full tier (up to 24h) would pin a half-translated page at the edge
+  // (2026-09-12 i18n review, D2). It is still cached, but for one minute:
+  // long enough to absorb a burst, short enough that the translations the
+  // NEXT render schedules (another 25) become visible within the minute, so
+  // the page converges instead of sticking.
+  const budget = (locals as { __i18nBudget?: { refusedCount?: number } }).__i18nBudget;
+  const degraded = (budget?.refusedCount ?? 0) > 0;
+  const effectiveTtl = degraded ? Math.min(ttl, 60) : ttl;
+
   // Browser gets a short lease (60s), the edge holds the tiered TTL, and the
   // production CDN may serve stale while it revalidates in the background.
   res.headers.set(
     "Cache-Control",
-    `public, max-age=60, s-maxage=${ttl}, stale-while-revalidate=${ttl}`,
+    `public, max-age=60, s-maxage=${effectiveTtl}, stale-while-revalidate=${effectiveTtl}`,
   );
   res.headers.set("x-cache", "miss");
-  res.headers.set("x-cache-ttl", String(ttl));
+  res.headers.set("x-cache-ttl", String(effectiveTtl));
+  if (degraded) res.headers.set("x-translation", `degraded; refused=${budget!.refusedCount}`);
 
   // Buffer the body before caching rather than res.clone().
   //
@@ -375,6 +435,17 @@ export const onRequest = defineMiddleware((context, next) => withServerTiming(as
     cfContext.waitUntil(store.catch((err) => console.error("[edge-cache] put failed:", err)));
   } else {
     await store.catch((err) => console.error("[edge-cache] put failed:", err));
+  }
+
+  // Write the route bundle back only when this render resolved something the
+  // preloaded bundle did not have (or had differently). The body is fully
+  // buffered above, so the ledger is complete here. Off the visitor's path.
+  if (translationKv && ledger.size > 0) {
+    const save = storeTranslationBundleIfChanged(translationKv, bundleKey, bundle, ledger).catch(
+      (err) => console.error("[translate] bundle write failed:", err),
+    );
+    if (cfContext?.waitUntil) cfContext.waitUntil(save);
+    else await save;
   }
 
   return harden(forVisitor);

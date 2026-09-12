@@ -62,7 +62,16 @@ interface PublicationEnv {
   readonly TRANSLATION_JOBS?: { send(body: unknown): Promise<void>; sendBatch?(messages: readonly { body: unknown }[]): Promise<void> };
   readonly PUBLICATION_COORDINATOR?: unknown;
   readonly PUBLICATION_SERVING?: string;
+  /** Exactly "off" disables the cron tick without a config change — the only
+   *  way to stop the every-minute FM polling other than editing wrangler.jsonc
+   *  and redeploying. Anything else (absent, "on", typos) leaves it running. */
+  readonly PUBLICATION_TICK?: string;
   readonly ANTHROPIC_API_KEY?: string;
+}
+
+/** Is the scheduled tick switched off by the PUBLICATION_TICK var? */
+export function tickDisabled(env: { readonly PUBLICATION_TICK?: unknown }): boolean {
+  return env.PUBLICATION_TICK === "off";
 }
 
 interface KvBindingLike {
@@ -131,6 +140,12 @@ export default {
     env: PublicationEnv,
     ctx: ExecutionContextLike,
   ): Promise<void> {
+    // Kill switch (2026-09-12 review, D1): a dashboard var flip stops the
+    // every-minute FM polling immediately, without touching the bindings.
+    if (tickDisabled(env)) {
+      console.log("[publication] scheduled: PUBLICATION_TICK=off; skipping");
+      return;
+    }
     const store = stateStore(env);
     if (!store) {
       console.log("[publication] scheduled: no state binding; skipping");

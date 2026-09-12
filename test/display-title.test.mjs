@@ -45,6 +45,12 @@ test("paginatedTitle: appends ' · Sida N' for page 2 and beyond", () => {
   assert.equal(paginatedTitle("Previous Artists", 12), "Previous Artists · Sida 12");
 });
 
+test("paginatedTitle: English pages say 'Page', not 'Sida'", () => {
+  assert.equal(paginatedTitle("Previous Artists", 2, "en"), "Previous Artists · Page 2");
+  assert.equal(paginatedTitle("Previous Artists", 1, "en"), "Previous Artists");
+  assert.equal(paginatedTitle("Previous Artists", 2, "sv"), "Previous Artists · Sida 2");
+});
+
 // seo-phase-1b-brief.md P1 item 7: news titles drop the Base suffix when the
 // FM headline is already long.
 test("shouldAppendSiteName: true for a title at or under 60 characters", () => {

@@ -43,6 +43,10 @@ interface Props {
   /** Page-level noindex override. ORed with the site-wide PUBLIC_NOINDEX flag
    * — either one being true is enough to noindex the page. */
   noindex?: boolean;
+  /** Error pages (404) have no canonical URL and no language siblings: emit
+   * no <link rel="canonical">, no hreflang cluster and no og:url for them,
+   * rather than asserting that a URL that does not exist is canonical. */
+  omitCanonical?: boolean;
   jsonLd?: Record<string, unknown> | Record<string, unknown>[];
 }
 
@@ -56,6 +60,7 @@ const {
   ogImage,
   ogType = "website",
   noindex: noindexProp = false,
+  omitCanonical = false,
   jsonLd,
 } = Astro.props;
 
@@ -410,7 +415,7 @@ const TIKTOK_PIXEL_ID = "TIKTOK-PLACEHOLDER"; // TODO: replace with real pixel I
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={metaDescription} />
     {noindex && <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex" />}
-    <link rel="canonical" href={canonicalUrl} />
+    {!omitCanonical && <link rel="canonical" href={canonicalUrl} />}
 
     <!-- hreflang pairs (docs/i18n-phase-2-brief.md, section 3) — one per
          locale plus x-default (= Swedish, decision 1). Emitted on every
@@ -418,7 +423,7 @@ const TIKTOK_PIXEL_ID = "TIKTOK-PLACEHOLDER"; // TODO: replace with real pixel I
          while section 4's chrome-string translation hasn't landed on a
          given page yet — hreflang correctness doesn't depend on whether
          the page's copy is translated. -->
-    {hreflangs.map((link) => (
+    {!omitCanonical && hreflangs.map((link) => (
       <link rel="alternate" hreflang={link.hreflang} href={link.href} />
     ))}
 
@@ -426,7 +431,7 @@ const TIKTOK_PIXEL_ID = "TIKTOK-PLACEHOLDER"; // TODO: replace with real pixel I
     <meta property="og:site_name" content="Ninetone Group" />
     <meta property="og:title" content={fullTitle} />
     <meta property="og:description" content={metaDescription} />
-    <meta property="og:url" content={canonicalUrl} />
+    {!omitCanonical && <meta property="og:url" content={canonicalUrl} />}
     <meta property="og:image" content={ogImageUrl} />
     <meta property="og:type" content={ogType} />
     <meta property="og:locale" content={ogLocale} />
