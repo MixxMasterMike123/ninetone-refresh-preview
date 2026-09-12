@@ -149,7 +149,7 @@ export default {
     ctx.waitUntil(
       (async () => {
         try {
-          const [nine, { translationKey }] = await Promise.all([
+          const [nine, { translationKey, lookupOverride }] = await Promise.all([
             import("./lib/ninetone.ts"),
             import("./lib/translate.ts"),
           ]);
@@ -199,6 +199,11 @@ export default {
             readbackCache: { get: (key: string) => cache.get(key) },
             keyFor: (source: string, target: string, tier: string) =>
               translationKey(source, target as "sv" | "en", tier as "fast" | "quality"),
+            // Overrides must reach the RELEASE, not only rendering — otherwise a
+            // human correction fixes the page while the bundle still ships the
+            // bad machine output. Hashed on the source, same as translate().
+            overrideFor: async (source: string, target: "sv" | "en") =>
+              lookupOverride(await sha256Hex(source), target),
             buildId: typeof __BUILD_ID__ === "string" ? __BUILD_ID__ : "unknown",
             now: () => Date.now(),
             coordinator: coordinator as never,

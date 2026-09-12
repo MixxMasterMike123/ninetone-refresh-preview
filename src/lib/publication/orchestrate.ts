@@ -295,6 +295,11 @@ export async function consumeJob(
 }
 
 export interface AssembleDeps {
+  /** Derives the generation id from the assembled CONTENT. Preferred over `generation`. */
+  readonly generationFor?: (
+    records: readonly SourceRecord[],
+    translations: Readonly<Record<string, unknown>>,
+  ) => Promise<string>;
   readonly readback: ReadBackDeps;
   readonly release: ReleaseDeps;
   readonly promptVersion?: string;
@@ -339,8 +344,16 @@ export async function assembleRelease(
     };
   }
 
+  // The generation id covers the TRANSLATIONS too, not only the source
+  // versions — see runTick() for the production failure that forced this.
+  // `createdAt`/`buildId` are deliberately excluded so an unchanged corpus
+  // still re-assembles to the same id instead of a new bundle every minute.
+  const generation = deps.generationFor
+    ? await deps.generationFor(publishable, readBack.translations)
+    : deps.generation;
+
   const release = buildRelease({
-    generation: deps.generation,
+    generation,
     records: publishable,
     translations: readBack.translations,
     routesFor: deps.routesFor,
@@ -355,7 +368,7 @@ export async function assembleRelease(
     // readable-but-broken generation within reach of the fallback chain.
     deps.log?.("[publication] release failed validation; not stored", issues.slice(0, 5));
     return {
-      generation: deps.generation,
+      generation,
       stored: false,
       digest: null,
       published: 0,
@@ -366,7 +379,7 @@ export async function assembleRelease(
 
   const digest = await storeRelease(deps.release, release);
   return {
-    generation: deps.generation,
+    generation,
     stored: true,
     digest,
     published: publishable.length,
@@ -429,6 +442,36 @@ export function routesForRecord(record: SourceRecord): string[] {
  * a new bundle every minute. `Date.now()` would also defeat the immutability
  * the whole release path depends on.
  */
+/**
+ * Order-independent digest of an assembled translation map.
+ *
+ * MUST NOT USE `JSON.stringify` ON THE MAP. Its output depends on key
+ * INSERTION order, and read-back fills those keys in parallel, so two runs over
+ * identical content produce different strings — and therefore different
+ * generation ids. Observed in production: five generations written in a few
+ * minutes, all 557 entities, all byte-identical in content, differing only in
+ * whether `artistPresentationShort` was inserted before or after
+ * `artistPresentationString`. A cron every minute then wrote a new immutable
+ * bundle every minute.
+ *
+ * Sorting every level makes the digest a function of CONTENT alone.
+ */
+export function canonicalTranslations(
+  translations: Readonly<Record<string, unknown>>,
+): string {
+  const parts: string[] = [];
+  for (const ref of Object.keys(translations).sort()) {
+    const byLocale = (translations[ref] ?? {}) as Record<string, Record<string, string>>;
+    for (const locale of Object.keys(byLocale).sort()) {
+      const fields = byLocale[locale] ?? {};
+      for (const field of Object.keys(fields).sort()) {
+        parts.push(`${ref}\u0000${locale}\u0000${field}\u0000${fields[field]}`);
+      }
+    }
+  }
+  return parts.join("\u0001");
+}
+
 export async function generationIdFor(
   hash: (input: string) => Promise<string>,
   refs: readonly string[],
@@ -447,6 +490,8 @@ export interface TickDeps extends DiscoveryRunDeps {
   readonly release: ReleaseDeps;
   readonly readbackCache: ReadBackDeps["cache"];
   readonly keyFor: ReadBackDeps["keyFor"];
+  /** Override lookup; see ReadBackDeps.overrideFor for why the release needs it. */
+  readonly overrideFor?: ReadBackDeps["overrideFor"];
   readonly buildId: string;
   readonly now: () => number;
   /**
@@ -542,18 +587,36 @@ export async function runTick(deps: TickDeps): Promise<TickResult> {
     return { discovery, coordinatorApplied, assembled: null, promoted: false, mode };
   }
 
-  const generation = await generationIdFor(
-    deps.snapshots.hash,
-    readySnapshots.map((s) => entityRef(s.kind, s.id)),
-    readySnapshots.map((s) => s.snapshotVersion),
-  );
-
+  // The generation id must cover the TRANSLATIONS, not only the source
+  // versions. Snapshot versions alone are not enough: a poisoned cache entry
+  // corrected by hand (or a re-translation) changes the release's content while
+  // every source version stays identical, so the id would be unchanged and
+  // `storeRelease()` — which refuses to rewrite a generation with different
+  // bytes, correctly — would throw on every tick and no release could ever be
+  // stored again. Observed in production: two English bios that the model had
+  // returned in Swedish were fixed, and assembly then silently threw forever.
+  //
+  // Hashing the assembled entity text as well means a content change always
+  // produces a NEW immutable generation, which is what immutability is for.
   const assembled = await assembleRelease(
     {
-      readback: { cache: deps.readbackCache, keyFor: deps.keyFor },
+      readback: {
+        cache: deps.readbackCache,
+        keyFor: deps.keyFor,
+        overrideFor: deps.overrideFor,
+      },
       release: deps.release,
       buildId: deps.buildId,
-      generation,
+      generation: "unused",
+      generationFor: async (records, translations) =>
+        generationIdFor(
+          deps.snapshots.hash,
+          records.map((r) => entityRef(r.kind, r.id)),
+          [
+            ...readySnapshots.map((s) => s.snapshotVersion),
+            await deps.snapshots.hash(canonicalTranslations(translations)),
+          ],
+        ),
       createdAt: new Date(deps.now()).toISOString(),
       routesFor: routesForRecord,
       promptVersion: deps.promptVersion ?? PROMPT_VERSION,

@@ -315,3 +315,94 @@ test("routes match the sitemap's authoritative prefixes", () => {
   assert.deepEqual(r("webPostSection", "Ninetone Group"), [], "sections are fragments, not pages");
   assert.deepEqual(r("webPostSection", "Ninetone Group#1"), [], "blocks are fragments too");
 });
+
+test("a corrected translation produces a NEW generation, not a throw", async () => {
+  // Production failure: two English bios the model had returned in Swedish were
+  // corrected. The source text never changed, so every snapshotVersion stayed
+  // identical and the generation id — then derived from snapshot versions alone
+  // — stayed identical too. storeRelease() correctly refuses to rewrite a
+  // generation whose bytes differ, so assembly threw on EVERY tick and no
+  // release could be stored again. The id must cover the translations.
+  const h = harness();
+  await runTick(h.deps);
+  const { deps: cd } = consumerDeps(h.store, h.cache);
+  for (const job of h.queue.sent) await consumeJob(cd, job);
+
+  const first = await runTick(h.deps);
+  assert.equal(first.assembled.stored, true);
+
+  // Correct a translation in place; the SOURCE is untouched.
+  for (const [k, v] of [...h.cache.map.entries()]) {
+    if (k.startsWith("tr:v1:en:")) h.cache.map.set(k, "CORRECTED ENGLISH");
+    void v;
+  }
+
+  const second = await runTick(h.deps);
+  assert.equal(second.assembled.stored, true, "assembly must not throw after a correction");
+  assert.notEqual(
+    second.assembled.generation,
+    first.assembled.generation,
+    "changed content must mean a new immutable generation",
+  );
+
+  const bundle = await readRelease({ store: h.release }, second.assembled.generation);
+  assert.equal(bundle.entities[0].text.en.artistPresentationShort, "CORRECTED ENGLISH");
+
+  // And the original generation is still intact — immutability preserved.
+  const original = await readRelease({ store: h.release }, first.assembled.generation);
+  assert.equal(original.entities[0].text.en.artistPresentationShort, "[en] Kort bio.");
+});
+
+test("an unchanged corpus AND unchanged translations still reuse the generation", async () => {
+  const h = harness();
+  await runTick(h.deps);
+  const { deps: cd } = consumerDeps(h.store, h.cache);
+  for (const job of h.queue.sent) await consumeJob(cd, job);
+
+  const a = await runTick(h.deps);
+  const b = await runTick(h.deps);
+  assert.equal(b.assembled.generation, a.assembled.generation, "no churn when nothing changed");
+});
+
+test("generation id is independent of key INSERTION ORDER", async () => {
+  // Production churn: read-back fills the translation map in parallel, so key
+  // insertion order varies between runs. The generation id hashed
+  // JSON.stringify(translations), whose output depends on that order, so five
+  // byte-identical 557-entity generations were written in a few minutes — a new
+  // immutable bundle every cron tick, forever.
+  const { canonicalTranslations } = await import("../src/lib/publication/orchestrate.ts");
+
+  const a = {
+    "artist:anjo": { sv: { title: "T", body: "B" }, en: { title: "T", body: "B" } },
+    "artist:bo": { sv: { title: "X" }, en: { title: "X" } },
+  };
+  // Same content, every level inserted in a different order.
+  const b = {
+    "artist:bo": { en: { title: "X" }, sv: { title: "X" } },
+    "artist:anjo": { en: { body: "B", title: "T" }, sv: { body: "B", title: "T" } },
+  };
+
+  assert.notEqual(JSON.stringify(a), JSON.stringify(b), "the naive encoding really does differ");
+  assert.equal(canonicalTranslations(a), canonicalTranslations(b), "the canonical one must not");
+});
+
+test("a real content change still changes the canonical digest", async () => {
+  const { canonicalTranslations } = await import("../src/lib/publication/orchestrate.ts");
+  const base = { "artist:anjo": { sv: { title: "T" }, en: { title: "T" } } };
+  const changed = { "artist:anjo": { sv: { title: "T" }, en: { title: "CHANGED" } } };
+  assert.notEqual(canonicalTranslations(base), canonicalTranslations(changed));
+});
+
+test("repeated ticks over unchanged content write ONE bundle, not one per tick", async () => {
+  const h = harness();
+  await runTick(h.deps);
+  const { deps: cd } = consumerDeps(h.store, h.cache);
+  for (const job of h.queue.sent) await consumeJob(cd, job);
+
+  const ids = new Set();
+  for (let i = 0; i < 4; i++) ids.add((await runTick(h.deps)).assembled.generation);
+
+  assert.equal(ids.size, 1, `four ticks produced ${ids.size} generations: ${[...ids].join(", ")}`);
+  const bundles = [...h.release.map.keys()].filter((k) => k.startsWith("rel:v1:bundle:"));
+  assert.equal(bundles.length, 1, "a cron every minute must not write a bundle every minute");
+});

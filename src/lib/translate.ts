@@ -252,7 +252,7 @@ function loadOverrides(): Promise<OverridesFile> {
  * — `translate()` needs this same hash a moment later for the KV cache key,
  * and hashing the same string twice per call was pure waste.
  */
-async function lookupOverride(hash: string, target: Lang): Promise<string | null> {
+export async function lookupOverride(hash: string, target: Lang): Promise<string | null> {
   const overrides = await loadOverrides();
   const entry = overrides[hash];
   const value = entry?.[target];

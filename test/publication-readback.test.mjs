@@ -315,3 +315,57 @@ test("read-back makes no model calls and no FM reads", async () => {
   await readBackEntity({ cache, keyFor }, snap);
   assert.equal(cache.reads, 2, "exactly one read per (field, locale); nothing else is consulted");
 });
+
+// ---------------------------------------------------------------------------
+// Overrides must reach the RELEASE, not only the rendered page
+// ---------------------------------------------------------------------------
+
+test("an override beats a poisoned cache entry", async () => {
+  // Found in production: two FM bios are authored in ENGLISH, and the model
+  // returned Swedish for the English request — twice for one of them, so
+  // re-translating did not help. A human override fixed rendering (translate()
+  // checks overrides before the cache), but readBackAll read KV directly and
+  // would have shipped the Swedish text inside the release. The release and the
+  // page disagreeing is worse than either being wrong alone.
+  const snap = await snapshotOf({ artistPresentationShort: "Authored in English." });
+  const cache = fakeCache();
+  for (const locale of ["sv", "en"]) {
+    cache.map.set(await keyFor("Authored in English.", locale, "fast"), "FEL SPRÅK");
+  }
+
+  const result = await readBackEntity(
+    {
+      cache,
+      keyFor,
+      overrideFor: async (source, locale) =>
+        locale === "en" && source === "Authored in English." ? "Authored in English." : null,
+    },
+    snap,
+  );
+
+  assert.equal(result.complete, true);
+  assert.equal(result.text.en.artistPresentationShort, "Authored in English.", "override wins");
+  assert.equal(result.text.sv.artistPresentationShort, "FEL SPRÅK", "other locales fall through");
+});
+
+test("a blank override does not mask the cache", async () => {
+  const snap = await snapshotOf({ artistPresentationShort: "Text." });
+  const cache = fakeCache();
+  for (const locale of ["sv", "en"]) cache.map.set(await keyFor("Text.", locale, "fast"), `ok-${locale}`);
+
+  const result = await readBackEntity(
+    { cache, keyFor, overrideFor: async () => "   " },
+    snap,
+  );
+  assert.equal(result.text.en.artistPresentationShort, "ok-en", "whitespace is not an override");
+});
+
+test("read-back without overrideFor behaves exactly as before", async () => {
+  const snap = await snapshotOf({ artistPresentationShort: "Text." });
+  const cache = fakeCache();
+  for (const locale of ["sv", "en"]) cache.map.set(await keyFor("Text.", locale, "fast"), `v-${locale}`);
+
+  const result = await readBackEntity({ cache, keyFor }, snap);
+  assert.equal(result.complete, true);
+  assert.equal(result.text.sv.artistPresentationShort, "v-sv");
+});

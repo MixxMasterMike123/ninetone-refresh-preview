@@ -51,6 +51,21 @@ export interface ReadBackDeps {
   readonly cache: TranslationReader;
   /** Inject translate.ts's `translationKey` — the same function the consumer wrote with. */
   readonly keyFor: (source: string, target: Lang, tier: string) => Promise<string>;
+  /**
+   * Human override lookup, keyed on sha256 of the SOURCE text.
+   *
+   * MUST MIRROR translate()'s PRECEDENCE: overrides win over the cache. A
+   * release assembled without this can disagree with what the page renders,
+   * which is worse than either being wrong alone.
+   *
+   * This is not hypothetical. Two FM bios are authored in English, and the
+   * model returned Swedish for the English request on both — twice for one of
+   * them, so re-translating did not help. An override fixed rendering, but the
+   * release still read the poisoned cache entry directly and would have
+   * shipped Swedish under /en/. Optional so existing callers and tests keep
+   * working; omitted means cache-only, which is the old behaviour.
+   */
+  readonly overrideFor?: (source: string, target: Lang) => Promise<string | null>;
 }
 
 /** One field that could not be resolved. */
@@ -119,6 +134,17 @@ export async function readBackEntity(
 
   await runBounded(pairs, async ({ field, locale, source }) => {
     const key = await deps.keyFor(source, locale, tier);
+
+    // Overrides first, exactly as translate() does. A human correction must
+    // reach the release, not only the rendered page.
+    if (deps.overrideFor) {
+      const override = await deps.overrideFor(source, locale);
+      if (override !== null && override.trim() !== "") {
+        text[locale][field] = override;
+        return;
+      }
+    }
+
     const value = await deps.cache.get(key);
     if (value === null || value.trim() === "") {
       missing.push({ ref, locale, field, key });
