@@ -276,3 +276,45 @@ test("hreflangLinks still emits the full cluster for a normal bilingual page", (
   const links = hreflangLinks("/records", "https://ninetone.com");
   assert.deepEqual(links.map((l) => l.hreflang).sort(), ["en", "sv", "x-default"]);
 });
+
+// --- url(): assets and endpoints are never locale-prefixed ------------------
+// Third bug of this exact shape. The language switch, the contact form action,
+// and the header logo each broke because a path that is NOT a page route got
+// the current locale applied to it. /en/images/LogoDark.svg is a 404, so the
+// logo silently disappeared on every English page.
+
+test("url(): static asset paths never take a locale prefix", async () => {
+  const { url } = await import("../src/lib/url.ts");
+  for (const p of [
+    "/images/LogoDark.svg",
+    "/images/ninetoneSQlogo.png",
+    "/favicon.ico",
+    "/favicon.svg",
+    "/apple-touch-icon.png",
+    "/fonts/newsreader-roman.woff2",
+    "/og-default.png",
+  ]) {
+    assert.equal(url(p, "en"), p, `${p} must not be localized`);
+    assert.equal(url(p, "sv"), p);
+  }
+});
+
+test("url(): API and document endpoints never take a locale prefix", async () => {
+  const { url } = await import("../src/lib/url.ts");
+  // src/middleware.ts 404s /en/api/* by design, and the .json/.txt/.xml
+  // endpoints are single documents rather than localized routes.
+  for (const p of ["/api/contact", "/api/publish", "/search-index.json", "/robots.txt", "/sitemap.xml"]) {
+    assert.equal(url(p, "en"), p, `${p} must not be localized`);
+  }
+});
+
+test("url(): real page routes still take the locale prefix", async () => {
+  const { url } = await import("../src/lib/url.ts");
+  assert.equal(url("/records", "en"), "/en/records");
+  assert.equal(url("/", "en"), "/en");
+  assert.equal(url("/news/some_slug", "en"), "/en/news/some_slug");
+  // An underscore or hyphen in a slug must not be mistaken for a file
+  // extension — the check only matches a real trailing suffix.
+  assert.equal(url("/records/artists/a_friend_of_mine", "en"), "/en/records/artists/a_friend_of_mine");
+  assert.equal(url("/records/artists/previous/single/the_s_kid", "en"), "/en/records/artists/previous/single/the_s_kid");
+});
