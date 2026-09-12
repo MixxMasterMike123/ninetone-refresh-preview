@@ -5,7 +5,7 @@ Live progress log for
 and [the design](translation-publication-plan-2026-09-12.md). Updated after
 every section. **Not yet deployed; no new Cloudflare infrastructure exists.**
 
-**Current: 570 tests, both builds green, checkpoint 4.5 complete. Nothing deployed.**
+**Current: 579 tests, both builds green, checkpoint 4.5 complete. Nothing deployed.**
 
 ## Resume commands
 
@@ -49,7 +49,7 @@ are what appear in the dashboard.
 | 2. Background preparation | **Done, review-corrected** — immutable completions |
 | 3. Safe publication | **Done** (logic) — `release.ts`, 15 tests |
 | 4. Serving and lifecycle | **Logic done** — consumer, gating, integration tests; rendering not switched |
-| 4.5. Production adapters | **Done** — snapshots, FM adapter, read-back, handler wiring, DO, rendering (inert) |
+| 4.5. Production adapters | **Done** — snapshots, FM adapter, read-back, handler wiring, DO, rendering (inert), section lifecycle |
 | 5. Validation and rollout | Not started — needs authorized resource creation |
 
 ## Log
@@ -698,3 +698,37 @@ npm run build:cf && npx wrangler deploy      # ALWAYS in that order, one command
 CONFIG lives in `dist/server/wrangler.json`, not just the code, and a gh build does not
 write it at all. `npm run build:cf && npx wrangler deploy` as ONE command is the only
 safe shape.
+
+### 4.5f — section lifecycle, corrected
+
+`test/publication-section-lifecycle.test.mjs` (9 tests).
+
+**A framing error of mine, corrected by the user.** I measured that one untranslated
+block withholds its whole section and reported it as a "blast radius" concern. That
+conflated three different situations which have three different CORRECT behaviours.
+Verified each against the real release machinery rather than by reading:
+
+| Situation | Measured behaviour | Correct because |
+|---|---|---|
+| **New section**, one block still translating | whole group withheld (`selectPublishable` -> `[]`) | ready-before-visible; a half-translated section must never appear |
+| **Existing section edited**, new text preparing | candidate generation publishes nothing, but **`g1` stays current** and still contains the section | the live site keeps the last fully translated version — withholding never blanks a published section |
+| **Block deleted** | block goes, section + survivors stay, section's dangling ref dropped, **no translation involved** (`withRemovals` filters) | a withdrawal must never queue behind prose work |
+
+The key realisation: withholding only ever affects the **candidate** generation.
+`resolveGeneration()` keeps serving `current` until a complete generation is promoted,
+so an edit in flight is invisible to visitors rather than destructive. My original
+report implied live content could vanish; it cannot.
+
+Also measured: withholding is scoped to the reference group — one preparing section does
+not hold back unrelated records (an artist alongside it publishes normally), and at real
+scale (6 sections / 31 blocks) one untranslated block withholds 4 records, not 37.
+
+The regression these tests guard: a future change making case 2 behave like case 1, which
+would blank a live section during an edit and look like data loss in FileMaker.
+
+**Signatures verified against the REAL translate.ts** (fakes cannot catch this class):
+`translationKey("Kort bio.","sv","fast")` -> `tr:v1:sv:fast:<64 hex>`; `callWithGuard.length === 6`,
+matching worker-entry.ts's `(apiKey, text, target, tier, kind, await buildProtectedTerms(protect))`
+— also confirmed in the built bundle at `dist/server/entry.mjs:1463`.
+
+Tests: 579 total (9 new), all passing.
