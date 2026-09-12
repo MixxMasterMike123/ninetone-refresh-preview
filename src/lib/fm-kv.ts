@@ -18,20 +18,23 @@ import { timeServer } from "./server-timing.ts";
 // pays FM in full — and FM is the slowest thing on the cold path: measured
 // on staging via Server-Timing, the previous-artists find set cost
 // `fmnet 3002 ms` of a 3.9 s TTFB. This layer lets any isolate reuse a find
-// another isolate (or the every-minute publication tick, which runs the same
-// getters) performed in the last two minutes, so a cold isolate reads ~1 MB
+// another isolate performed in the last five minutes, so a cold isolate reads ~1 MB
 // from KV in ~100 ms instead of waiting seconds on FM.
 //
 // PUBLISH SEMANTICS PRESERVED. The key embeds the same `cache-version` epoch
 // the edge cache uses, so a Publish (which bumps it) makes every FM read
 // miss this layer once and re-fetch live. Between Publishes, the visitor-
-// visible freshness is already governed by the page tiers (5 min–24 h), which
-// this 120 s layer sits comfortably inside. The publication tick observes FM
-// at most ~2 min late, still within its one-minute-cadence goal's spirit.
+// visible freshness is already governed by the page tiers (5 min–24 h), and
+// this layer's TTL equals the shortest of them. If the publication cron is
+// resumed, it observes FM at most this many seconds late.
 //
 // NOT a correctness layer: no KV binding (static build, Node dev) means a
 // straight call; a KV failure means a straight call.
-const FM_KV_TTL_SECONDS = 120;
+// 300 s: the publication cron (which ran the same finds every minute and kept
+// this layer warm) is paused, so visitor renders are the only refresh. Five
+// minutes is the shortest page tier (homepage), so nothing is served staler
+// than its own tier already allows; a Publish still forces a live read.
+const FM_KV_TTL_SECONDS = 300;
 const FM_KV_VERSION_MEMO_MS = 60_000;
 
 let versionMemo: { value: string; expires: number } | null = null;

@@ -35,7 +35,7 @@ test("no KV binding → the loader runs directly", async () => {
   assert.equal(calls, 1);
 });
 
-test("first read fills KV (120 s TTL); a second isolate's read costs no FM call", async () => {
+test("first read fills KV (300 s TTL); a second isolate's read costs no FM call", async () => {
   const kv = fakeKv({ "cache-version": "7" });
   let calls = 0;
   const loader = async () => { calls++; return [{ SLUG: "x", bio: "…" }]; };
@@ -47,7 +47,7 @@ test("first read fills KV (120 s TTL); a second isolate's read costs no FM call"
   const [key, value, opts] = kv.puts[0];
   assert.match(key, /^fm:v1:7:f:API_ARTIST_DETAIL:[0-9a-f]{64}$/, "epoch, shape, layout and body hash in the key");
   assert.deepEqual(JSON.parse(value), first);
-  assert.equal(opts.expirationTtl, 120);
+  assert.equal(opts.expirationTtl, 300);
 
   // "Another isolate": same KV, fresh loader that must not be reached.
   const second = await fmFindViaKv(kv, "API_ARTIST_DETAIL", BODY, false, async () => { throw new Error("FM must not be called"); });
@@ -67,7 +67,7 @@ test("the Publish epoch is part of the key, so a Publish forces a live FM read",
 test("an empty result is cached only briefly (negative-result guard) and a KV failure falls through to FM", async () => {
   const kv = fakeKv({ "cache-version": "7" });
   await fmFindViaKv(kv, "API_NEWS", BODY, false, async () => []);
-  assert.equal(kv.puts.at(-1)[2].expirationTtl, 120);
+  assert.equal(kv.puts.at(-1)[2].expirationTtl, 300);
 
   const broken = { get: async () => { throw new Error("kv down"); }, put: async () => { throw new Error("kv down"); } };
   const original = console.error;
