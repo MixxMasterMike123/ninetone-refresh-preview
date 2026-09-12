@@ -46,7 +46,7 @@ are what appear in the dashboard.
 | 1. Inventory and contracts | **Done, review-corrected** — 6 counterexamples fixed |
 | 2. Background preparation | **Done, review-corrected** — immutable completions |
 | 3. Safe publication | **Done** (logic) — `release.ts`, 15 tests |
-| 4. Serving and lifecycle | Not started |
+| 4. Serving and lifecycle | **Partial** — resolver + entrypoint; rendering not switched |
 | 5. Validation and rollout | Not started |
 
 ## Log
@@ -230,3 +230,48 @@ rather than corruption — but it is real, and it is written at `promoteRelease`
 The coordinator in checkpoint 4 is what closes it.
 
 Tests: 434 total (15 new), all passing.
+
+### Checkpoint 4 — serving and lifecycle (partial)
+
+`src/lib/publication/serving.ts` + `test/publication-serving.test.mjs` (9
+tests), and `src/worker-entry.ts`.
+
+**One generation per request.** `pinGeneration()` resolves once and the result
+is reused, so homepage, lists, detail pages, search and sitemap cannot mix
+generations within a render — and a promotion landing mid-render cannot split a
+page across two versions. Tested by promoting a new generation between pinning
+and lookup.
+
+**No live fallback.** When no generation resolves, `lookup()` returns
+`unavailable` and the caller keeps its existing behaviour. It never reaches
+into FileMaker for untranslated text; that would be the most natural-looking
+mistake to make here and is the failure the whole design exists to prevent.
+
+**Shadow mode is the default.** `publicationMode()` returns "shadow" unless
+PUBLICATION_SERVING is exactly "on" — a missing or misspelled variable must
+never switch the site's content source. `compareShadow()` reports
+onlyInRelease / onlyInLive / differing rather than a verdict, because a
+difference is not automatically a defect: a release legitimately withholds an
+entity whose translations are still preparing.
+
+**The entrypoint gap the review named is closed.** `wrangler.jsonc`'s `main`
+pointed at the adapter's own module, which exports only `{ fetch }`, so there
+was nowhere to put `scheduled`/`queue`. `src/worker-entry.ts` re-exports the
+adapter's fetch **verbatim** and adds the two handlers beside it. Verified by
+bundling it: fetch, scheduled and queue are all present, and fetch is the
+adapter's function rather than a wrapper — so if the publication handlers were
+deleted tomorrow, serving would be byte-identical.
+
+**Deliberately NOT done, and the honest state of this checkpoint:**
+
+- `main` is still the adapter entrypoint. Switching it is a deploy-time change
+  and belongs with the authorized rollout, not with logic work.
+- The `scheduled` and `queue` handlers are stubs that log and retry. Wiring
+  discovery and the consumer into them against non-existent Cloudflare
+  resources would be worse than a handler that reports it is not enabled.
+- Rendering still uses `fmText()`. Visitor-triggered translation has NOT been
+  removed, because removing it before a bootstrapped release exists would leave
+  the site with no content source at all.
+- No bootstrap generation exists. That needs authorized translation spend.
+
+Tests: 443 total (9 new), all passing. Both builds green. Nothing deployed.
