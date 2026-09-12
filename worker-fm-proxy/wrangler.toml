@@ -1,4 +1,6 @@
 name = "ninetone-fm-image-proxy"
+# Pinned to micke.ohlen@gmail.com's account (same reason as the site Worker; see wrangler.jsonc there).
+account_id = "0d392e5c79e386966a98a214ac91a133"
 main = "src/index.ts"
 compatibility_date = "2025-09-01"
 

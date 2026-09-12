@@ -10,6 +10,14 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ninetone-site",
+  // PINNED to the account that owns this Worker and every binding below
+  // (micke.ohlen@gmail.com's account). Added 2026-09-12 the moment a second
+  // account (Ninetone's, via Patrik) appeared on the same login: without
+  // this, `wrangler deploy` picks whichever account the session sees and
+  // would create a bindingless second `ninetone-site` there. Change this
+  // ONLY as part of the planned production cutover (moving the Worker and
+  // its KV state to Ninetone's account — see DEPLOY.md).
+  "account_id": "0d392e5c79e386966a98a214ac91a133",
   "compatibility_date": "2026-06-01",
   // nodejs_compat also populates process.env from vars/secrets — the env
   // fallback in src/lib/filemaker.ts (and shopify/youtube) relies on it.
