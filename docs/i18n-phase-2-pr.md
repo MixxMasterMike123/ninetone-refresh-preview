@@ -1,19 +1,71 @@
-# Phase 2 — Swedish primary, English via Claude translation
+# v0.2.0.0 — Swedish primary, English via Claude translation, plus SEO, performance and publication (shadow)
 
-Branch `i18n-phase-2` off `seo-phase-1`. Staging only. **Do not merge** — Fable reviews first.
-
-Companion to [i18n-phase-2-brief.md](i18n-phase-2-brief.md). Every decision in that brief was treated as settled; where one could not be followed as written, the substitute is listed under [Deviations](#deviations-from-the-brief) below, as the Definition of done requires.
-
-## What this does
-
-Swedish becomes the site's default locale at the root. English lives under `/en/`, rendered from the same page files, with copy translated by Claude and cached permanently in KV. No route files were duplicated; no page was forked per language.
+Branch `i18n-phase-2` → `main`. This PR carries everything since the site went
+server-rendered on Cloudflare: SEO phases 1 and 1b (branch `seo-phase-1`, never
+merged), i18n phase 2, the 2026-09-12 review and performance fixes, and the
+translate-before-publish subsystem in shadow mode. Staging is at Worker version
+`279c87cb`. **Still noindexed** — `PUBLIC_NOINDEX` is untouched.
 
 | | |
 |---|---|
-| Commits | 7 (+ warm-run/PR commits) |
-| Files changed | 68 (+5854 / −571) |
-| Tests | 348 passing (was 227 at branch point) |
+| Commits | 57 |
+| Files changed | 195 (+43,870 / −931) |
+| Tests | **646** passing (was 200 at the SEO branch point) |
 | Builds | `npm run build` and `npm run build:cf` both green; post-build audit clean (548 pages) |
+| Version | `0.2.0.0` (VERSION and CHANGELOG.md introduced with this PR) |
+
+## Since `ff58788` — 2026-09-12
+
+Full report: [review-and-fixes-2026-09-12.md](review-and-fixes-2026-09-12.md).
+Four read-only review agents (perf hot path, SEO layer, i18n runtime,
+publication subsystem) reported to one reviewer, who verified the load-bearing
+claims independently and measured staging with `Server-Timing`.
+
+**The slowness, measured.** Warm edge hits were always ~0.1 s. A page-cache
+miss on a cold isolate paid one KV round trip per translated string (homepage:
+83 serial reads, 3.75 s) and, on Previous Artists, 3.0 s of FileMaker time.
+Fixes, all verified live:
+
+- **Route translation bundle** — one KV key per (locale, route) with every
+  translation the last render resolved; read before render, seeds the isolate
+  cache, written back only when changed. N reads → 1.
+- **KV bulk reads** — same-tick reads flushed as one `get([...keys])` (≤100).
+  Workers allow six simultaneous connections, so a 341-wide `Promise.all` was
+  effectively six-wide.
+- **FileMaker KV read-through** (`src/lib/fm-kv.ts`, 300 s, keyed by the Publish
+  epoch). Previous Artists cold render: 3.9 s → 0.84 s.
+- A KV miss is no longer pinned in the isolate cache; the edge `cacheTtl` on
+  translation reads is short (KV caches negative lookups too).
+- A render whose translation budget refused strings is cached 60 s, not the
+  tier TTL — decided after the streamed body is buffered, where components run.
+
+**SEO.** `/en/` for Swedish-only pages 301s to the Swedish URL; English
+pagination titles say "Page"; the English `llms.txt` links English pages and the
+Swedish one is Swedish; `X-Robots-Tag` covers SSR HTML; no `SearchAction` to
+the noindexed search page; 404s emit no canonical/hreflang/og:url.
+
+**Publication subsystem.** Deployed in shadow mode (no visitor path reads it).
+Its cron is **paused** via `PUBLICATION_TICK=off` in `wrangler.jsonc`; delete
+that line and redeploy to resume discovery. Fixed: the stale-scan guard now
+reads the coordinator revision before the FM scan; unchanged releases are not
+rewritten every minute. Open before `PUBLICATION_SERVING=on`: route promotion
+through `promoteRelease()`, durable FM-deletion withdrawals, `hasRoute()`
+forward fallback, DLQ draining.
+
+**Two review findings on the first deploy, fixed the same evening:** the long
+`cacheTtl` pinned misses per colo for hours; the degraded check ran before the
+body was buffered. Both reproduced in tests.
+
+**Deploy note.** The GitHub workflow only rebuilds the GitHub Pages preview
+from `main`. The Cloudflare Worker deploys with
+`npm run build:cf && npx wrangler deploy` (one command — the two builds share
+`dist/`).
+
+## Phase 2 — what this does
+
+Swedish becomes the site's default locale at the root. English lives under `/en/`, rendered from the same page files, with copy translated by Claude and cached permanently in KV. No route files were duplicated; no page was forked per language.
+
+Companion to [i18n-phase-2-brief.md](i18n-phase-2-brief.md). Every decision in that brief was treated as settled; where one could not be followed as written, the substitute is listed under [Deviations](#deviations-from-the-brief) below. SEO phases 1 and 1b are described in [seo-phase-1-pr.md](seo-phase-1-pr.md) and [seo-phase-1b-pr.md](seo-phase-1b-pr.md).
 
 ## Architecture
 
@@ -34,7 +86,7 @@ Swedish becomes the site's default locale at the root. English lives under `/en/
 - [x] `scripts/i18n-list.mjs` output attached
 - [x] Warm script run against staging — numbers below
 - [x] Deviations listed
-- [ ] Staging verification (see [Staging checklist](#staging-checklist))
+- [x] Staging verification (see [Staging checklist](#staging-checklist))
 
 ## Warm run
 
@@ -182,7 +234,7 @@ Verified directly rather than by inspection: `Intl` output matches the brief exa
 
 Against `https://ninetone-site.micke-ohlen.workers.dev`:
 
-Deployed with `npx wrangler deploy` from this branch. Version `65f24e31`.
+Deployed with `npx wrangler deploy` from this branch. Version `65f24e31` at the time of this checklist; `279c87cb` as of 2026-09-12 evening.
 
 | Check | Result |
 |---|---|
@@ -209,7 +261,7 @@ after:   Explore    Follow  All rights reserved
 
 1. **Consolidate the near-duplicate copy** listed above — a copy decision.
 2. **`CommandPalette`'s client-side `SECTION_LABELS`** cannot call `t()` (browser-side, no `Astro.locals`). Four other scripts were bridged via `data-i18n-*` attributes; this one needs a slightly larger data bridge.
-3. **`src/lib/ninetone.ts` and `filemaker.ts` use extensionless relative imports**, which Vite resolves but plain Node cannot. The warm script routes around it with an inline module hook. Worth fixing at the source eventually.
+3. **`src/lib/ninetone.ts` uses extensionless relative imports**, which Vite resolves but plain Node cannot (`filemaker.ts` was fixed on 2026-09-12). The warm script routes around it with an inline module hook. Worth fixing at the source eventually.
 4. **Prompt caching is declared but unmeasured.** `cache_control` is set on the system prompt; it may fall below the minimum cacheable prefix and silently no-op. Measure `cache_read_input_tokens` on staging before assuming it helps.
 5. **`BreadcrumbList` carries `inLanguage`**, which is technically an `ItemList` rather than a `CreativeWork`. Harmless (page-level, no `@id`), unlike the `Organization`/`WebSite` case that was fixed.
 
