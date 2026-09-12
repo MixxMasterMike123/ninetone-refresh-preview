@@ -102,6 +102,21 @@ test("a serial chain still reads one key at a time (single-key path, no bulk pro
   assert.equal(kv.calls.bulk, 0);
 });
 
+test("physical reads use a SHORT edge cacheTtl (KV caches negative lookups for the same TTL as hits)", async () => {
+  const seen = [];
+  const kv = {
+    async get(key, opts) { seen.push([Array.isArray(key) ? "bulk" : "single", opts]); return Array.isArray(key) ? new Map(key.map((k) => [k, null])) : null; },
+    async put() {},
+  };
+  await translate({ text: "Ensam", target: "en", tier: "fast", kv });
+  await Promise.all(["Ett", "Två", "Tre"].map((text) => translate({ text, target: "en", tier: "fast", kv })));
+  assert.ok(seen.length >= 2);
+  for (const [, opts] of seen) {
+    assert.ok(opts && typeof opts.cacheTtl === "number", "cacheTtl is always passed explicitly");
+    assert.ok(opts.cacheTtl <= 60, `a miss must not be pinned at the colo for long: cacheTtl=${opts.cacheTtl}`);
+  }
+});
+
 test("a KV miss is NOT pinned: the value written moments later is read on the next request", async () => {
   const kv = bulkKv();
   const key = await translationKey("Hej världen", "en", "fast");

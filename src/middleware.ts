@@ -383,29 +383,6 @@ export const onRequest = defineMiddleware((context, next) => withServerTiming(as
     return harden(res);
   }
 
-  // DEGRADED RENDER: the translation budget (25 uncached strings per render,
-  // src/lib/translate.ts RequestBudget) refused at least one string, so this
-  // page is knowingly incomplete in its language — it rendered source text
-  // for strings it could neither read from KV nor schedule. Caching that for
-  // a full tier (up to 24h) would pin a half-translated page at the edge
-  // (2026-09-12 i18n review, D2). It is still cached, but for one minute:
-  // long enough to absorb a burst, short enough that the translations the
-  // NEXT render schedules (another 25) become visible within the minute, so
-  // the page converges instead of sticking.
-  const budget = (locals as { __i18nBudget?: { refusedCount?: number } }).__i18nBudget;
-  const degraded = (budget?.refusedCount ?? 0) > 0;
-  const effectiveTtl = degraded ? Math.min(ttl, 60) : ttl;
-
-  // Browser gets a short lease (60s), the edge holds the tiered TTL, and the
-  // production CDN may serve stale while it revalidates in the background.
-  res.headers.set(
-    "Cache-Control",
-    `public, max-age=60, s-maxage=${effectiveTtl}, stale-while-revalidate=${effectiveTtl}`,
-  );
-  res.headers.set("x-cache", "miss");
-  res.headers.set("x-cache-ttl", String(effectiveTtl));
-  if (degraded) res.headers.set("x-translation", `degraded; refused=${budget!.refusedCount}`);
-
   // Buffer the body before caching rather than res.clone().
   //
   // Astro streams its HTML. clone() tees that single stream into two branches
@@ -424,6 +401,37 @@ export const onRequest = defineMiddleware((context, next) => withServerTiming(as
   // and the cached copy are then built from the same settled bytes, so
   // neither can race the other.
   const body = await timeServer("buffer", () => res.arrayBuffer());
+
+  // DEGRADED RENDER — decided only AFTER the body is buffered. Astro streams:
+  // when render() returns, only the page's own frontmatter has run; Header,
+  // Footer and every card execute while the body is consumed above, and
+  // their translation calls are the ones most likely to hit the ceiling. A
+  // check placed before the buffer saw refusedCount=0 for a render that went
+  // on to refuse seven strings, and cached the half-translated page for the
+  // full tier (24 h on /team). Reproduced and pinned in test/middleware.test.mjs.
+  //
+  // The budget (25 uncached strings per render, src/lib/translate.ts
+  // RequestBudget) refusing a string means the page knowingly rendered source
+  // text for it. Such a page is still cached, but for one minute: long enough
+  // to absorb a burst, short enough that the translations the NEXT render
+  // schedules become visible within the minute, so the page converges
+  // instead of sticking (2026-09-12 i18n review, D2).
+  const budget = (locals as { __i18nBudget?: { refusedCount?: number } }).__i18nBudget;
+  const degraded = (budget?.refusedCount ?? 0) > 0;
+  const effectiveTtl = degraded ? Math.min(ttl, 60) : ttl;
+
+  // Browser gets a short lease (60s), the edge holds the tiered TTL, and the
+  // production CDN may serve stale while it revalidates in the background.
+  // Set on `res` BEFORE the two responses below are built from it — they
+  // copy its headers at construction.
+  res.headers.set(
+    "Cache-Control",
+    `public, max-age=60, s-maxage=${effectiveTtl}, stale-while-revalidate=${effectiveTtl}`,
+  );
+  res.headers.set("x-cache", "miss");
+  res.headers.set("x-cache-ttl", String(effectiveTtl));
+  if (degraded) res.headers.set("x-translation", `degraded; refused=${budget!.refusedCount}`);
+
   const forVisitor = new Response(body, res);
   const forCache = new Response(body, res);
 

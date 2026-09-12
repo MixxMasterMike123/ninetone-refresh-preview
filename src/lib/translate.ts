@@ -910,12 +910,15 @@ function isolateCacheSet(kv: KvLike, key: string, job: Promise<string | null>): 
 const BULK_READ_MAX = 100;
 
 /**
- * Colo-edge cache for translation values. Keys are content-addressed and
- * values permanent, so a longer-than-default edge TTL is safe; it is capped
- * at the bundle TTL so a value deleted by hand (the language auditor) is
- * gone from every layer within the same window.
+ * Colo-edge cache for translation reads — deliberately SHORT (the documented
+ * minimum is 30 s). KV caches negative lookups for the same cacheTtl as hits,
+ * so a long TTL here would pin every MISS at the colo: a translation the
+ * scheduled job writes seconds later would stay invisible in that colo for
+ * the whole window, prolonging untranslated output and re-scheduling the
+ * same job. Hits lose nothing from the short TTL — the isolate cache and the
+ * route bundle already keep them off the network.
  */
-const KV_READ_OPTS = { cacheTtl: 6 * 60 * 60 } as const;
+const KV_READ_OPTS = { cacheTtl: 30 } as const;
 
 type PendingRead = {
   key: string;

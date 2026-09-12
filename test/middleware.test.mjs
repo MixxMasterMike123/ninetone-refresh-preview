@@ -711,6 +711,35 @@ test("a render whose translation budget refused strings is cached for 60s, not t
   assert.equal(runtime.stored.length, 1, "still cached — briefly — to absorb a burst");
 });
 
+test("budget exhausted by COMPONENTS (after headers, during body streaming) still degrades the TTL", async () => {
+  // Astro streams: render() returns after the page frontmatter, and Header/
+  // Footer/cards run while the body is consumed. Their refusals must count.
+  const runtime = createRuntime();
+  const context = {
+    request: new Request("https://ninetone.com/en/team"),
+    url: new URL("https://ninetone.com/en/team"),
+    locals: { cfContext: { waitUntil: (p) => runtime.waits.push(p) } },
+  };
+  const response = await middlewareModule.onRequest(context, async () => {
+    context.locals.__i18nBudget = { refusedCount: 0 }; // frontmatter: nothing refused yet
+    const stream = new ReadableStream({
+      pull(controller) {
+        // "Component render" happening during body consumption.
+        context.locals.__i18nBudget.refusedCount = 7;
+        controller.enqueue(new TextEncoder().encode("<html>half-translated</html>"));
+        controller.close();
+      },
+    });
+    return new Response(stream, { headers: { "content-type": "text/html" } });
+  });
+  await Promise.all(runtime.waits);
+  assert.equal(response.headers.get("x-cache-ttl"), "60");
+  assert.equal(response.headers.get("x-translation"), "degraded; refused=7");
+  assert.match(response.headers.get("Cache-Control"), /s-maxage=60,/);
+  assert.equal(runtime.stored[0].response.headers.get("x-cache-ttl"), "60", "the cached copy carries the same short TTL");
+  assert.equal(await response.text(), "<html>half-translated</html>");
+});
+
 test("a complete render keeps the tier TTL and no degraded marker", async () => {
   const runtime = createRuntime();
   const context = {
