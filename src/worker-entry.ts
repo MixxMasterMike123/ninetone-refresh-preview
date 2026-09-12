@@ -40,14 +40,16 @@
  * exercised by deploying.
  */
 
+declare const __BUILD_ID__: string;
+
 import astro from "@astrojs/cloudflare/entrypoints/server";
 // Static, matching the adapter's own handler (which imports `env` from here).
 // The Durable Object base class must be available at module evaluation time
 // because the class below is declared at module scope.
 import { DurableObject } from "cloudflare:workers";
 
-import { makeCoordinatorClass } from "./lib/publication/coordinator-do.ts";
-import { runDiscovery, consumeJob } from "./lib/publication/orchestrate.ts";
+import { callCoordinator, makeCoordinatorClass } from "./lib/publication/coordinator-do.ts";
+import { consumeJob, runTick } from "./lib/publication/orchestrate.ts";
 import { publicationMode } from "./lib/publication/serving.ts";
 import type { SnapshotBoundJob } from "./lib/publication/snapshot.ts";
 import { loadSourceRecords } from "./lib/publication/fm-source.ts";
@@ -113,10 +115,16 @@ export default {
   fetch: astro.fetch,
 
   /**
-   * Cron Trigger — discovery.
+   * Cron Trigger — one full publication tick.
    *
-   * Runs in shadow: it reads FM, freezes snapshots and enqueues translation
-   * work. It never promotes a release, so it changes no response.
+   * Discovers FM edits, freezes snapshots, enqueues translation work, applies
+   * the scan through the coordinator, and ASSEMBLES + STORES a release from
+   * whatever is ready. All of that runs in shadow and changes no response;
+   * only promotion is gated on PUBLICATION_SERVING.
+   *
+   * Assembly deliberately runs here rather than being deferred: a tick that
+   * only discovered and translated would leave nothing to validate against
+   * live output, which is exactly the gap that blocked the first deployment.
    */
   async scheduled(
     _event: { cron: string; scheduledTime: number },
@@ -128,6 +136,12 @@ export default {
       console.log("[publication] scheduled: no state binding; skipping");
       return;
     }
+    const releases = env.PUBLICATION_RELEASES ?? store;
+    const cache = env.CACHE_STATE;
+    if (!cache) {
+      console.log("[publication] scheduled: no translation cache binding; skipping");
+      return;
+    }
 
     // Gated on BINDINGS, not on PUBLICATION_SERVING. Preparation must run in
     // shadow — gating it on the flag would mean flipping serving on against a
@@ -135,40 +149,82 @@ export default {
     ctx.waitUntil(
       (async () => {
         try {
-          const { getArtists, getPreviousArtists, getClients, getBookingRoster, getTeam, getNews, getBookingCategories, getWebPosts } =
-            await import("./lib/ninetone.ts");
+          const [nine, { translationKey }] = await Promise.all([
+            import("./lib/ninetone.ts"),
+            import("./lib/translate.ts"),
+          ]);
 
-          const discoveryDeps = {
-            store,
-            hash: sha256Hex,
-            loadRecords: async () => [],
-          };
+          // The coordinator serializes scan application and promotion. Absent
+          // binding -> null, and runTick() then skips ordering rather than
+          // silently applying unserialized state.
+          const namespace = env.PUBLICATION_COORDINATOR as
+            | Parameters<typeof callCoordinator>[0]
+            | undefined;
+          const coordinator = namespace
+            ? {
+                read: () => callCoordinator<{ revision: number }>(namespace, { op: "read" }),
+                applyScan: (scan: never) =>
+                  callCoordinator<{ applied: boolean; state: { revision: number } }>(namespace, {
+                    op: "applyScan",
+                    scan,
+                  }),
+                approve: (args: {
+                  basedOnRevision: number;
+                  generation: string;
+                  digest: string;
+                }) => callCoordinator<{ promoted: boolean }>(namespace, { op: "approve", ...args }),
+              }
+            : null;
 
-          const result = await runDiscovery({
-            discovery: discoveryDeps,
+          const result = await runTick({
+            discovery: { store, hash: sha256Hex, loadRecords: async () => [] },
             snapshots: { store, hash: sha256Hex },
             load: {
               getters: {
-                getArtists,
-                getPreviousArtists,
-                getClients,
-                getBookingRoster,
-                getTeam,
-                getNews,
-                getBookingCategories,
-                getWebPosts,
+                getArtists: nine.getArtists,
+                getPreviousArtists: nine.getPreviousArtists,
+                getClients: nine.getClients,
+                getBookingRoster: nine.getBookingRoster,
+                getTeam: nine.getTeam,
+                getNews: nine.getNews,
+                getBookingCategories: nine.getBookingCategories,
+                getWebPosts: nine.getWebPosts,
               } as Parameters<typeof loadSourceRecords>[0]["getters"],
               hash: sha256Hex,
             },
             queue: env.TRANSLATION_JOBS ?? null,
             env: env as unknown as Record<string, unknown>,
             keyVersion: "v1",
+            release: { store: releases },
+            readbackCache: { get: (key: string) => cache.get(key) },
+            keyFor: (source: string, target: string, tier: string) =>
+              translationKey(source, target as "sv" | "en", tier as "fast" | "quality"),
+            buildId: typeof __BUILD_ID__ === "string" ? __BUILD_ID__ : "unknown",
+            now: () => Date.now(),
+            coordinator: coordinator as never,
             log: (message, detail) => console.log(message, detail ?? ""),
           });
 
-          console.log("[publication] discovery", JSON.stringify(result));
+          console.log(
+            "[publication] tick",
+            JSON.stringify({
+              mode: result.mode,
+              scanned: result.discovery.scanned,
+              changed: result.discovery.changed,
+              enqueued: result.discovery.enqueued,
+              ready: result.discovery.reconciled.readyIds.size,
+              coordinatorApplied: result.coordinatorApplied,
+              generation: result.assembled?.generation ?? null,
+              stored: result.assembled?.stored ?? false,
+              published: result.assembled?.published ?? 0,
+              withheld: result.assembled?.withheld.length ?? 0,
+              promoted: result.promoted,
+              inventoryComplete: result.discovery.inventoryComplete,
+              failures: result.discovery.failures,
+            }),
+          );
         } catch (error) {
-          console.error("[publication] discovery failed", error);
+          console.error("[publication] tick failed", error);
         }
       })(),
     );

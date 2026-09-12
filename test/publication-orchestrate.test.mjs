@@ -110,15 +110,54 @@ test("a first scan snapshots and enqueues both locales", async () => {
   }
 });
 
-test("a re-scan with no changes enqueues NOTHING", async () => {
-  const { deps, queue } = discoveryRunDeps();
+test("a re-scan enqueues NOTHING once the work has completed", async () => {
+  // The "no work at all" property is about COMPLETED work, not merely about an
+  // unchanged hash. Enqueueing is driven by reconcile(), which derives
+  // outstanding jobs from MISSING completion records — so a re-scan re-sends
+  // anything that never finished. That is the crash-recovery behaviour, and an
+  // earlier version of this test asserted the opposite by never consuming the
+  // queue, which would have locked in the bug where a failed enqueue stranded a
+  // record until someone edited it in FileMaker.
+  const { deps, queue, store } = discoveryRunDeps();
   await runDiscovery(deps);
-  queue.sent.length = 0;
 
+  const { deps: cd, calls } = consumeDeps(store);
+  for (const job of queue.sent) await consumeJob(cd, job);
+  assert.equal(calls.n, 2, "two locales translated on the first pass");
+
+  queue.sent.length = 0;
   const second = await runDiscovery(deps);
+
   assert.equal(second.changed, 0);
-  assert.equal(second.enqueued, 0, "an unchanged re-save must produce no work at all");
+  assert.equal(second.enqueued, 0, "completed work must never be re-enqueued");
   assert.equal(second.unchanged, 1);
+  assert.deepEqual([...second.reconciled.readyIds], ["artist:anjo"]);
+});
+
+test("a re-scan RE-ENQUEUES work that never completed (crash recovery)", async () => {
+  // Reproduces the deployment-review finding: a queue failure after
+  // persistDiscovery() previously stranded the record forever, because
+  // discover() reports `unchanged` on the next scan and nothing replayed the
+  // lost jobs. Verified before the fix: scan 2 gave `enqueued: 0`.
+  const store = fakeKv();
+  const boom = {
+    async sendBatch() {
+      throw new Error("queue unavailable");
+    },
+    async send() {
+      throw new Error("queue unavailable");
+    },
+  };
+
+  const { deps: failing } = discoveryRunDeps({ store, queue: boom });
+  await assert.rejects(() => runDiscovery(failing), /queue unavailable/);
+
+  const { deps: healthy, queue } = discoveryRunDeps({ store });
+  const second = await runDiscovery(healthy);
+
+  assert.equal(second.changed, 0, "FM is unchanged — discover() sees nothing new");
+  assert.equal(second.enqueued, 2, "but the lost jobs are recovered from missing completions");
+  assert.equal(queue.sent.length, 2);
 });
 
 test("an edit is rediscovered and re-enqueued", async () => {

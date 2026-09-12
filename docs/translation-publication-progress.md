@@ -732,3 +732,77 @@ matching worker-entry.ts's `(apiKey, text, target, tier, kind, await buildProtec
 — also confirmed in the built bundle at `dist/server/entry.mjs:1463`.
 
 Tests: 579 total (9 new), all passing.
+
+## Checkpoint 5 — deployment blockers resolved
+
+The deployment review (docs/publication-deployment-blockers-2026-09-12.md) refused
+deployment on three findings. **All three were reproduced against current source before
+being fixed**, and each is now covered end-to-end through the real entrypoints.
+
+| Blocker | Status |
+|---|---|
+| B1 `assembleRelease()` had no production caller | Fixed — `runTick()` assembles and stores in shadow |
+| B2 `callCoordinator()` had no production caller; the DO binding was declared but unreached | Fixed — every scan applies through the coordinator; promotion approves through it |
+| B3 work lost after `persistDiscovery()` was never recovered | Fixed — enqueue is now driven by `reconcile()` |
+
+### B3 reproduced, then fixed
+
+The finding was exact. With a throwing queue on scan 1:
+
+```
+scan1 THREW: queue unavailable
+scan2 changed: 0 enqueued: 0 unchanged: 1
+>>> RECOVERED: NO — jobs lost permanently
+```
+
+`discover()` skips a record whose hash is unchanged AND whose candidate exists, so the
+record was stranded until someone edited it in FileMaker. The fix is to stop enqueueing
+from `result.changed` and enqueue from `reconcile()` instead, which derives outstanding
+jobs from MISSING completion records — recoverable from ANY crash point. Same
+reproduction after the fix:
+
+```
+scan2 changed: 0 enqueued: 2
+>>> RECOVERED: YES
+```
+
+**This corrected one of my own tests.** `a re-scan with no changes enqueues NOTHING`
+asserted the wrong precondition — it never consumed the queue, so it was asserting that
+un-translated work must NOT be retried, which is precisely the bug. Replaced by two
+tests: no re-enqueue once work has *completed*, and re-enqueue when it never did.
+
+### `runTick()` — the full cron path
+
+`discover -> persist -> reconcile -> snapshot+enqueue outstanding -> apply scan via the
+COORDINATOR -> assemble+store -> promote only if PUBLICATION_SERVING=on`.
+
+Generation ids are **content-addressed** (`generationIdFor`), so an unchanged corpus
+re-assembles to the same generation instead of writing a new bundle every minute — which
+also makes `storeRelease()`'s refuse-to-overwrite check a real invariant.
+
+Routes come from `routesForRecord()`, using the prefixes `buildSitemapEntries()` already
+uses (sitemap.ts:200-207). `webPostSection` and `bookingCategory` get none: sections and
+blocks are page fragments, category pages come from a filter.
+
+### Verified end-to-end through the BUILT bundle against live FM
+
+Not helper tests — the real `dist/server/entry.mjs` `scheduled` handler, fake bindings,
+real FM reads, faked translation provider (no spend), real DO class over fake storage:
+
+```
+TICK 1: scanned 557, changed 557, enqueued 3208, coordinatorApplied true,
+        inventoryComplete true, failures [], promoted false
+TICK 2: changed 0, enqueued 0, ready 557, published 557, withheld 0,
+        stored true, promoted false, current pointer null
+Release: 557 entities, 1028 routes, VALID, 555/557 carry translated text
+By kind: artist 33, previousArtist 341, client 37, bookingTalent 9,
+         teamMember 17, newsPost 77, bookingCategory 6, webPostSection 37
+```
+
+Counts match the independent live FM probes exactly (33/37/17/77/6, and 37 =
+6 sections + 31 blocks). The 2 entities without text are artists whose FM prose fields
+are all empty (`requiredFields: []`) — they publish as valid empty entities rather than
+blocking. bookingTalent is 9 because only ~11 of 72 roster rows carry
+`bookingPresentation*` prose, matching the earlier probe.
+
+Tests: 589 total (19 new), all passing.

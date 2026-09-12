@@ -52,50 +52,51 @@
       // truth, written before email is attempted. 90-day TTL set per-key.
       "binding": "CONTACT_SUBMISSIONS",
       "id": "8724541e66e647a29022860aa49aca2f"
+    },
+    {
+      // Discovery state, immutable source snapshots and job completion facts.
+      "binding": "PUBLICATION_STATE",
+      "id": "044f0e16defe452c9ad19d615a995180"
+    },
+    {
+      // Immutable, validated bilingual release bundles.
+      "binding": "PUBLICATION_RELEASES",
+      "id": "e29fb55c52484e4d999a4670e03b5ea3"
     }
   ],
   // ---------------------------------------------------------------------
   // Publication flow (translate-before-publish).
   //
-  // NOT YET CREATED IN CLOUDFLARE. Every id below is a placeholder; the
-  // resources are created with the commands in
-  // docs/translation-publication-progress.md at rollout, which is a separate,
-  // authorized step. Resource NAMES are fixed so they are findable in the
-  // dashboard (the existing CACHE_STATE namespace was unidentifiable among
-  // seven and had to be renamed mid-session — that is the mistake this
-  // convention exists to avoid).
-  //
-  // The whole block is commented out so that `npm run build:cf` and
-  // `wrangler deploy` keep working against today's account: wrangler fails
-  // hard on a queue or namespace that does not exist. Uncomment at rollout,
-  // after the create commands have run and the real ids are pasted in.
-  //
-  // "kv_namespaces" additions (merge into the array above):
-  //   { "binding": "PUBLICATION_STATE",    "id": "<ninetone-publication-state>" },
-  //   { "binding": "PUBLICATION_RELEASES", "id": "<ninetone-publication-releases>" }
-  //
-  // "queues": {
-  //   "producers": [{ "binding": "TRANSLATION_JOBS", "queue": "ninetone-translation-jobs" }],
-  //   "consumers": [{
-  //     "queue": "ninetone-translation-jobs",
-  //     "max_batch_size": 10,
-  //     "max_retries": 3,
-  //     "dead_letter_queue": "ninetone-translation-jobs-dlq"
-  //   }]
-  // },
-  //
-  // "durable_objects": {
-  //   "bindings": [{
-  //     "name": "PUBLICATION_COORDINATOR",
-  //     "class_name": "NinetonePublicationCoordinator"
-  //   }]
-  // },
-  // "migrations": [
-  //   { "tag": "v1", "new_sqlite_classes": ["NinetonePublicationCoordinator"] }
-  // ],
-  //
-  // Cron goes on THIS Worker, not a second one:
-  // "triggers": { "crons": ["*/15 * * * *"] },
+  // Resources use fixed dashboard names. PUBLICATION_SERVING remains absent,
+  // so this configuration can only prepare shadow releases until rollout is
+  // explicitly enabled.
+  "queues": {
+    "producers": [
+      { "binding": "TRANSLATION_JOBS", "queue": "ninetone-translation-jobs" }
+    ],
+    "consumers": [
+      {
+        "queue": "ninetone-translation-jobs",
+        "max_batch_size": 10,
+        "max_retries": 3,
+        "dead_letter_queue": "ninetone-translation-jobs-dlq"
+      }
+    ]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PUBLICATION_COORDINATOR",
+        "class_name": "NinetonePublicationCoordinator"
+      }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["NinetonePublicationCoordinator"] }
+  ],
+  // Cron goes on THIS Worker, not a second one. Each tick discovers FM edits;
+  // it does not change visitor serving while PUBLICATION_SERVING is absent.
+  "triggers": { "crons": ["* * * * *"] },
   //
   // PUBLICATION_SERVING is deliberately ABSENT from "vars". publicationMode()
   // returns "shadow" unless it is exactly "on", so preparation runs and

@@ -26,7 +26,14 @@
  * assembly read the snapshot. That is the invariant the whole design rests on.
  */
 
-import { entityRef, persistDiscovery, recordJobCompletion, type DiscoveryDeps } from "./discovery.ts";
+import {
+  entityRef,
+  persistDiscovery,
+  recordJobCompletion,
+  reconcile,
+  type DiscoveryDeps,
+  type ReconciledState,
+} from "./discovery.ts";
 import { discover } from "./discovery.ts";
 import type { SourceRecord } from "./contracts.ts";
 import {
@@ -46,6 +53,10 @@ import { publicationMode, type PublicationMode } from "./serving.ts";
 
 /** What one discovery run did. Returned for logging and for tests to assert on. */
 export interface DiscoveryRunResult {
+  /** Authoritative state derived from completion records. Drives assembly. */
+  readonly reconciled: ReconciledState;
+  /** Frozen snapshots for this scan, by kind-qualified ref. */
+  readonly snapshotsByRef: ReadonlyMap<string, SourceSnapshot>;
   readonly mode: PublicationMode;
   readonly scanned: number;
   readonly changed: number;
@@ -107,26 +118,92 @@ export async function runDiscovery(deps: DiscoveryRunDeps): Promise<DiscoveryRun
     deps.keyVersion,
   );
 
-  // Freeze every changed record, then enqueue from the SNAPSHOT.
+  // RECONCILE, THEN ENQUEUE FROM WHAT IS OUTSTANDING — not from `result.changed`.
+  //
+  // This is the crash-recovery property, and it is why the scan does not simply
+  // enqueue what it just detected. `discover()` skips a record whose hash is
+  // unchanged AND whose candidate exists, so if anything failed AFTER
+  // persistDiscovery() — the queue was down, the isolate died mid-send — the
+  // next scan would report `unchanged` and enqueue nothing, stranding that
+  // record until someone edited it in FileMaker. Reproduced before fixing:
+  // a throwing queue on scan 1 left scan 2 reporting `changed: 0, enqueued: 0`.
+  //
+  // `reconcile()` instead derives outstanding jobs from what is MISSING — it
+  // reads completion records back and returns every job that has none. That is
+  // recoverable from ANY crash point, and it makes re-enqueueing always safe
+  // because completions are immutable and keyed by job id, so a redelivery
+  // rewrites an identical value.
+  const reconciled = await reconcile(
+    { ...deps.discovery, loadRecords: async () => loaded.records },
+    deps.keyVersion,
+  );
+
+  // Freeze a snapshot for every record with outstanding work, then enqueue from
+  // the SNAPSHOT. Snapshots are write-once, so re-freezing an already-frozen
+  // record is a no-op read rather than a rewrite.
+  const outstandingByRef = new Map<string, SourceRecord>();
+  for (const job of reconciled.jobs) {
+    outstandingByRef.set(entityRef(job.entityKind, job.entityId), null as unknown as SourceRecord);
+  }
+  for (const record of loaded.records) {
+    const ref = entityRef(record.kind, record.id);
+    if (outstandingByRef.has(ref)) outstandingByRef.set(ref, record);
+  }
+
   let enqueued = 0;
   const snapshots: SourceSnapshot[] = [];
-  for (const record of result.changed) {
-    const protect = loaded.protectedNames[entityRef(record.kind, record.id)] ?? [];
+  const queued: SnapshotBoundJob[] = [];
+
+  for (const [ref, record] of outstandingByRef) {
+    if (!record) continue; // job for a record FM no longer returns; removal path handles it
+    const protect = loaded.protectedNames[ref] ?? [];
     const snapshot = await writeSnapshot(deps.snapshots, record, { promptVersion, protect });
     snapshots.push(snapshot);
 
-    const jobs = jobsForSnapshot(snapshot);
-    if (!jobs.length || !deps.queue) continue;
+    // Only the jobs that are actually outstanding. Re-sending completed jobs
+    // would be free (the consumer reads the cache first) but pointless traffic.
+    const outstandingIds = new Set(
+      reconciled.jobs
+        .filter((j) => entityRef(j.entityKind, j.entityId) === ref)
+        .map((j) => `${j.field}:${j.target}`),
+    );
+    const jobs = jobsForSnapshot(snapshot).filter((j) =>
+      outstandingIds.has(`${j.field}:${j.target}`),
+    );
+    if (!jobs.length) continue;
+    queued.push(...jobs);
+  }
 
+  // Also snapshot records that are complete, so release assembly has their
+  // frozen text without re-reading FM.
+  for (const record of loaded.records) {
+    if (!record.active) continue;
+    const ref = entityRef(record.kind, record.id);
+    if (outstandingByRef.has(ref)) continue;
+    if (!reconciled.readyIds.has(ref)) continue;
+    snapshots.push(
+      await writeSnapshot(deps.snapshots, record, {
+        promptVersion,
+        protect: loaded.protectedNames[ref] ?? [],
+      }),
+    );
+  }
+
+  if (deps.queue && queued.length) {
     if (deps.queue.sendBatch) {
-      await deps.queue.sendBatch(jobs.map((body) => ({ body })));
+      // Cloudflare caps a batch at 100 messages.
+      for (let i = 0; i < queued.length; i += 100) {
+        await deps.queue.sendBatch(queued.slice(i, i + 100).map((body) => ({ body })));
+      }
     } else {
-      for (const job of jobs) await deps.queue.send(job);
+      for (const job of queued) await deps.queue.send(job);
     }
-    enqueued += jobs.length;
+    enqueued = queued.length;
   }
 
   return {
+    reconciled,
+    snapshotsByRef: new Map(snapshots.map((s) => [entityRef(s.kind, s.id), s])),
     mode,
     scanned: loaded.records.length,
     changed: result.changed.length,
@@ -293,4 +370,207 @@ export async function assembleRelease(
  */
 export function shouldPromote(env: Readonly<Record<string, unknown>>): boolean {
   return publicationMode(env) === "serving";
+}
+
+/**
+ * Routes an entity is expected to serve, both locales.
+ *
+ * Prefixes are taken from `buildSitemapEntries()` in src/lib/sitemap.ts
+ * (sitemap.ts:200-207), which is the authoritative mapping the real pages and
+ * the sitemap already agree on. Duplicating the strings here rather than
+ * importing that function is deliberate — it takes an origin and builds full
+ * URLs for a sitemap, while a release needs bare paths — but the prefixes must
+ * not drift, so they are listed together and tested against the same values.
+ *
+ * `webPostSection` and `bookingCategory` deliberately get NO routes: sections
+ * are page FRAGMENTS rendered inside division pages, not pages of their own,
+ * and category pages are generated from a filter rather than per-entity. An
+ * entity with no routes still publishes; it simply contributes none.
+ */
+const ROUTE_PREFIX: Readonly<Record<string, string | null>> = {
+  artist: "/records/artists",
+  previousArtist: "/records/artists/previous/single",
+  client: "/management/clients",
+  teamMember: "/team",
+  bookingTalent: "/ninetone-nation",
+  newsPost: "/news",
+  guide: "/guider",
+  bookingCategory: null,
+  webPostSection: null,
+};
+
+export function routesForRecord(record: SourceRecord): string[] {
+  const prefix = ROUTE_PREFIX[record.kind];
+  if (!prefix) return [];
+  // A block id carries a '#'; blocks are fragments, never routes.
+  if (record.id.includes("#")) return [];
+  const sv = `${prefix}/${record.id}`;
+  return [sv, `/en${sv}`];
+}
+
+/**
+ * A deterministic generation id for a set of ready entities.
+ *
+ * Content-addressed rather than time-based, so an unchanged corpus re-assembles
+ * to the SAME generation and `storeRelease()`'s "refuse to overwrite a
+ * generation with different bytes" check becomes a genuine invariant instead of
+ * a new bundle every minute. `Date.now()` would also defeat the immutability
+ * the whole release path depends on.
+ */
+export async function generationIdFor(
+  hash: (input: string) => Promise<string>,
+  refs: readonly string[],
+  hashes: readonly string[],
+): Promise<string> {
+  const digest = await hash([...refs].sort().join("|") + "::" + [...hashes].sort().join("|"));
+  return `g-${digest.slice(0, 16)}`;
+}
+
+// ---------------------------------------------------------------------------
+// The full cron tick — discovery, assembly, and coordinator ordering.
+// ---------------------------------------------------------------------------
+
+export interface TickDeps extends DiscoveryRunDeps {
+  /** Release bundle store (PUBLICATION_RELEASES). */
+  readonly release: ReleaseDeps;
+  readonly readbackCache: ReadBackDeps["cache"];
+  readonly keyFor: ReadBackDeps["keyFor"];
+  readonly buildId: string;
+  readonly now: () => number;
+  /**
+   * Coordinator RPC. Injected so the tick is testable without a Durable
+   * Object; production passes a client bound to PUBLICATION_COORDINATOR.
+   */
+  readonly coordinator: {
+    applyScan(scan: {
+      basedOnRevision: number;
+      newestHashes: Record<string, string>;
+      inventory?: readonly string[];
+      removals: readonly string[];
+    }): Promise<{ applied: boolean; state: { revision: number } }>;
+    read(): Promise<{ revision: number }>;
+    approve(args: {
+      basedOnRevision: number;
+      generation: string;
+      digest: string;
+    }): Promise<{ promoted: boolean }>;
+  } | null;
+}
+
+export interface TickResult {
+  readonly discovery: DiscoveryRunResult;
+  readonly coordinatorApplied: boolean | null;
+  readonly assembled: AssembleResult | null;
+  readonly promoted: boolean;
+  readonly mode: PublicationMode;
+}
+
+/**
+ * One complete cron tick.
+ *
+ * ORDER: discover -> apply the scan through the COORDINATOR (so ordering is
+ * serialized and a stale scan is refused) -> assemble and store a release from
+ * what is ready -> promote ONLY when PUBLICATION_SERVING is on.
+ *
+ * Assembly runs in shadow. That is the whole point of shadow mode: a release
+ * bundle exists and can be compared against live output while nothing serves
+ * from it. A tick that only discovered and translated would leave nothing to
+ * validate, which is the gap the deployment review correctly refused to deploy.
+ */
+export async function runTick(deps: TickDeps): Promise<TickResult> {
+  const discovery = await runDiscovery(deps);
+  const mode = publicationMode(deps.env);
+
+  // --- Coordinator: serialize authoritative state -------------------------
+  //
+  // Routed through the DO so two overlapping ticks cannot interleave
+  // read-modify-write. `applyScan` refuses anything computed from an older
+  // revision, which is only genuinely sufficient because the DO serializes.
+  let coordinatorApplied: boolean | null = null;
+  if (deps.coordinator) {
+    const before = await deps.coordinator.read();
+    const newestHashes: Record<string, string> = {};
+    for (const [ref, snapshot] of discovery.snapshotsByRef) {
+      newestHashes[ref] = snapshot.contentHash;
+    }
+    const applied = await deps.coordinator.applyScan({
+      basedOnRevision: before.revision,
+      newestHashes,
+      // Only claim an inventory when the FM read was COMPLETE, or a partial
+      // read would look like mass deletion at the coordinator too.
+      ...(discovery.inventoryComplete ? { inventory: [...discovery.snapshotsByRef.keys()] } : {}),
+      removals: discovery.reconciled.removals.map((r) => entityRef(r.kind, r.id)),
+    });
+    coordinatorApplied = applied.applied;
+    if (!applied.applied) {
+      deps.log?.("[publication] scan refused by coordinator (stale revision); skipping assembly");
+      return { discovery, coordinatorApplied, assembled: null, promoted: false, mode };
+    }
+  }
+
+  // --- Assembly: build and STORE a release from what is ready -------------
+  const readySnapshots: SourceSnapshot[] = [];
+  const readyRecords: SourceRecord[] = [];
+  for (const ref of discovery.reconciled.readyIds) {
+    const snapshot = discovery.snapshotsByRef.get(ref);
+    if (!snapshot) continue;
+    readySnapshots.push(snapshot);
+    readyRecords.push({
+      kind: snapshot.kind,
+      id: snapshot.id,
+      hash: snapshot.contentHash,
+      fields: snapshot.fields,
+      references: snapshot.references,
+      active: snapshot.active,
+    });
+  }
+
+  if (!readySnapshots.length) {
+    deps.log?.("[publication] nothing ready yet; no release assembled");
+    return { discovery, coordinatorApplied, assembled: null, promoted: false, mode };
+  }
+
+  const generation = await generationIdFor(
+    deps.snapshots.hash,
+    readySnapshots.map((s) => entityRef(s.kind, s.id)),
+    readySnapshots.map((s) => s.snapshotVersion),
+  );
+
+  const assembled = await assembleRelease(
+    {
+      readback: { cache: deps.readbackCache, keyFor: deps.keyFor },
+      release: deps.release,
+      buildId: deps.buildId,
+      generation,
+      createdAt: new Date(deps.now()).toISOString(),
+      routesFor: routesForRecord,
+      promptVersion: deps.promptVersion ?? PROMPT_VERSION,
+      log: deps.log,
+    },
+    readyRecords,
+    readySnapshots,
+  );
+
+  // --- Promotion: the ONE step the rollout flag gates ----------------------
+  let promoted = false;
+  if (assembled.stored && assembled.digest && shouldPromote(deps.env) && deps.coordinator) {
+    const state = await deps.coordinator.read();
+    const outcome = await deps.coordinator.approve({
+      basedOnRevision: state.revision,
+      generation: assembled.generation,
+      digest: assembled.digest,
+    });
+    promoted = outcome.promoted;
+    if (promoted) {
+      // The pointer the serving path reads. Written only after the coordinator
+      // approved, so two concurrent promotions cannot both win.
+      await deps.release.store.put("rel:v1:current", assembled.generation);
+      const historyRaw = await deps.release.store.get("rel:v1:history");
+      const history: string[] = historyRaw ? (JSON.parse(historyRaw) as string[]) : [];
+      const next = [assembled.generation, ...history.filter((g) => g !== assembled.generation)];
+      await deps.release.store.put("rel:v1:history", JSON.stringify(next.slice(0, 5)));
+    }
+  }
+
+  return { discovery, coordinatorApplied, assembled, promoted, mode };
 }
