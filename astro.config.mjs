@@ -24,7 +24,7 @@ const TARGET = process.env.DEPLOY_TARGET === "cf" ? "cf" : "gh";
 
 const site =
   TARGET === "cf"
-    ? process.env.SITE_URL ?? "https://ninetone-site.micke-ohlen.workers.dev"
+    ? process.env.SITE_URL ?? "https://ninetone-site.ninetone.workers.dev"
     : "https://mixxmastermike123.github.io";
 
 // Adapter is imported lazily so plain `npm run build` (gh) never loads the

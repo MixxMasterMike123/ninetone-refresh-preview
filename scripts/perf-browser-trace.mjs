@@ -6,9 +6,9 @@ import WebSocket from "ws";
 
 const endpoint = process.argv[2] ?? "http://127.0.0.1:9223";
 const targets = [
-  "https://ninetone-site.micke-ohlen.workers.dev/",
-  "https://ninetone-site.micke-ohlen.workers.dev/en",
-  "https://ninetone-site.micke-ohlen.workers.dev/records/artists/previous",
+  "https://ninetone-site.ninetone.workers.dev/",
+  "https://ninetone-site.ninetone.workers.dev/en",
+  "https://ninetone-site.ninetone.workers.dev/records/artists/previous",
 ];
 
 // The `/json/version` WebSocket accepts Browser-domain commands only. Attach

@@ -16,7 +16,7 @@
  * in `trnkv` with a large n is per-string translation reads (bundle missing
  * for that route); neither present and still slow → look at `render`.
  */
-const base = process.env.SITE_ORIGIN ?? "https://ninetone-site.micke-ohlen.workers.dev";
+const base = process.env.SITE_ORIGIN ?? "https://ninetone-site.ninetone.workers.dev";
 const routes = process.argv.slice(2).length
   ? process.argv.slice(2)
   : ["/", "/en", "/records/artists", "/records/artists/previous", "/en/records/artists/previous", "/news", "/team"];

@@ -331,18 +331,18 @@ Two gotchas discovered on first deploy (2026-07-02):
    image proxy with its config pinned: `npx wrangler deploy -c wrangler.toml`.
    (At the repo root the redirect is what you want: plain `npx wrangler deploy`
    deploys the site.)
-2. **Three Cloudflare accounts on this login** (since 2026-09-12: the
-   stadsauktions account, the **micke.ohlen@gmail.com account** (`0d392e5c…`)
-   and Ninetone's own account via Patrik (`39f8beab…`)). Everything Ninetone
-   today — `ninetone-site`, `ninetone-fm-image-proxy`, every KV namespace, the
-   Durable Object, the queues — lives on the **gmail account**. Both Worker
-   configs therefore pin `account_id` to it, so a deploy can never land on a
-   different account by accident; wrangler's per-project cache in
+2. **Three Cloudflare accounts on this login** (the stadsauktions account,
+   micke.ohlen@gmail.com's account `0d392e5c…`, and Ninetone's own account
+   `39f8beab…` where Mikael is Administrator). **Since 2026-09-12 everything
+   Ninetone deploys to Ninetone's account**: `ninetone-site` at
+   `ninetone-site.ninetone.workers.dev`, `ninetone-fm-image-proxy` at
+   `ninetone-fm-image-proxy.ninetone.workers.dev`, five KV namespaces, the
+   coordinator DO, the queue + DLQ. Both Worker configs pin `account_id` to
+   it, so a deploy can never land elsewhere; wrangler's per-project cache in
    `node_modules/.cache/wrangler/wrangler-account.json` no longer matters.
-   Ninetone's account is empty as of 2026-09-12. Moving the Worker and its
-   state there is the production cutover (a Worker can only bind a custom
-   domain from a zone in its own account), and that is the one time the
-   pinned `account_id` changes.
+   The original copies on the gmail account are retired and not deployed to.
+   `wrangler login` must be authorised for Ninetone's account (the OAuth
+   consent screen lets you pick accounts — pick all of them).
 
 ### Staging deploy (workers.dev)
 

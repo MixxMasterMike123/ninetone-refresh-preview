@@ -123,7 +123,7 @@ function parseFmDate(s: string): number {
 function releaseCoverUrl(slug: string, album: string): string {
   const PROXY_BASE = (
     import.meta.env.FM_IMAGE_PROXY_BASE ??
-    "https://ninetone-fm-image-proxy.micke-ohlen.workers.dev"
+    "https://ninetone-fm-image-proxy.ninetone.workers.dev"
   ).replace(/\/$/, "");
   return `${PROXY_BASE}/release/${encodeURIComponent(slug)}/by-album/${encodeURIComponent(album)}`;
 }

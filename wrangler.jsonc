@@ -10,14 +10,14 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ninetone-site",
-  // PINNED to the account that owns this Worker and every binding below
-  // (micke.ohlen@gmail.com's account). Added 2026-09-12 the moment a second
-  // account (Ninetone's, via Patrik) appeared on the same login: without
-  // this, `wrangler deploy` picks whichever account the session sees and
-  // would create a bindingless second `ninetone-site` there. Change this
-  // ONLY as part of the planned production cutover (moving the Worker and
-  // its KV state to Ninetone's account — see DEPLOY.md).
-  "account_id": "0d392e5c79e386966a98a214ac91a133",
+  // PINNED to Ninetone's own Cloudflare account (Patrik.frisk@ninetone.com,
+  // Mikael is Administrator) since 2026-09-12 — every binding below lives
+  // there. The original deployment on micke.ohlen@gmail.com's account
+  // (0d392e5c…, Worker `ninetone-site`, KV 9a5e09f3… etc.) is retired and no
+  // longer deployed to; its translation cache was copied across. Pinning
+  // means `wrangler deploy` can never land on another account the login can
+  // see.
+  "account_id": "39f8beab0b95e4c3df1242f03744b8f1",
   "compatibility_date": "2026-06-01",
   // nodejs_compat also populates process.env from vars/secrets — the env
   // fallback in src/lib/filemaker.ts (and shopify/youtube) relies on it.
@@ -46,30 +46,30 @@
       // Cache epoch for the tiered edge cache (src/middleware.ts) — bumped by
       // the Publish button (src/pages/api/publish.ts).
       "binding": "CACHE_STATE",
-      "id": "9a5e09f3e19240c192104bb7de0f72a1"
+      "id": "1772c36b9dc24447b58e0625859dc056"
     },
     {
       // Astro sessions store — the adapter auto-enables the KV session
       // driver and declares this binding, so it must resolve to a real
       // namespace even though the site doesn't use Astro.session yet.
       "binding": "SESSION",
-      "id": "95e1b100fcb945e2aecbe0dc2e090e12"
+      "id": "ac08e2053a9d4c47b27d15ff7d9c126f"
     },
     {
       // Contact-form submissions (src/pages/api/contact.ts) — source of
       // truth, written before email is attempted. 90-day TTL set per-key.
       "binding": "CONTACT_SUBMISSIONS",
-      "id": "8724541e66e647a29022860aa49aca2f"
+      "id": "e753756178d44ba892ce3abcd63ae374"
     },
     {
       // Discovery state, immutable source snapshots and job completion facts.
       "binding": "PUBLICATION_STATE",
-      "id": "044f0e16defe452c9ad19d615a995180"
+      "id": "2f01939e483f4340889e0203cabd108a"
     },
     {
       // Immutable, validated bilingual release bundles.
       "binding": "PUBLICATION_RELEASES",
-      "id": "e29fb55c52484e4d999a4670e03b5ea3"
+      "id": "a2b0c621ea034ecd86582cb553127619"
     }
   ],
   // ---------------------------------------------------------------------
