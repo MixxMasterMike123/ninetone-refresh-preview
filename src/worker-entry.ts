@@ -1,12 +1,25 @@
 /**
- * Worker entrypoint — adds `scheduled` and `queue` handlers alongside Astro's
- * `fetch`, for the publication flow.
+ * Worker entrypoint — adds `scheduled`, `queue` and the publication Durable
+ * Object alongside Astro's `fetch`.
  *
  * WHY A CUSTOM ENTRYPOINT AT ALL. wrangler.jsonc's `main` pointed straight at
  * `@astrojs/cloudflare/entrypoints/server`, which exports only `{ fetch }`.
- * A Cron Trigger or Queue consumer needs `scheduled` / `queue` exports on the
- * same Worker, and there is nowhere to put them in the adapter's own module.
- * The review flagged this wiring as unimplemented; this file is it.
+ * A Cron Trigger, a Queue consumer and a Durable Object all need their own
+ * exports on the same Worker, and there is nowhere to put them in the
+ * adapter's own module.
+ *
+ * HOW THIS ACTUALLY GETS BUILT (verified, not assumed). `main` is NOT read by
+ * wrangler at deploy time: `.wrangler/deploy/config.json` redirects every
+ * `wrangler deploy` to the GENERATED `dist/server/wrangler.json`, whose `main`
+ * is `entry.mjs`. `main` here is a Vite build input — @cloudflare/vite-plugin
+ * resolves it as `virtual:cloudflare/user-entry` and emits
+ * `export * from <user entry>; export default mod.default ?? {}`. Two
+ * consequences that this file depends on:
+ *   1. A TypeScript source path works, and the adapter's
+ *      `virtual:astro-cloudflare:config` import resolves, because Vite (not
+ *      wrangler's esbuild) does the bundling.
+ *   2. NAMED exports survive, which is how the Durable Object class below
+ *      reaches the runtime.
  *
  * THE ONE RULE HERE: `fetch` must remain EXACTLY the adapter's handler. Every
  * page, API route, redirect, and the whole tiered edge cache in
@@ -15,23 +28,45 @@
  * if the publication handlers were deleted tomorrow, serving would be
  * byte-identical.
  *
- * ROLLOUT POSTURE. `scheduled` and `queue` do nothing observable until
- * PUBLICATION_SERVING is switched on: discovery runs and prepares releases in
- * shadow, and the serving path is not wired into rendering at all yet
- * (checkpoint 4 is deliberately incomplete on that point — see the progress
- * doc). Deploying this file alone changes no response.
+ * ROLLOUT POSTURE. `publicationMode()` returns "shadow" unless
+ * PUBLICATION_SERVING is exactly "on", and a missing or misspelled variable
+ * must never switch the site's content source. In shadow, discovery and
+ * translation run and releases are PREPARED and STORED, but nothing is
+ * promoted and rendering still uses `fmText()`. Deploying this file with no
+ * new vars changes no response.
+ *
+ * ALL LOGIC LIVES IN src/lib/publication/orchestrate.ts, injected. This file
+ * only resolves bindings and calls in. Logic written inline here could only be
+ * exercised by deploying.
  */
 
 import astro from "@astrojs/cloudflare/entrypoints/server";
+// Static, matching the adapter's own handler (which imports `env` from here).
+// The Durable Object base class must be available at module evaluation time
+// because the class below is declared at module scope.
+import { DurableObject } from "cloudflare:workers";
 
-/** The subset of bindings the publication handlers need. */
+import { makeCoordinatorClass } from "./lib/publication/coordinator-do.ts";
+import { runDiscovery, consumeJob } from "./lib/publication/orchestrate.ts";
+import { publicationMode } from "./lib/publication/serving.ts";
+import type { SnapshotBoundJob } from "./lib/publication/snapshot.ts";
+import { loadSourceRecords } from "./lib/publication/fm-source.ts";
+
+/** Bindings the publication handlers use. All optional: absence disables them. */
 interface PublicationEnv {
-  readonly CACHE_STATE?: {
-    get(key: string, opts?: { cacheTtl?: number }): Promise<string | null>;
-    put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
-    delete?(key: string): Promise<void>;
-  };
+  readonly CACHE_STATE?: KvBindingLike;
+  readonly PUBLICATION_STATE?: KvBindingLike;
+  readonly PUBLICATION_RELEASES?: KvBindingLike;
+  readonly TRANSLATION_JOBS?: { send(body: unknown): Promise<void>; sendBatch?(messages: readonly { body: unknown }[]): Promise<void> };
+  readonly PUBLICATION_COORDINATOR?: unknown;
   readonly PUBLICATION_SERVING?: string;
+  readonly ANTHROPIC_API_KEY?: string;
+}
+
+interface KvBindingLike {
+  get(key: string, opts?: { cacheTtl?: number }): Promise<string | null>;
+  put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
+  delete?(key: string): Promise<void>;
 }
 
 interface ExecutionContextLike {
@@ -48,6 +83,29 @@ interface QueueBatchLike<T> {
   readonly messages: readonly QueueMessageLike<T>[];
 }
 
+/**
+ * SHA-256 hex, matching translate.ts's own (un-exported) `sha256Hex`.
+ *
+ * Duplicated rather than imported for the same reason translate.ts duplicates
+ * it from http.ts: six lines beats coupling this entrypoint's import graph to
+ * a module documented as dependency-free.
+ */
+async function sha256Hex(value: string): Promise<string> {
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * State store for discovery and snapshots.
+ *
+ * Prefers the dedicated `ninetone-publication-state` namespace and falls back
+ * to CACHE_STATE so the handlers still work before that namespace exists. The
+ * key prefixes (`pub:v1:`) do not collide with the translation cache (`tr:v1:`).
+ */
+function stateStore(env: PublicationEnv): KvBindingLike | null {
+  return env.PUBLICATION_STATE ?? env.CACHE_STATE ?? null;
+}
+
 export default {
   /**
    * Astro's handler, re-exported verbatim. Do not wrap: see the file comment.
@@ -57,48 +115,160 @@ export default {
   /**
    * Cron Trigger — discovery.
    *
-   * Intentionally a stub that only logs while the publication resources do not
-   * exist. Declaring a handler that silently does the wrong thing against a
-   * half-configured environment is worse than one that reports it is not
-   * enabled, and the handoff requires the deployment to change nothing until
-   * bootstrap is authorized.
+   * Runs in shadow: it reads FM, freezes snapshots and enqueues translation
+   * work. It never promotes a release, so it changes no response.
    */
   async scheduled(
     _event: { cron: string; scheduledTime: number },
     env: PublicationEnv,
     ctx: ExecutionContextLike,
   ): Promise<void> {
-    if (!env.CACHE_STATE) {
+    const store = stateStore(env);
+    if (!store) {
       console.log("[publication] scheduled: no state binding; skipping");
       return;
     }
-    // Discovery is wired here in checkpoint 4's remaining work. Until then the
-    // handler exists so the cron trigger can be declared and observed without
-    // touching content.
+
+    // Gated on BINDINGS, not on PUBLICATION_SERVING. Preparation must run in
+    // shadow — gating it on the flag would mean flipping serving on against a
+    // cold, unprepared release.
     ctx.waitUntil(
-      Promise.resolve().then(() => {
-        console.log("[publication] scheduled tick — discovery not yet enabled");
-      }),
+      (async () => {
+        try {
+          const { getArtists, getPreviousArtists, getClients, getBookingRoster, getTeam, getNews, getBookingCategories, getWebPosts } =
+            await import("./lib/ninetone.ts");
+
+          const discoveryDeps = {
+            store,
+            hash: sha256Hex,
+            loadRecords: async () => [],
+          };
+
+          const result = await runDiscovery({
+            discovery: discoveryDeps,
+            snapshots: { store, hash: sha256Hex },
+            load: {
+              getters: {
+                getArtists,
+                getPreviousArtists,
+                getClients,
+                getBookingRoster,
+                getTeam,
+                getNews,
+                getBookingCategories,
+                getWebPosts,
+              } as Parameters<typeof loadSourceRecords>[0]["getters"],
+              hash: sha256Hex,
+            },
+            queue: env.TRANSLATION_JOBS ?? null,
+            env: env as unknown as Record<string, unknown>,
+            keyVersion: "v1",
+            log: (message, detail) => console.log(message, detail ?? ""),
+          });
+
+          console.log("[publication] discovery", JSON.stringify(result));
+        } catch (error) {
+          console.error("[publication] discovery failed", error);
+        }
+      })(),
     );
   },
 
   /**
    * Queue consumer — translation jobs.
    *
-   * Acks on success and retries on failure, so an exhausted message lands in
-   * the dead-letter queue rather than looping. Delivery is at least once, which
-   * is safe here because completion records are immutable and keyed by job id:
-   * a redelivery rewrites an identical value.
+   * Retry is reserved for the genuinely transient case (an unreadable
+   * snapshot). A job whose own bounded retries are exhausted is ACKed rather
+   * than retried: telling the queue to retry would multiply four internal
+   * attempts by the queue's own retry count for a single field.
    */
-  async queue(batch: QueueBatchLike<unknown>, env: PublicationEnv): Promise<void> {
-    if (!env.CACHE_STATE) {
+  async queue(batch: QueueBatchLike<SnapshotBoundJob>, env: PublicationEnv): Promise<void> {
+    const store = stateStore(env);
+    const cache = env.CACHE_STATE;
+
+    if (!store || !cache) {
+      // Without bindings nothing can be processed OR safely dropped.
       for (const message of batch.messages) message.retry();
       return;
     }
+
+    const [{ translationKey, callWithGuard, buildProtectedTerms }] = await Promise.all([
+      import("./lib/translate.ts"),
+    ]);
+
+    const apiKey = env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      console.error("[publication] queue: no ANTHROPIC_API_KEY; retrying batch");
+      for (const message of batch.messages) message.retry();
+      return;
+    }
+
+    const consumer = {
+      cache: {
+        get: (key: string) => cache.get(key),
+        put: (key: string, value: string) => cache.put(key, value),
+      },
+      keyFor: (source: string, target: string, tier: string) =>
+        translationKey(source, target as "sv" | "en", tier as "fast" | "quality"),
+      translateFn: async ({
+        text,
+        target,
+        tier,
+        kind,
+        protect,
+      }: {
+        text: string;
+        target: string;
+        tier: string;
+        kind: string;
+        protect: readonly string[];
+      }) =>
+        callWithGuard(
+          apiKey,
+          text,
+          target as "sv" | "en",
+          tier as "fast" | "quality",
+          kind as "plain" | "markdown" | "title",
+          await buildProtectedTerms(protect),
+        ),
+    };
+
     for (const message of batch.messages) {
-      // Consumer wiring lands with checkpoint 4's remaining work. Retrying
-      // rather than acking means nothing is silently dropped in the interim.
-      message.retry();
+      try {
+        const disposition = await consumeJob(
+          {
+            consumer: consumer as never,
+            snapshots: { store },
+            discovery: { store, hash: sha256Hex, loadRecords: async () => [] },
+            keyVersion: "v1",
+            log: (m, d) => console.log(m, d ?? ""),
+          },
+          message.body,
+        );
+
+        if (disposition.action === "retry") message.retry();
+        else message.ack();
+      } catch (error) {
+        console.error("[publication] queue message failed", error);
+        // An unexpected throw is not the same as a translation failure: it may
+        // well be transient (a binding hiccup), so let the queue retry it.
+        message.retry();
+      }
     }
   },
 };
+
+/**
+ * The publication coordinator Durable Object.
+ *
+ * Exported by NAME because that is how the runtime finds a DO class, and the
+ * Cloudflare Vite plugin's generated entry does `export * from <user entry>`,
+ * so this survives the build. `DurableObject` is imported here (not in the
+ * coordinator module) so that module stays loadable under `node --test`.
+ */
+export const NinetonePublicationCoordinator = makeCoordinatorClass(
+  DurableObject as unknown as new (...args: never[]) => object,
+);
+
+/** Re-exported so operational tooling can read the flag the same way. */
+export { publicationMode };

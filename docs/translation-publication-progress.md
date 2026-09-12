@@ -5,6 +5,8 @@ Live progress log for
 and [the design](translation-publication-plan-2026-09-12.md). Updated after
 every section. **Not yet deployed; no new Cloudflare infrastructure exists.**
 
+**Current: 570 tests, both builds green, checkpoint 4.5 complete. Nothing deployed.**
+
 ## Resume commands
 
 ```sh
@@ -47,7 +49,8 @@ are what appear in the dashboard.
 | 2. Background preparation | **Done, review-corrected** — immutable completions |
 | 3. Safe publication | **Done** (logic) — `release.ts`, 15 tests |
 | 4. Serving and lifecycle | **Logic done** — consumer, gating, integration tests; rendering not switched |
-| 5. Validation and rollout | Not started |
+| 4.5. Production adapters | **Done** — snapshots, FM adapter, read-back, handler wiring, DO, rendering (inert) |
+| 5. Validation and rollout | Not started — needs authorized resource creation |
 
 ## Log
 
@@ -357,3 +360,341 @@ size. What still needs authorization is deployment, not money.
 
 Tests: 478 total, all passing. Both builds green. Nothing deployed, no
 translation calls made.
+
+## Checkpoint 4.5 — production adapters (in progress)
+
+The four review rounds validated the LOGIC. This checkpoint writes the
+production adapters that logic was always injected with. Until now every
+`DiscoveryDeps`/`ConsumerDeps` field was satisfied only by a test fake:
+`grep -rn "lib/publication" src scripts` returned no production importer.
+
+### Why this checkpoint exists (found while wiring, not planned)
+
+Wiring the `src/worker-entry.ts` stubs to "the real discovery + consumer" was
+not possible as scoped. Three gaps, each verified against the code:
+
+| Gap | Evidence |
+|---|---|
+| `ConsumerDeps.sourceFor` is unimplementable from a job | `TranslationJob` (contracts.ts:219-229) carries no source text, and consumer.ts:55 forbids re-reading FM |
+| `DiscoveryDeps.loadRecords` has no production implementation | only `test/publication.test.mjs:363` and `test/publication-review-regressions.test.mjs:51` supply one |
+| Release assembly has no text source | `buildRelease` (release.ts:85-92) needs `translations[ref][locale][field]`, but `processJob` returns `{status,key}` and discards the text |
+
+Two smaller ones: `sha256Hex` is NOT exported (translate.ts:170), and no
+`promptVersion` constant exists anywhere — it is only ever a threaded parameter.
+
+### Decisions taken (user, this session)
+
+1. **Immutable source snapshots.** A job names the exact snapshot + field. A
+   missing snapshot RETRIES safely; it must never fall back to current FM text.
+2. **Snapshots identify the complete source version**, including membership
+   metadata — not merely the text-only content hash. Translation-cache identity
+   stays text-only (`sha256(text)` per target+tier) so a status change still
+   reuses translations. These are two different identities on purpose.
+3. **Protected entity names travel with the job**, closing `protect: []`
+   (contracts.ts:278).
+4. **webPostSection**: section title modelled separately from its repeated
+   blocks, using real FM identity/ordering/parentage.
+5. **Releases assemble by reading translations back from KV** and verifying
+   completeness. A consumer returning cache keys is fine — the read-back is
+   the missing piece.
+
+### Measured FM facts (read-only probe, no writes, no translation)
+
+Probed `API_WEBPOSTS` live to decide the webPostSection grain rather than guess:
+
+- **Portal rows carry a stable `recordId`** (and `modId`). 31 blocks across 6
+  sections, **31 unique ids, zero duplicates** — FM gives genuine block
+  identity. `fmFindWithPortals` currently DISCARDS it (filemaker.ts:223), which
+  is why `guides.ts` had to slugify subjects for identity.
+- **`webPost::slug` EXISTS as a field but is empty in all 31 rows.**
+  `guides.ts:8-11` says "There is no FM slug field on a webPost portal row" —
+  the field exists; the comment's conclusion (derive the slug) is still right,
+  its stated reason is not.
+- **`webPost::sortOrder` is a TIMESTAMP** (`"02/14/2025 16:08:55"`), never
+  numeric, in all 31 rows. `getWebPosts()`'s `orderOf()` does `Number(raw)`,
+  so every row yields `MAX_SAFE_INTEGER` — **the sort is a total no-op** and
+  ordering is really FM's portal order. Reproduced against the real values.
+  PRE-EXISTING, not introduced here; changing it changes rendered output, so it
+  is recorded and left alone rather than fixed inside this checkpoint.
+- **No "Guider" category exists in FM** (code 401 for `Guider`, `*Guid*`,
+  `Guides`). The `guide` entity kind currently yields ZERO records. The adapter
+  must treat that as empty-and-fine, not as a failed read.
+
+Section record ids are 1-6; block ids 1-28 plus 39, 40, 54.
+
+### Measured FM entity facts (read-only probes)
+
+Field names and identity were verified against live FM rather than inferred, because
+`ENTITY_FIELDS` and the warm script had already drifted apart once before.
+
+| Kind | Layout | Records | Identity field | Unique |
+|---|---|---|---|---|
+| artist | `API_ARTIST` | 33 | `SLUG` | 33/33 |
+| client | `API_Management` | 37 | `SLUG` | 37/37 |
+| bookingTalent | `API_Booking` | 72 | `SLUG` | 72/72 |
+| teamMember | `API_USERS` | 17 | `SLUG` | 17/17 |
+| newsPost | `API_NEWS` | 77 | `slug` (lowercase!) | 77/77 |
+| webPostSection | `API_WEBPOSTS` | 6 | `category` + `recordId` | 6/6 |
+
+Every identity field is 100% populated and fully unique — no collision handling needed.
+
+**Prose fields are SPARSE, which the design already anticipates** ("only fields the
+source actually has are required"):
+
+- artists: title 25/33, string 31/33, short 31/33
+- clients: title 35/37, string 36/37, short 36/37, artistPresentationShort 28/37
+- team: title 16/17 (one member has none), titleDescription + DescriptionString 17/17
+- **booking: title 10/72, string 11/72** — most roster entries have no bio at all
+- news: Title + shortMessage + MessageString all 77/77
+
+Fallback chains confirmed live: `Description` AND `DescriptionString` both exist and are
+both 17/17 on team; news has `Title` 77/77 but `title` 0/77, so `ENTITY_FIELDS`'s
+capitalized `Title` is right. `Tag` is 0/72 on API_Booking, so booking category identity
+comes from `getBookingCategories()`, not a roster field.
+
+### 4.5a — source snapshots (done)
+
+`src/lib/publication/snapshot.ts` + `test/publication-snapshot.test.mjs` (17 tests).
+
+**Two identities, deliberately separate** — this is the user's refinement, and the
+reason `snapshotVersion` is not simply `record.hash`:
+
+| Identity | Covers | Purpose |
+|---|---|---|
+| `contentHash` | text only (`sourceHashInput`) | what the translation cache keys on — status changes reuse translations |
+| `snapshotVersion` | `sha256(contentHash + membershipFingerprint)` | the COMPLETE source version — text AND `active`/`references` |
+
+Collapsing them breaks one requirement or the other: the content hash alone makes a
+status change invisible to the snapshot (stale membership in a release), while folding
+membership into the content hash re-translates unchanged prose on every status change
+(the paid-work-for-nothing bug an earlier review already caught).
+
+Tested: `Active -> Previous -> Active` returns to the **original** snapshot version, not
+a third one; a reference change is a new source version but not a new content hash.
+
+**Missing snapshot => retry, never fetch.** `resolveJobSource()` has three outcomes, and
+the distinction is load-bearing: `retry` (snapshot not readable yet — KV eventual
+consistency), `absent` (snapshot readable, field genuinely missing — permanent, so
+retrying would loop until the queue dead-lettered it for the wrong reason), `found`.
+There is no code path from a job to live FM text. Asserted by a counting store: resolving
+costs exactly one KV read.
+
+Snapshots are write-once — a redelivered job reads byte-identical text.
+
+**`protect` is now filled.** `jobsForSnapshot()` replaces `jobsForRecord()`'s hardcoded
+`protect: []` with names frozen into the snapshot at discovery time.
+
+### 4.5b — FM source adapter (done)
+
+`src/lib/publication/fm-source.ts` + `test/publication-fm-source.test.mjs` (18 tests).
+
+**All-or-nothing completeness.** Every layout is read independently so one failure does
+not hide the others, but ANY failure clears `complete`, which the caller passes to
+`discover({ inventoryComplete })`. This is the opposite of the warm script's
+catch-and-continue — right for warming a cache, catastrophic here, where a partial read
+would look like mass deletion.
+
+**webPostSection grain (the user's decision, implemented):** the section's own `title` is
+one record; each portal block is its own record carrying `subject` + `message`.
+
+- **Identity from FM's portal `recordId`** — verified live end-to-end: **31/31 blocks**
+  carry one through `getWebPosts()`, ids globally unique across sections. Editing a
+  block's subject does NOT change its id (tested), so there is no phantom
+  delete-plus-create — the failure mode `guides.ts` still has, since it must slugify the
+  subject for identity.
+- **Ordering preserved positionally** via `LoadedRecords.blockOrder`, because
+  `SourceRecord.fields` is translatable text only and `ReleaseEntity` has no ordering
+  field. NOT from `sortOrder` — that is a timestamp and its sort is a proven no-op.
+- **Parentage is bidirectional**: the section references its blocks, each block
+  references its section, so `selectPublishable()` cannot publish a block whose section
+  is not ready.
+- **Blast radius**: editing one block leaves every other block's hash unchanged (tested).
+  One-record-per-section would have re-translated all 3-6 blocks on any edit.
+
+**One additive change outside the publication module:** `getWebPosts()` now carries
+`recordId` on each block (`src/lib/ninetone.ts`). Optional field, unread by rendering —
+FM returns it at the portal row's top level, NOT `webPost::`-prefixed, so `pickStr`
+could not reach it.
+
+Tests: 513 total (35 new), all passing.
+
+### 4.5c — translation read-back (done)
+
+`src/lib/publication/readback.ts` + `test/publication-readback.test.mjs` (12 tests).
+
+The consumer returning cache keys is correct — the translation cache is
+content-addressed, so the key IS the durable handle, and passing prose back through
+queue results would be wasteful and racy. The missing half was resolving those keys
+back into text at assembly time. That is this module.
+
+**Keys are derived from the SNAPSHOT's frozen text**, never from live FM, so the
+translation read back is provably the translation of the text the release will ship.
+Tested directly: a translation of some *newer* text sitting in the same cache does not
+win.
+
+**Completeness is verified, not assumed.** `readBackEntity()` names the specific
+`{ref, locale, field, key}` that is missing, including the cache key so a miss is
+diagnosable in KV. Blank counts as missing. Expected fields come from the snapshot,
+intersected with `ENTITY_FIELDS`, mirroring `jobsForSnapshot()` exactly — deriving them
+differently is how a completeness check drifts from the work actually queued.
+
+**A missing translation is not an error** — it means "still preparing". `readBackAll()`
+returns an explicit ready/incomplete split so the caller publishes the ready set and
+leaves the rest, rather than stalling publication on work in progress.
+
+**End-to-end test, zero model calls asserted:** the real `processJob()` runs against a
+counting fake provider (4 calls: 2 fields x 2 locales), a redelivery costs **0**, then
+`readBackAll()` + `buildRelease()` produce a release that `validateRelease()` accepts
+with no issues. The negative case is covered too: an incomplete read-back is reported
+not-ready, and forcing it into a release anyway fails validation with the missing field
+named.
+
+Tests: 525 total (12 new), all passing.
+
+### 4.5d — handler wiring, DO, and config (done)
+
+`src/lib/publication/orchestrate.ts`, `src/lib/publication/coordinator-do.ts`,
+rewritten `src/worker-entry.ts`, `wrangler.jsonc`, plus
+`test/publication-orchestrate.test.mjs` (22) and
+`test/publication-worker-entry.test.mjs` (10).
+
+**The gating rule, stated precisely.** Preparation is gated on BINDINGS; only
+promotion is gated on the flag:
+
+| Stage | Gate | Runs in shadow? |
+|---|---|---|
+| discovery, snapshots, enqueue | `CACHE_STATE`/`PUBLICATION_STATE` present | yes |
+| translation (queue consumer) | bindings + `ANTHROPIC_API_KEY` | yes |
+| release assembly + store | bindings | yes |
+| **promotion** | **`PUBLICATION_SERVING === "on"`** | **no** |
+
+Gating preparation on the flag would mean flipping serving on against a cold,
+unprepared release — the opposite of what shadow mode is for. Tested both ways.
+
+**Queue disposition discipline.** `retry` is reserved for the genuinely transient case:
+
+- missing snapshot -> **retry** (KV eventual consistency), zero model calls
+- field absent from a readable snapshot -> **ack** (permanent; retrying would loop
+  until the queue dead-lettered it for the wrong reason)
+- job exhausted its own bounded retries -> **ack**, NOT retry. `processJob` already
+  runs 4 internal attempts; telling the queue to retry multiplies that by the queue's
+  own retry count — 20 model calls for one field. Measured in the test: 4 calls, once.
+- stale/superseded completion -> **ack** (`recordJobCompletion` returned false)
+
+**Ordering:** the snapshot is written BEFORE the job is enqueued, so a job can never
+reference a snapshot that does not exist. Asserted by recording write/enqueue order.
+
+**Durable Object.** `NinetonePublicationCoordinator` closes the promotion race
+checkpoint 3 left open. All rules stay in the pure `coordinator.ts` functions; the DO
+only makes read-modify-write atomic around them, so ordering is testable with
+`node --test` and a fake storage — no miniflare. `DurableObject` is injected via
+`makeCoordinatorClass()` rather than imported in the module, because importing
+`cloudflare:workers` outside workerd would make the module unloadable under
+`node --test` and take the suite with it.
+
+**BUILD ARCHITECTURE — verified, and it corrects the plan's assumption.**
+`wrangler deploy` does NOT read `wrangler.jsonc`: `.wrangler/deploy/config.json`
+redirects it to the GENERATED `dist/server/wrangler.json`, whose `main` is `entry.mjs`.
+So `main` in `wrangler.jsonc` is a **Vite build input**. @cloudflare/vite-plugin resolves
+it as `virtual:cloudflare/user-entry` and emits
+`export * from <entry>; export default mod.default ?? {}` — which is why a `.ts` source
+path works, why the adapter's `virtual:astro-cloudflare:config` still resolves, and why
+the named DO export survives.
+
+**This makes the shared-dist footgun sharper than recorded: the deploy CONFIG lives in
+dist/ too, not just the code.** A gh build leaves no `dist/server/wrangler.json` at all.
+
+**Verified against the real built bundle** (not asserted):
+
+```
+export { NinetonePublicationCoordinator, worker_entry_default as default, publicationMode };
+var worker_entry_default$1 = { fetch: server_default.fetch, async scheduled(...), async queue(...) }
+var server_default = { fetch: handle };   // the adapter's own object
+```
+
+`fetch` is the adapter's handler passed through untouched — serving is byte-identical.
+`test/publication-worker-entry.test.mjs` imports that bundle with a stubbed
+`cloudflare:workers` and drives the real handlers with fake bindings: the DO constructs
+and answers RPC, rejects malformed input with 400, `scheduled` is inert without a
+binding and never throws out of the handler, and the queue retry/ACK rules hold. Those
+tests SKIP (verified: 10 skipped, 0 failed) when `dist/` holds a gh build, so
+`npm test` never requires a build.
+
+**wrangler.jsonc resources are declared but COMMENTED OUT**, with the exact blocks to
+uncomment. Nothing exists in Cloudflare yet and every id is a placeholder; wrangler
+fails hard on a queue or namespace that does not exist, so leaving them live would break
+today's deploy. `PUBLICATION_SERVING` is deliberately absent from `vars`.
+
+Tests: 557 total (79 new), all passing. Both builds green; gh audit clean over 548
+pages. `dist/` rebuilt to cf afterwards. Nothing deployed, no translation calls.
+
+### 4.5e — rendering integration (done, inert)
+
+`src/lib/publication/render.ts` + `test/publication-render.test.mjs` (13 tests).
+
+**Deliberately a WRAPPER, not an edit to `fmText()`.** `withRelease()` wraps an
+existing translator; the fallback path stays byte-for-byte what it is today. That is
+what makes step 4 reversible by removing one call rather than by reverting logic inside
+the function every page depends on.
+
+**Inertness is proven, not assumed.** With the flag off, `pinForRequest()` does not even
+resolve a generation (asserted: zero resolver calls — reading KV per request to then
+ignore the result is pure latency), and `withRelease()` returns the ORIGINAL translator
+object unwrapped (`assert.equal(wrapped, translator)`). Near-miss flag values — `"ON"`,
+`"On"`, `"true"`, `"1"`, `"yes"`, `" on"` — all stay inert.
+
+**One generation per request.** The pin lives on `locals` and is a single shared promise,
+so three concurrent lookups resolve once. A promotion landing mid-render cannot split a
+page: the pin wins for the whole render (tested by moving the pointer between pins).
+
+**Two different misses, never conflated:** no generation resolves -> `unavailable`,
+caller keeps existing behaviour; a generation serves but lacks the entity -> `miss`,
+handled forward-only. `resolveFromRelease()` returns **null, never source text**, so
+nothing can render untranslated prose as though it were translated. A resolver throw
+degrades instead of failing the render.
+
+**Not wired into `fmText()` call sites yet, on purpose.** `withRelease` needs an
+`entityId` + `fieldFor` mapping per call site, and a wrong mapping would serve one
+record's prose under another's name — it returns the unchanged translator rather than
+guess. Threading that through the ~30 call sites is step 4 work, done against a
+shadow-validated release, not now.
+
+## Checkpoint 4.5 complete
+
+| Gap at session start | Closed by |
+|---|---|
+| `ConsumerDeps.sourceFor` unimplementable | `snapshot.ts` — immutable snapshots, job names snapshot + field |
+| `DiscoveryDeps.loadRecords` missing | `fm-source.ts` — all 9 kinds, all-or-nothing completeness |
+| Release assembly had no text source | `readback.ts` — KV read-back with verified completeness |
+| `sha256Hex` not exported | duplicated in `worker-entry.ts`, as translate.ts itself does from http.ts |
+| No `promptVersion` constant | `PROMPT_VERSION = "p1"` in `fm-source.ts`, separate from `TRANSLATION_KEY_VERSION` |
+| `protect: []` inert | frozen into the snapshot, travels with every job |
+| Stub `scheduled`/`queue` | `orchestrate.ts` + rewritten `worker-entry.ts` |
+| Promotion race (from checkpoint 3) | `coordinator-do.ts` — `NinetonePublicationCoordinator` |
+
+**Final state: 570 tests passing (92 new), both builds green, gh audit clean over 548
+pages, `dist/` left holding the cf build. Nothing deployed. No translation calls made.
+No Cloudflare resources created.**
+
+### What step 2 (rollout) now requires — corrected
+
+The original plan said "declare the resources in wrangler.jsonc and switch `main`".
+`main` is switched and the resources are written but commented out. Creating them is
+the authorized step:
+
+```sh
+npx wrangler kv namespace create ninetone-publication-state
+npx wrangler kv namespace create ninetone-publication-releases
+npx wrangler queues create ninetone-translation-jobs
+npx wrangler queues create ninetone-translation-jobs-dlq
+# paste the returned ids into wrangler.jsonc, uncomment the block, then:
+npm run build:cf && npx wrangler deploy      # ALWAYS in that order, one command
+```
+
+`PUBLICATION_SERVING` stays unset. The DO migration (`v1`,
+`new_sqlite_classes: ["NinetonePublicationCoordinator"]`) applies on that first deploy.
+
+**The dual-build footgun is worse than recorded and belongs in CLAUDE.md:** the deploy
+CONFIG lives in `dist/server/wrangler.json`, not just the code, and a gh build does not
+write it at all. `npm run build:cf && npx wrangler deploy` as ONE command is the only
+safe shape.

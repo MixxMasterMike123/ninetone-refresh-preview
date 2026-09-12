@@ -22,6 +22,17 @@ npm run build    # production build
 npm run preview  # serve built output
 ```
 
+**Both build targets share `dist/`.** `npm run build` (gh) and `npm run build:cf` (cf)
+overwrite each other. This bites harder than it looks, because `wrangler deploy` does
+**not** read `wrangler.jsonc` — `.wrangler/deploy/config.json` redirects it to the
+*generated* `dist/server/wrangler.json`. So a stale `dist/` ships both the wrong code
+**and** the wrong deploy config (bindings, DO migrations, cron triggers), and a gh build
+does not write that config at all. Always deploy as one command:
+
+```bash
+npm run build:cf && npx wrangler deploy   # never separate these
+```
+
 ## Layout
 
 - `src/pages/` — Astro routes

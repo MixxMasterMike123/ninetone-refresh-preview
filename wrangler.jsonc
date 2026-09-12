@@ -14,9 +14,21 @@
   // nodejs_compat also populates process.env from vars/secrets — the env
   // fallback in src/lib/filemaker.ts (and shopify/youtube) relies on it.
   "compatibility_flags": ["nodejs_compat"],
-  // Adapter-provided unified entrypoint (Astro 6 / adapter v13 convention) —
-  // handles both `astro dev` and production. Do NOT point at dist output.
-  "main": "@astrojs/cloudflare/entrypoints/server",
+  // Custom entrypoint: re-exports the adapter's `fetch` VERBATIM and adds the
+  // publication `scheduled`/`queue` handlers plus the coordinator Durable
+  // Object beside it (src/worker-entry.ts). The adapter's own module exports
+  // only `{ fetch }`, so there is nowhere else to put them.
+  //
+  // This is a VITE build input, not a wrangler path: @cloudflare/vite-plugin
+  // resolves it as `virtual:cloudflare/user-entry` and emits
+  // `export * from <entry>; export default mod.default ?? {}`, which is why a
+  // .ts source works, why the adapter's `virtual:astro-cloudflare:config`
+  // import still resolves, and why the named DO export survives. At deploy
+  // time `.wrangler/deploy/config.json` redirects wrangler to the GENERATED
+  // dist/server/wrangler.json, whose `main` is `entry.mjs`.
+  //
+  // Still do NOT point this at dist output.
+  "main": "src/worker-entry.ts",
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS"
@@ -42,6 +54,53 @@
       "id": "8724541e66e647a29022860aa49aca2f"
     }
   ],
+  // ---------------------------------------------------------------------
+  // Publication flow (translate-before-publish).
+  //
+  // NOT YET CREATED IN CLOUDFLARE. Every id below is a placeholder; the
+  // resources are created with the commands in
+  // docs/translation-publication-progress.md at rollout, which is a separate,
+  // authorized step. Resource NAMES are fixed so they are findable in the
+  // dashboard (the existing CACHE_STATE namespace was unidentifiable among
+  // seven and had to be renamed mid-session — that is the mistake this
+  // convention exists to avoid).
+  //
+  // The whole block is commented out so that `npm run build:cf` and
+  // `wrangler deploy` keep working against today's account: wrangler fails
+  // hard on a queue or namespace that does not exist. Uncomment at rollout,
+  // after the create commands have run and the real ids are pasted in.
+  //
+  // "kv_namespaces" additions (merge into the array above):
+  //   { "binding": "PUBLICATION_STATE",    "id": "<ninetone-publication-state>" },
+  //   { "binding": "PUBLICATION_RELEASES", "id": "<ninetone-publication-releases>" }
+  //
+  // "queues": {
+  //   "producers": [{ "binding": "TRANSLATION_JOBS", "queue": "ninetone-translation-jobs" }],
+  //   "consumers": [{
+  //     "queue": "ninetone-translation-jobs",
+  //     "max_batch_size": 10,
+  //     "max_retries": 3,
+  //     "dead_letter_queue": "ninetone-translation-jobs-dlq"
+  //   }]
+  // },
+  //
+  // "durable_objects": {
+  //   "bindings": [{
+  //     "name": "PUBLICATION_COORDINATOR",
+  //     "class_name": "NinetonePublicationCoordinator"
+  //   }]
+  // },
+  // "migrations": [
+  //   { "tag": "v1", "new_sqlite_classes": ["NinetonePublicationCoordinator"] }
+  // ],
+  //
+  // Cron goes on THIS Worker, not a second one:
+  // "triggers": { "crons": ["*/15 * * * *"] },
+  //
+  // PUBLICATION_SERVING is deliberately ABSENT from "vars". publicationMode()
+  // returns "shadow" unless it is exactly "on", so preparation runs and
+  // nothing is served from a release until it is set explicitly.
+  // ---------------------------------------------------------------------
   "ratelimits": [
     {
       "name": "PUBLISH_RATE_LIMITER",
